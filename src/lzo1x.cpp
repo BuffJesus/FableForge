@@ -210,6 +210,10 @@ void findMatches(const uint8_t* in, size_t n, std::vector<Cands>& out) {
     constexpr size_t kHashBits = 16;
     std::vector<uint32_t> head(size_t(1) << kHashBits, 0xFFFFFFFFu);
     std::vector<uint32_t> next(n, 0xFFFFFFFFu);
+    // Positions advance monotonically. A match at distance d proves equality
+    // up to its end for every later position inside that span at the same d.
+    // Reuse that verified prefix without changing the longest-match result.
+    std::vector<size_t> matchEnd(std::min(n,kMaxDist+1),0);
     auto hash = [&](size_t i) {
         const uint32_t v = uint32_t(in[i]) | (uint32_t(in[i + 1]) << 8) | (uint32_t(in[i + 2]) << 16);
         return size_t((v * 0x9E3779B1u) >> (32 - kHashBits));
@@ -226,8 +230,9 @@ void findMatches(const uint8_t* in, size_t n, std::vector<Cands>& out) {
             const bool canImprove = c.best.len < maxLen && in[p + c.best.len] == in[i + c.best.len];
             const bool wantClass = (dist <= 16384 && c.m3.len < maxLen) || (dist >= 2049 && dist <= 3072 && !c.m1lDist);
             if (canImprove || wantClass) {
-                size_t len = 0;
+                size_t len = matchEnd[dist]>i ? matchEnd[dist]-i : 0;
                 while (len < maxLen && in[p + len] == in[i + len]) ++len;
+                matchEnd[dist]=i+len;
                 if (len >= kMinLen) {
                     if (len > c.best.len) c.best = {uint32_t(dist), uint32_t(len)};
                     if (dist <= 2048 && len > c.m2.len) c.m2 = {uint32_t(dist), uint32_t(len)};

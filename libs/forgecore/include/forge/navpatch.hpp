@@ -71,6 +71,13 @@ struct RetailNav {
 // Parse every navigation section of the LEV. Throws on a malformed block.
 RetailNav parseNavigation(const lev::File& file);
 
+// Strict read-only storage review from a LEV byte image. Requires a contiguous
+// directory/section chain through EOF, canonical flags and bounded local node,
+// layer and region indices. Uses the same flat native record reader as above;
+// does not emit or traverse potentially cyclic child graphs.
+RetailNav validateNavigationStorage(const std::vector<uint8_t>& bytes,
+                                    size_t navigationOffset,int width,int height);
+
 // Rebuild the LEV bytes: everything before navigationOffset() is the file's
 // original bytes; the directory and every section are re-emitted (offsets and
 // the blockEnd chain recomputed). With an unmodified RetailNav the output is

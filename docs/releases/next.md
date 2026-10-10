@@ -5,6 +5,58 @@ version is chosen; validation is recorded at release time, not here.
 
 ## Changes
 
+- **Camera field of view.** View > Map camera provides a degrees slider, typed
+  input and reset. The chosen view is remembered across restart.
+
+- **Pinned terrain brush.** Hold Space to keep the pen at its last ground point
+  while moving the pointer or camera. Release to resume pointing; Shift keeps
+  its painting controls. The pinned cursor is labeled in the viewport.
+
+- **Remembered editor session.** Reopening the same install returns to the last
+  map, camera, View/Edit mode, editing tab and terrain tool. Each visited map
+  retains its own camera and rendering mode across revisits and restart.
+
+- **Saved snapshots.** Ctrl+B or Create dated snapshot keeps a restore point for
+  the current map's objects and terrain. Saved snapshots lists captures with
+  undoable Restore and confirmed Delete. These points survive draft saves and
+  restarts alongside automatic crash recovery.
+
+- **Crash recovery.** Unsaved objects and terrain are captured automatically every
+  five minutes. File > Recovery snapshots changes the interval or captures now.
+  Reopening offers Recover or Discard; Recover latest snapshot also works while
+  the map is open. The prompt shows the capture time. Recovery supports undo,
+  and failed saves keep the snapshot. Archives are separate from game files and saved drafts.
+
+- **Budget areas.** Drag boxes or click objects to survey their cost. Shift keeps
+  earlier picks; highlighted areas and objects show what is included. Done
+  returns to the report, and Clear or Escape starts a fresh survey.
+
+- **Terrain drafts.** Save draft, Ctrl+S and F6 now save terrain alongside objects;
+  F7 saves and reloads. Terrain uses a separate file ignored by the game, and
+  reopening restores it. Write terrain remains available to apply it later.
+  Failed joint saves keep both edits pending.
+
+- **Precise Passability pens.** Walkable, Blocked, Camera ok and Camera no now use
+  the original editor's rounded pen. A 0.25-cell brush reaches one vertex;
+  small cursors show affected vertices, and extra boundary vertices stay untouched.
+
+- **Shore-point editing.** Terrain > Passability > Shore paints shore-point flags
+  with On/Off and Shift to reverse the stroke. Red shows set cells; flags save
+  with terrain and undo as one stroke. Visible water shoreline generation is separate.
+
+- **Environment Smear.** Environ. can blend each reached cell with its eight
+  neighbours while painting. Small brushes outline reached cells and prompt for
+  a larger Radius when none are reached. Smear operates within the current map.
+
+- **Full ground stamp.** Ground can set every vertex inside its strict brush
+  footprint fully to the chosen theme in one application. Small cursors show
+  the vertices. Switch Full stamp off to use the existing soft brush.
+
+- **Sound and environment colours.** Terrain painting shows each region's editor
+  colour with sharp cell boundaries. Sound can show all sounds, only the selected
+  sound, or be hidden; Environment has its own toggle. Colours update during
+  painting and undo, and colour chips in the theme pickers select a theme.
+
 - **User guide.** Short task pages under `docs/guide/` (paint the ground, Fit to
   neighbours, mod packs and load order, dialogue lip sync), linked from the README
   and shipped in the ZIP beside it.
@@ -18,10 +70,32 @@ version is chosen; validation is recorded at release time, not here.
   editor does, and say which depths they include before Replace all.
 - **Whole-map heights.** Raise (optionally with every object), scale or flatten a
   whole map's ground in one step (Terrain > Whole-map heights...).
+  Raise also handles camera coordinate bases and spline key positions using the
+  original editor's height rules.
 - **Clear all sounds.** The Sound tool clears, or fills, a map's ambient sound in
   one step.
+- **Small Sound brushes work at the pointer.** Sound painting uses the original
+  editor's rounded vertex pen and outlines the affected 4x4 cells at small sizes.
+- **Precise Replace pen.** Replace uses the original editor's truncated vertex
+  centre and strict radius, with considered-vertex dots for small brushes.
+- **Environment painting.** Each touched 4x4 cell takes the chosen environment
+  fully in one application. Small brushes outline the cells, and choosing
+  no environment clears them.
 - **Draw Paths** now has the original editor's square ends: ground behind the
   start and past the end of the drag is no longer flattened.
+- **Pick a height in every sculpt tool.** Ctrl+drag samples the ground height
+  continuously in Raise, Lower, Flatten, Smooth, Noise and Paths. Each shows
+  the sampled height, ready to use with Flatten.
+- **Fixed-point height keys.** Hold `-` or `=` in a sculpt tool to lower or
+  raise its starting spot. Moving the pointer keeps that spot fixed, and
+  releasing the key finishes one undo step. Other terrain tools ignore the keys.
+  Speed is available in every sculpt tool, with the key step shown in its tooltip.
+- **Precise sculpt cursors.** Exact-step Raise/Lower, Flatten and Smooth show their
+  rounded centre and affected vertices for small brushes, including a single
+  vertex at a 0.25-cell radius.
+  Noise outlines its possible random poke area as a square.
+  Held height keys show their distinct vertices and ask for a larger Radius
+  when the fractional-radius pen reaches none.
 - **Gentler scaling.** The scale gizmo changes size about 0.3% per pixel instead of
   1%, grows and shrinks symmetrically, and Shift makes it five times finer. The
   Properties scale field drags at the same gentler rate.
@@ -30,10 +104,12 @@ version is chosen; validation is recorded at release time, not here.
   with its path and name filled in.
 - **World tab:** the selected map's card opens it in the editor or straight into
   Fit to neighbours.
+- **Snap to cell centres.** A saved placement option puts new and pasted things
+  on the centres of the 1 m grid cells. Carry uses the same grid while keeping
+  the object's height above ground.
 - **Escape** cancels any pending write confirmation without clearing the selection;
   Enter never confirms a write.
 
 ## Known limits
 
 The Replace pen's footprint still differs slightly from the original editor's.
-Whole-map Raise does not yet move camera-point targets.

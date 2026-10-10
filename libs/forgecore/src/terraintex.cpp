@@ -4,8 +4,10 @@
 #include <cctype>
 #include <cstdio>
 #include <cstdlib>
+#include <charconv>
 #include <cstring>
 #include <fstream>
+#include <limits>
 #include <map>
 #include <sstream>
 #include <stdexcept>
@@ -24,6 +26,8 @@ namespace {
 // banks (FableTLC docs/TEXTURE_WRITER.md; matches EgoCore TextureBuilder).
 constexpr uint8_t kTailDXT1[6] = {0x03, 0x04, 0, 0, 0, 0};
 constexpr uint8_t kTailDXT3[6] = {0x02, 0x08, 0, 0, 0, 0};
+constexpr uint8_t kTailDXT5[6] = {0x05, 0x08, 0, 0, 0, 0};
+constexpr uint8_t kTailV8U8[6] = {0x04, 0x10, 8, 8, 0, 0};
 constexpr uint8_t kTailARGB[6] = {0x01, 0x20, 8, 8, 8, 8};
 
 uint16_t readU16(const uint8_t* p) {
@@ -68,6 +72,8 @@ const uint8_t* pixelFormatTail(uint32_t format) {
     switch (format & 0xFF) {
         case kFormatDXT1: return kTailDXT1;
         case kFormatDXT3: return kTailDXT3;
+        case kFormatDXT5: return kTailDXT5;
+        case kFormatV8U8: return kTailV8U8;
         case kFormatARGB: return kTailARGB;
         default: return nullptr;
     }
@@ -77,6 +83,8 @@ const char* pixelFormatName(uint32_t format) {
     switch (format & 0xFF) {
         case kFormatDXT1: return "DXT1";
         case kFormatDXT3: return "DXT3";
+        case kFormatDXT5: return "DXT5";
+        case kFormatV8U8: return "V8U8";
         case kFormatARGB: return "A8R8G8B8";
         default: return "unknown";
     }
@@ -84,6 +92,7 @@ const char* pixelFormatName(uint32_t format) {
 
 size_t mipRawLength(uint32_t format, uint32_t w, uint32_t h) {
     if ((format & 0xFF) == kFormatARGB) return size_t(w) * size_t(h) * 4;
+    if ((format & 0xFF) == kFormatV8U8) return size_t(w) * size_t(h) * 2;
     const size_t unit = (format & 0xFF) == kFormatDXT1 ? 8 : 16;
     return size_t((w + 3) / 4) * size_t((h + 3) / 4) * unit;
 }
@@ -124,7 +133,7 @@ TextureValidation validateTextureEntry(const std::vector<uint8_t>& info,
 
     const uint8_t* tail = pixelFormatTail(fmt);
     if (tail == nullptr) {
-        v.errors.push_back("unsupported pixel format 0x" +
+        v.errors.push_back("unsupported pixel format " +
                            std::to_string(i.pixelFormat));
         return v;
     }
@@ -164,7 +173,15 @@ TextureValidation validateTextureEntry(const std::vector<uint8_t>& info,
         v.warnings.push_back("volume texture with a mip chain: slice count per "
                              "level is assumed to halve");
 
-    const size_t mip0Raw = mipRawLength(fmt, surfaceW, surfaceH) * depth;
+    // CGraphicDataBank::LoadGraphicFrame (031238F0) reads each surface's
+    // GetByteLength (030C5F90): Width * Height * ColourDepth >> 3. Native
+    // DXT5 therefore stores 4/1 bytes for 2x2/1x1 tails, not 16-byte blocks.
+    // Keep the established DXT1/DXT3 writer contract separate from this path.
+    const auto storedMipLength = [&](uint32_t width, uint32_t height) {
+        return fmt == kFormatDXT5 ? size_t(width) * height
+                                 : mipRawLength(fmt, width, height);
+    };
+    const size_t mip0Raw = storedMipLength(surfaceW, surfaceH) * depth;
     if (i.frameDataSize != mip0Raw)
         v.errors.push_back("FrameDataSize " + std::to_string(i.frameDataSize) +
                            " != uncompressed mip-0 size " + std::to_string(mip0Raw));
@@ -173,7 +190,7 @@ TextureValidation validateTextureEntry(const std::vector<uint8_t>& info,
     uint32_t w = surfaceW, h = surfaceH;
     uint32_t d = depth;
     for (uint32_t level = 0; level < mips; ++level) {
-        const size_t raw = mipRawLength(fmt, w, h) * d;
+        const size_t raw = storedMipLength(w, h) * d;
         v.mipRawSizes.push_back(raw);
         if (level == 0 && i.mipSize0 > 0) {
             // Fable chunked-LZO region: chunks cover raw-3 bytes, then 3 raw
@@ -297,6 +314,11 @@ DecodedMip0 decodeMip0(const std::vector<uint8_t>& info,
         return out;
     }
     const TextureInfo& i = validation.info;
+    if ((i.pixelFormat & 0xFF) == kFormatDXT5 || (i.pixelFormat & 0xFF) == kFormatV8U8) {
+        const std::string formatName=pixelFormatName(i.pixelFormat);
+        out.error = formatName + " storage is valid but the texture preview decoder does not support " + formatName;
+        return out;
+    }
     out.width = powerOfTwoUp(i.allocWidth);
     out.height = powerOfTwoUp(i.allocHeight);
     const uint32_t fmt = i.pixelFormat & 0xFF;
@@ -483,12 +505,26 @@ TextureValidation validateBigEntry(const fs::path& bigPath,
                                    std::string* bankOut, uint32_t* idOut) {
     const auto file = big::File::open(bigPath);
     const std::string needle = upper(entryName);
-    for (const auto& bank : file.banks()) {
-        for (const auto& entry : bank.entries) {
-            if (upper(entry.name) != needle) continue;
-            if (bankOut) *bankOut = bank.name;
-            if (idOut) *idOut = entry.id;
-            return validateTextureEntry(entry.subHeader, file.entryData(entry));
+    // A post-write check must resolve the exact entry just written. A unique
+    // folded fallback remains useful for the read-only verification command.
+    for (bool exact : {true,false}) {
+        const big::Bank* matchedBank=nullptr;
+        const big::Entry* matchedEntry=nullptr;
+        for (const auto& bank : file.banks()) {
+            for (const auto& entry : bank.entries) {
+                if (exact ? entry.name!=entryName : upper(entry.name)!=needle) continue;
+                if (matchedEntry) {
+                    TextureValidation ambiguous;
+                    ambiguous.errors.push_back("ambiguous texture entry name: " + std::string(entryName));
+                    return ambiguous;
+                }
+                matchedBank=&bank;matchedEntry=&entry;
+            }
+        }
+        if (matchedEntry) {
+            if (bankOut) *bankOut=matchedBank->name;
+            if (idOut) *idOut=matchedEntry->id;
+            return validateTextureEntry(matchedEntry->subHeader,file.entryData(*matchedEntry));
         }
     }
     TextureValidation v;
@@ -507,6 +543,8 @@ ImportResult importPng(const ImportRequest& request) {
     texturewrite::Image img = texturewrite::loadImage(request.png.string(), err);
     if (img.rgba.empty()) return fail(err);
     const int realW = img.width, realH = img.height;
+    if (request.add && (realW > 65535 || realH > 65535))
+        return fail("source image dimensions exceed the 16-bit texture header");
     std::error_code ec;
     if (!fs::is_regular_file(request.srcBig, ec)) return fail("no such bank " + request.srcBig.string());
     big::File file = big::File::open(request.srcBig);
@@ -514,41 +552,99 @@ ImportResult importPng(const ImportRequest& request) {
     big::Entry* target = nullptr;
     for (auto& b : file.banks()) {
         for (auto& e : b.entries)
-            if (e.name == request.entryName) { bank = &b; target = &e; break; }
-        if (target) break;
+            if (e.name == request.entryName) {
+                if (target) return fail("ambiguous texture entry name " + request.entryName);
+                bank = &b; target = &e;
+            }
     }
     uint32_t format = texturewrite::formatByName(request.format);
+    if (!request.format.empty() && !format)
+        return fail("unknown texture format '" + request.format + "' (dxt1 | dxt3 | argb8888)");
+    uint32_t newId = 0;
+    int retainedTransparency = -1;
     int allocW = 0, allocH = 0;
+    int frameW = realW, frameH = realH;
     if (request.add) {
         if (target) return fail("entry " + request.entryName + " already exists in " + bank->name + " (replace it instead)");
         bank = file.findBank(request.subBank);
         if (!bank) return fail("bank " + request.subBank + " not found in " + request.srcBig.string());
         if (bank->entries.empty()) return fail("bank " + request.subBank + " is empty; nothing to model the new record on");
+        for (const auto& entry : bank->entries) newId = std::max(newId, entry.id);
+        if (newId == std::numeric_limits<uint32_t>::max()) return fail("no free texture entry ID");
+        ++newId;
         if (!format) return fail("unknown texture format '" + request.format + "' (dxt1 | dxt3 | argb8888)");
         if (!request.dims.empty()) {
-            if (std::sscanf(request.dims.c_str(), "%dx%d", &allocW, &allocH) != 2 || allocW <= 0 || allocH <= 0) return fail("bad --dims " + request.dims);
+            const auto split = request.dims.find('x');
+            auto dimension = [](std::string_view text, int& value) {
+                const auto [end, error] = std::from_chars(text.data(), text.data()+text.size(), value);
+                return !text.empty() && error == std::errc{} && end == text.data()+text.size()
+                    && value > 0 && value <= 65535;
+            };
+            if (split == std::string::npos ||
+                !dimension(std::string_view(request.dims).substr(0,split),allocW) ||
+                !dimension(std::string_view(request.dims).substr(split+1),allocH))
+                return fail("bad --dims " + request.dims + "; expected WxH with dimensions from 1 to 65535");
         } else {
             for (allocW = 1; allocW < realW; allocW <<= 1) {}
             for (allocH = 1; allocH < realH; allocH <<= 1) {}
+            if (format == kFormatDXT1 || format == kFormatDXT3) {
+                allocW = std::max(4,allocW); allocH = std::max(4,allocH);
+            }
         }
+        if (allocW > 65535 || allocH > 65535)
+            return fail("allocated dimensions exceed the 16-bit texture header");
+        if ((allocW & (allocW-1)) || (allocH & (allocH-1)))
+            return fail("allocated texture dimensions must be powers of two");
     } else {
         if (!target) return fail("entry " + request.entryName + " not found in " + request.srcBig.string());
         TextureInfo info;
         if (!parseTextureInfo(target->subHeader.data(), target->subHeader.size(), info, err)) return fail(request.entryName + ": " + err);
+        // CGraphicInfo::IsVolumeTexture (02D136E0) uses archive type 4,
+        // including a volume with only one slice or a damaged zero depth.
+        if (target->type == 4 || info.frameCount > 1 || info.depth != 0)
+            return fail(request.entryName + ": image replacement supports only single-frame 2D textures");
+        // Native IsBooleanAlpha (0263DE40) selects both DXT1 mode 2 and
+        // non-DXT1 mode 4. Preserve the reviewed DXT1/DXT3 combinations.
+        const uint32_t originalFormat = info.pixelFormat & 0xFF;
+        const bool cutoutSlot = (originalFormat == kFormatDXT1 && info.transparency == 2) ||
+                                (originalFormat == kFormatDXT3 && info.transparency == 4);
+        if ((info.transparency > 1 && !cutoutSlot) ||
+            (originalFormat == kFormatDXT1 && info.transparency != 0 && !cutoutSlot))
+            return fail(request.entryName + ": image replacement cannot preserve transparency mode " +
+                        std::to_string(info.transparency));
+        if (cutoutSlot && format && format != originalFormat)
+            return fail(request.entryName + ": cutout texture format conversion is not supported");
+        if (!info.allocWidth || !info.allocHeight || !info.frameWidth || !info.frameHeight ||
+            info.frameWidth > info.allocWidth || info.frameHeight > info.allocHeight)
+            return fail(request.entryName + ": invalid texture slot dimensions");
         allocW = info.allocWidth; allocH = info.allocHeight;   // the slot keeps its allocated size
+        frameW = info.frameWidth; frameH = info.frameHeight; // replacement keeps the slot's logical size too
         if (!format) format = info.pixelFormat & 0xFF;
         if (format != texturewrite::kFormatDXT1 && format != texturewrite::kFormatDXT3 && format != texturewrite::kFormatARGB)
             return fail(request.entryName + " uses pixel format " + std::to_string(format) + ", which this writer cannot encode");
+        // IsAlpha (0263DC90) tests this byte independently of the pixel format.
+        // An explicit format conversion uses the new format's default instead.
+        if (format == (info.pixelFormat & 0xFF)) retainedTransparency = info.transparency;
     }
+    if ((format == kFormatDXT1 || format == kFormatDXT3) && (allocW < 4 || allocH < 4))
+        return fail("compressed texture allocation dimensions must be at least 4x4");
     img = texturewrite::resample(img, allocW, allocH);
-    const texturewrite::Entry built = texturewrite::buildEntry(img, format, realW, realH, !request.rawMip0);
+    texturewrite::Entry built = texturewrite::buildEntry(img, format, frameW, frameH, !request.rawMip0, 0,
+                                                       format == kFormatDXT1 && retainedTransparency == 2);
+    if (retainedTransparency >= 0) built.info[16] = uint8_t(retainedTransparency);
+    const auto builtValidation = validateTextureEntry(built.info, built.payload);
+    if (!builtValidation.ok) {
+        result.validation = builtValidation;
+        return result;
+    }
     if (request.add) {
         big::Entry e;
         const big::Entry& model = bank->entries.back();
-        e.magic = model.magic; e.type = model.type; e.devFileType = model.devFileType;
-        uint32_t maxId = 0;
-        for (const auto& x : bank->entries) maxId = std::max(maxId, x.id);
-        e.id = maxId + 1;
+        e.magic = file.magic() == "BIGB" ? 42 : model.magic;
+        // This writer creates a single 2D image, never a sequence/bump/volume
+        // resource. Native PrepareDataForInclusion (03118180) uses type 0 for it.
+        e.type = 0; e.devFileType = model.devFileType;
+        e.id = newId;
         e.name = request.entryName;
         e.subHeader = built.info;
         e.data = built.payload;

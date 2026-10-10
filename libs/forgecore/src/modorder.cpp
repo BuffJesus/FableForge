@@ -3,10 +3,12 @@
 
 #include <algorithm>
 #include <array>
+#include <cctype>
 #include <cstring>
 #include <fstream>
 #include <map>
 #include <sstream>
+#include <set>
 #include <stdexcept>
 
 #include "nlohmann/json.hpp"
@@ -111,6 +113,21 @@ const char* kindName(Kind k) {
     }
 }
 
+fs::path normalizeSource(const fs::path& source) {
+    if (lower(source.filename().string()) == "data" && fs::is_directory(source) &&
+        (fs::is_directory(source / "CompiledDefs") || fs::is_directory(source / "Levels") ||
+         fs::is_directory(source / "graphics"))) return source.parent_path();
+    return source;
+}
+
+bool hasCompleteData(const fs::path& input) {
+    const auto source = normalizeSource(input);
+    if (!fs::is_directory(source) || fs::exists(source / "forge_pack.json")) return false;
+    for (const char* bank : {"names.bin", "game.bin", "script.bin", "frontend.bin"})
+        if (!fs::is_regular_file(source / "data" / "CompiledDefs" / bank)) return false;
+    return true;
+}
+
 Kind classify(const fs::path& source) {
     std::error_code ec;
     if (fs::is_regular_file(source, ec)) {
@@ -149,6 +166,7 @@ Order load(const fs::path& gameRoot) {
         Entry e;
         e.name = m.value("name", ""); e.source = m.value("source", ""); e.sha256 = m.value("sha256", "");
         e.enabled = m.value("enabled", true); e.note = m.value("note", "");
+        e.installData = m.value("install_data", false);
         const std::string k = m.value("kind", "unknown");
         e.kind = k == "fmp" ? Kind::Fmp : k == "patch" ? Kind::Patch : k == "tree" ? Kind::Tree : k == "egocore" ? Kind::EgoCore : k == "qst" ? Kind::Qst : k == "forge" ? Kind::Forge : Kind::Unknown;
         order.mods.push_back(std::move(e));
@@ -158,8 +176,10 @@ Order load(const fs::path& gameRoot) {
 
 void save(const fs::path& gameRoot, const Order& order) {
     json mods = json::array();
-    for (const auto& e : order.mods)
+    for (const auto& e : order.mods) {
         mods.push_back({{"name", e.name}, {"source", e.source}, {"kind", kindName(e.kind)}, {"sha256", e.sha256}, {"enabled", e.enabled}, {"note", e.note}});
+        if (e.installData) mods.back()["install_data"] = true;
+    }
     // Serialization can reject invalid text; finish it before touching the old order.
     const std::string bytes = json{{"version", order.version}, {"mods", mods}}.dump(2) + "\n";
     const fs::path target = fs::absolute(orderPath(gameRoot)).lexically_normal();
@@ -191,6 +211,12 @@ void save(const fs::path& gameRoot, const Order& order) {
     }
 }
 
+std::string sha256OfBytes(std::string_view bytes) {
+    Sha256 s;
+    s.update(reinterpret_cast<const uint8_t*>(bytes.data()), bytes.size());
+    return s.hex();
+}
+
 std::string sha256Of(const fs::path& p) {
     Sha256 s;
     std::error_code ec;
@@ -218,20 +244,25 @@ int indexOf(const Order& order, const std::string& nameOrIndex) {
     return -1;
 }
 
-Entry& add(Order& order, const fs::path& gameRoot, const fs::path& source, const std::string& name, int at) {
+Entry& add(Order& order, const fs::path& gameRoot, const fs::path& source, const std::string& name, int at, bool installData) {
     std::error_code ec;
     // as typed (relative to the current directory) first, then relative to the game root
     fs::path abs = fs::absolute(source, ec);
     if (!fs::exists(abs, ec)) abs = resolveSource(gameRoot, source.string());
     if (!fs::exists(abs, ec)) throw std::runtime_error("no such source: " + source.string());
     abs = fs::weakly_canonical(abs, ec);
+    abs = normalizeSource(abs);
     Entry e;
     e.kind = classify(abs);
+    if (installData && (e.kind != Kind::Tree || !hasCompleteData(abs)))
+        throw std::runtime_error("complete Data installation requires a mod folder with names.bin, game.bin, script.bin and frontend.bin");
+    e.installData = installData;
     if (e.kind == Kind::Unknown) throw std::runtime_error("not a mod source (need .fmp / .patch / .qst / a folder with Data/ or FSE/ / an EgoCore Mods/<Name>/ folder): " + abs.string());
+    e.name = name.empty() ? (abs.filename().string().empty() ? abs.parent_path().filename().string() : abs.stem().string()) : name;
+    requireLabel(e.name);
     e.sha256 = sha256Of(abs);
     for (const auto& m : order.mods)
         if (m.sha256 == e.sha256) throw std::runtime_error("already in the order as \"" + m.name + "\" (same contents)");
-    e.name = name.empty() ? (abs.filename().string().empty() ? abs.parent_path().filename().string() : abs.stem().string()) : name;
     if (indexOf(order, e.name) >= 0) throw std::runtime_error("a mod named \"" + e.name + "\" is already in the order; pass --name");
     // stored root-relative when the pack lives inside the game root (a portable order), absolute otherwise
     const fs::path rootAbs = fs::weakly_canonical(gameRoot, ec);
@@ -266,15 +297,52 @@ void setEnabled(Order& order, const std::string& nameOrIndex, bool enabled) {
 
 std::vector<std::string> buildLabels(const Order& order) {
     std::vector<std::string> out;
-    for (const auto& e : order.mods) if (e.enabled) out.push_back(e.name);
+    for (const auto& e : order.mods) if (e.enabled) {
+        out.push_back(e.name);
+    }
+    requireLabels(out);
     return out;
 }
 
+void requireLabel(std::string_view label) {
+    if (label.empty() || std::isspace(static_cast<unsigned char>(label.front())) ||
+        std::isspace(static_cast<unsigned char>(label.back())) ||
+        std::any_of(label.begin(), label.end(), [](unsigned char c) { return c < 32 || c == 127; }))
+        throw std::runtime_error("Mod name must be nonempty, without surrounding whitespace or control characters; choose another name with --name.");
+    if (lower(std::string(label)) == "vanilla")
+        throw std::runtime_error("Mod name vanilla is reserved for baseline choices; choose another name with --name.");
+}
+
+void requireLabels(const std::vector<std::string>& labels) {
+    std::set<std::string> seen;
+    for (const auto& label : labels) {
+        requireLabel(label);
+        if (!seen.insert(lower(label)).second)
+            throw std::runtime_error("Mod labels must be distinct (ignoring case); register each source with a different name using mods add --name.");
+    }
+}
+
+bool installsCompleteData(const Order& order) {
+    size_t enabled = 0;
+    bool result = false;
+    for (const auto& entry : order.mods) {
+        if (!entry.enabled) continue;
+        if (entry.installData) {
+            if (enabled != 0) throw std::runtime_error("Complete Data installation must be the first enabled mod; move it to the top of the order.");
+            result = true;
+        }
+        ++enabled;
+    }
+    return result;
+}
+
 std::vector<std::string> buildSources(const Order& order, const fs::path& gameRoot) {
+    (void)buildLabels(order); // reject ambiguous decisions before deploy restores an existing stage
+    installsCompleteData(order);
     std::vector<std::string> out;
     for (const auto& e : order.mods) {
         if (!e.enabled) continue;
-        fs::path p = resolveSource(gameRoot, e.source);
+        fs::path p = normalizeSource(resolveSource(gameRoot, e.source));
         const auto kind = classify(p);
         if (kind == Kind::Unknown)
             throw std::runtime_error("enabled mod source is missing or unsupported: " + e.name + " (" + p.string() + ")");

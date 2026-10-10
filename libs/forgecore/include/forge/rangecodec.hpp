@@ -22,9 +22,15 @@
 namespace forge::rangecodec {
 
 // Decode a CRangeCompressor block into `count` elements of `stride` bytes each
-// (stride ∈ {1,2,4}). `block` points at the flags byte; `blockLen` is its length.
+// (`stride` is the record size; descriptor column widths are 1, 2 or 4 bytes).
+// `block` points at the flags byte; `blockLen` is its length.
 // Returns count*stride decoded bytes. Throws std::runtime_error on malformed input.
 std::vector<uint8_t> decode(const uint8_t* block, size_t blockLen, size_t count, size_t stride);
+
+// Storage-validation form: additionally require exact consumption of the raw
+// bytes or compressed descriptor stream. The ordinary reader permits suffixes
+// for preservation-oriented callers. Neither function mutates the input.
+std::vector<uint8_t> decodeExact(const uint8_t* block, size_t blockLen, size_t count, size_t stride);
 
 // Emit a RAW/stored block for `count*stride` element bytes: [0x00][raw bytes].
 // This is the byte-exact form the engine's decoder accepts on the flags==0 path.

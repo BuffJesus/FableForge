@@ -1,16 +1,17 @@
 #!/usr/bin/env python3
-"""The GB-pack stress case of the mod composer (ROADMAP 0.20): Project Seasons (a whole-tree
-pack: 796 loose levels (including root creature_hub), a new ProjectAutumn/ folder, whole STB / banks / game.bin / text.big,
-the retail WAD parked as `_FinalAlbion.wad`, a userst.ini) under the Unofficial Fable Patch's
-bsdiff, built onto a scratch root that carries the install's retail containers. Checks the
+"""Original GB packs retain their compatible whole-bank identities; content-only
+copies retain the level/asset stress checks. Definition and language banks are excluded only in the owned test
+fixture, which is not a complete mod installation. Checks the
 composer's GB-pack rules: the parked WAD and the settings file are not layers, the loose levels
 are repacked into FinalAlbion.wad, the new level folder rides along, provenance covers every
 changed level. Skips without the extracted pack (work/nexus_mods/_peek/ProjectSeasons) or the
-install. ~30 s, ~2 GB of scratch under build/. Nothing touches the install.
+install. Owned scratch under build/. Nothing touches the install.
 
   python tools/test_gbpack.py [--root <fable install>] [--keep]
 """
-import argparse, json, os, re, shutil, subprocess, sys, time
+import argparse, json, os, re, shutil, subprocess, sys, tempfile, time
+from pathlib import Path
+from mod_content_fixture import content_only, accept_stable_overhaul
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 PACKS = {
@@ -45,15 +46,21 @@ def main() -> int:
     ap.add_argument("--root", default="")
     ap.add_argument("--pack", choices=PACKS, default="seasons")
     ap.add_argument("--keep", action="store_true")
+    ap.add_argument('--skip-graphics', action='store_true',
+                    help='Exclude bulk graphics from the level/WAD fixture; individual full-source bank audits still run')
+    ap.add_argument('--corpus', type=Path, default=Path(ROOT)/'work/nexus_mods/_peek')
     a = ap.parse_args()
     root = find_root(a.root)
-    packs = PACKS[a.pack]
-    if not root or any(not os.path.isdir(os.path.join(path, "data")) for _, path in packs) or not os.path.exists(UFP):
+    corpus_root = Path(ROOT)/'work/nexus_mods/_peek'
+    packs = [(name, str(a.corpus.resolve()/Path(path).relative_to(corpus_root))) for name, path in PACKS[a.pack]]
+    if not root or any(not os.path.isdir(os.path.join(path, "data")) for _, path in packs):
         print(f"gb-pack test skipped (no install, or {a.pack} not extracted under work/nexus_mods/_peek)"); return 0
     os.chdir(ROOT)
     tool = os.path.join(ROOT, "build", "forge-tools.exe")
-    scratch = os.path.join(ROOT, "build", "gb_root"); out = os.path.join(ROOT, "build", "gb_out")
-    shutil.rmtree(scratch, ignore_errors=True); shutil.rmtree(out, ignore_errors=True)
+    work = Path(tempfile.mkdtemp(prefix='gb-content-', dir=Path(ROOT)/'build')).resolve()
+    assert work.parent == (Path(ROOT)/'build').resolve()
+    print('Evidence retained at', work, flush=True)
+    scratch = str(work/'root'); out = str(work/'out')
     for d in ("data/Levels/FinalAlbion", "data/CompiledDefs", "data/graphics/pc", "data/lang/English"):
         os.makedirs(os.path.join(scratch, d))
     for rel in ("data/CompiledDefs/game.bin", "data/CompiledDefs/names.bin", "data/CompiledDefs/script.bin", "data/CompiledDefs/frontend.bin",
@@ -64,18 +71,25 @@ def main() -> int:
         shutil.copyfile(src, os.path.join(scratch, rel))
     ok = True
 
+    command_index = 0
     def run(*args):
-        r = subprocess.run([tool, *args], capture_output=True, text=True)
+        nonlocal command_index
+        command_index += 1
+        r = subprocess.run([tool, *args], capture_output=True, text=True, timeout=300)
+        (work/f'command-{command_index:02d}.log').write_text(r.stdout+r.stderr, encoding='utf-8')
         if r.returncode != 0:
             nonlocal ok; ok = False
             print("rc", r.returncode, "for", " ".join(args)); print(r.stdout[-800:], r.stderr[-400:])
         return r
 
-    run("mods", "add", scratch, UFP, "--name", "UFP")
-    for pack_name, pack_path in packs:
-        run("mods", "add", scratch, pack_path, "--name", pack_name)
+    fixtures = []
+    for index, (pack_name, pack_path) in enumerate(packs):
+        accept_stable_overhaul(tool, scratch, pack_path, work/f'accepted-{index}', ROOT, work/f'acceptance-{index}')
+        fixture = content_only(pack_path, work/'content'/pack_name, include_graphics=not a.skip_graphics)
+        fixtures.append(fixture)
     t0 = time.time()
-    r = run("mods", "build", scratch, out)
+    options = [argument for fixture in fixtures for argument in ('--with', str(fixture))]
+    r = run("mods", "merge", scratch, out, *options)
     dt = time.time() - t0
     o = r.stdout
     for pack_name, _ in packs:
@@ -117,8 +131,13 @@ def main() -> int:
         if "changes applied" in line or "TNG merge:" in line or "FinalAlbion.wad rebuilt:" in line:
             print(line)
     if not a.keep:
-        shutil.rmtree(scratch, ignore_errors=True); shutil.rmtree(out, ignore_errors=True)
-    print("gb-pack test", "OK" if ok else "FAILED")
+        for target in [Path(scratch), Path(out), *fixtures]:
+            assert target.resolve().is_relative_to(work) and target.resolve() != work
+            shutil.rmtree(target, ignore_errors=True)
+    (work/'result.json').write_text(json.dumps({'passed': ok, 'scope': 'compatible full-source bank audit and content-only level/asset fixtures',
+        'fixture_graphics_included': not a.skip_graphics,
+        'wad_payloads_checked': checked, 'complete_mod_installation': False}, indent=2), encoding='utf-8')
+    print("GB full-source bank audit and content-only fixture", "PASS" if ok else "FAILED")
     return 0 if ok else 1
 
 

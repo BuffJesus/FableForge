@@ -14,6 +14,15 @@
 #include <string>
 #include <vector>
 
+#ifdef _WIN32
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#undef near
+#undef far
+#endif
+
 #include "forge/heightpen.hpp"
 #include "forge/trackpath.hpp"
 #include "worldtiles.hpp"
@@ -26,6 +35,7 @@
 #include "forge/budget.hpp"
 #include "forge/fillerfit.hpp"
 #include "forge/worldmerge.hpp"
+#include "forge/defexternal.hpp"
 #include "forge/lev.hpp"
 #include "forge/temporarydirectory.hpp"
 #include "forge/terrain.hpp"
@@ -90,6 +100,11 @@ void testDisabledEffects() {
     CHECK(effect.parsedFully && effect.systems==3);
     CHECK(effect.sprites.size()==1);
     if(effect.sprites.size()==1) CHECK(effect.sprites[0].sprite==30);
+    auto trailing=payload; trailing.push_back(0);
+    const auto withTrailing=albion::effects::decode(trailing);
+    CHECK(!withTrailing.parsedFully && withTrailing.sprites.size()==1);
+    auto unsupported=payload; unsupported[0]=101;
+    CHECK(!albion::effects::decode(unsupported).parsedFully);
     payload.pop_back();
     CHECK(!albion::effects::decode(payload).parsedFully);
 }
@@ -503,8 +518,7 @@ fs::path writeSyntheticLev(const fs::path& path, int w, int h,
 
 // A fileVersion-3 .lev with the game-map grid (environment + sound themes): an
 // 8x8 map -> 2x2 game-map cells, sounds {SOUND_A, SOUND_B}, atmos slot 1 named.
-fs::path writeGameMapLev(const fs::path& path) {
-    const int w = 8, h = 8;
+fs::path writeGameMapLev(const fs::path& path, int w = 8, int h = 8) {
     std::vector<uint8_t> b;
     put<uint32_t>(b, 25); put<uint16_t>(b, 6404); b.insert(b.end(), 3, 0);
     put<uint32_t>(b, 0);
@@ -855,6 +869,143 @@ void testWater(const fs::path& dir) {
 
 // The level document: byte-exact round trip, frame edits in retail spelling,
 // duplicate/remove/place with undo, and the change summary.
+void testScriptNameSafety() {
+    const std::string source = "Version 2;\r\nXXXSectionStart NULL;\r\nNewThing Object;\r\nUID 1;\r\nDefinitionType \"OBJECT_A\";\r\nScriptName ROLE_TEST;\r\nHealth 1.0;\r\nEndThing;\r\nXXXSectionEnd;\r\n";
+    const std::vector<std::string> invalid = {"15360", "1ROLE", "\"ROLE\"", "ROLE TEST", "ROLE;Health 2", "ROLE\nTEST", "", "\xc3\xa9ROLE"};
+    const auto refused = [](auto operation) {
+        try { operation(); } catch (const std::invalid_argument&) { return true; }
+        return false;
+    };
+    // The same native token reader consumes creature brain and Switch names.
+    for (const auto& [type,key] : std::vector<std::pair<std::string,std::string>>{
+            {"AICreature","OverridingBrainName"},{"Switch","TriggeredByThing"},{"Switch","EnvironmentDef"}}) {
+        const std::string input="Version 2;\nXXXSectionStart NULL;\nNewThing "+type+
+            ";\nPlayer 4;\nUID 1;\nDefinitionType \"TEST_DEF\";\n"+key+
+            " ROLE_TEST;\nHealth 1.0;\nEndThing;\nXXXSectionEnd;\n";
+        for (const auto& value : invalid) {
+            for (int mode=0;mode<3;++mode) {
+                auto file=forge::tng::File::parseText(input);
+                if(mode==2) file.removeThingProperty(0,key);
+                const auto before=file.serialize();
+                CHECK(refused([&]{
+                    if(mode==0) file.setThingProperty(0,key,value);
+                    else if(mode==1) file.setThingPropertyAll(0,key,value);
+                    else file.insertThingPropertyBefore(0,key,value,"Health");
+                }));
+                CHECK(file.serialize()==before);
+            }
+            albion::editor::Document fieldDoc;
+            std::string fieldError;
+            CHECK(fieldDoc.openText("Native name fields",input,fieldError));
+            const auto revision=fieldDoc.revision();
+            CHECK(!fieldDoc.setPropertyValue(0,"",key,value));
+            CHECK(fieldDoc.text()==input && fieldDoc.revision()==revision && !fieldDoc.canUndo());
+            CHECK(refused([&]{fieldDoc.setProperty(0,key,value);}));
+            CHECK(fieldDoc.text()==input && fieldDoc.revision()==revision && !fieldDoc.canUndo());
+        }
+        auto legacy=input;
+        legacy.replace(legacy.find("ROLE_TEST"),9,"\"Legacy\"");
+        albion::editor::Document fieldDoc;
+        std::string fieldError;
+        CHECK(fieldDoc.openText("Legacy native name",legacy,fieldError));
+        CHECK(fieldDoc.setPropertyValue(0,"",key,"_VALID_2"));
+        CHECK(fieldDoc.text().find(key+" _VALID_2;")!=std::string::npos);
+        CHECK(fieldDoc.undo() && fieldDoc.text()==legacy);
+        CHECK(fieldDoc.setPropertyValue(0,"",key,"NULL"));
+    }
+    // A same-spelled unknown field on another thing type stays raw.
+    auto unrelated=forge::tng::File::parseText(source);
+    unrelated.setThingProperty(0,"OverridingBrainName","15360");
+    CHECK(unrelated.things()[0].find("OverridingBrainName")==std::optional<std::string_view>("15360"));
+    for (const auto& name : invalid) {
+        for (int mode = 0; mode != 3; ++mode) {
+            auto file = forge::tng::File::parseText(source);
+            if (mode == 2) file.removeThingProperty(0, "ScriptName");
+            const auto before = file.serialize();
+            CHECK(refused([&] {
+                if (mode == 0) file.setThingProperty(0, "scriptname", name);
+                else if (mode == 1) file.setThingPropertyAll(0, "ScriptName", name);
+                else file.insertThingPropertyBefore(0, "ScriptName", name, "Health");
+            }));
+            CHECK(file.serialize() == before && file.things().size() == 1);
+        }
+        albion::editor::Document doc;
+        std::string error;
+        CHECK(doc.openText("Script names", source, error));
+        const auto revision = doc.revision();
+        CHECK(!doc.setPropertyValue(0, "", "ScriptName", name));
+        CHECK(doc.text() == source && doc.revision() == revision && !doc.dirty() && !doc.canUndo());
+        CHECK(refused([&] { doc.setProperty(0, "ScriptName", name); }));
+        CHECK(doc.text() == source && doc.revision() == revision && !doc.dirty() && !doc.canUndo());
+        CHECK(refused([&] { doc.placeTrackNode(0, 0, 0, name); }));
+        CHECK(doc.text() == source && doc.revision() == revision && !doc.canUndo());
+        if (!name.empty()) {
+            const float position[3] = {0, 0, 0};
+            CHECK(refused([&] { doc.placeFishingSpot(position, "", name); }));
+            CHECK(doc.text() == source && doc.revision() == revision && !doc.canUndo());
+            forge::thingplacer::Placement placement;
+            placement.definitionType = "OBJECT_A";
+            placement.scriptName = name;
+            CHECK(refused([&] { doc.place(placement); }));
+            CHECK(doc.text() == source && doc.revision() == revision && !doc.canUndo());
+            CHECK(refused([&] { forge::thingplacer::serialize(placement, "\r\n"); }));
+            auto file = forge::tng::File::parseText(source);
+            CHECK(refused([&] { forge::thingplacer::place(file, placement); }));
+            CHECK(file.serialize() == source);
+        }
+    }
+    albion::editor::Document doc;
+    std::string error;
+    CHECK(doc.openText("Script names", source, error));
+    CHECK(doc.setPropertyValue(0, "", "ScriptName", "_ROLE_2"));
+    CHECK(doc.text().find("ScriptName _ROLE_2;") != std::string::npos);
+    doc.undo();
+    CHECK(doc.text() == source);
+    CHECK(doc.canRedo());
+    forge::thingplacer::Placement rejected;
+    rejected.definitionType = "OBJECT_A";
+    rejected.scriptName = "1ROLE";
+    const auto undoneRevision = doc.revision();
+    CHECK(refused([&] { doc.place(rejected); }));
+    CHECK(doc.canRedo() && !doc.canUndo() && doc.text() == source && doc.revision() == undoneRevision);
+    const auto node = doc.placeTrackNode(0, 0, 0, "ROLE_ROUTE");
+    const auto before = doc.text();
+    const auto revision = doc.revision();
+    CHECK(!doc.renameTrack(node, "1ROLE"));
+    CHECK(doc.text() == before && doc.revision() == revision);
+    CHECK(doc.renameTrack(node, "_ROLE_ROUTE_2"));
+    forge::thingplacer::Placement placement;
+    placement.definitionType = "OBJECT_A";
+    CHECK(forge::thingplacer::serialize(placement, "\r\n").find("ScriptName NULL;") != std::string::npos);
+    const std::string legacy = "Version 2;\r\nXXXSectionStart NULL;\r\nNewThing Object;\r\nScriptName \"Legacy\";\r\nHealth 1.0;\r\nEndThing;\r\nXXXSectionEnd;\r\n";
+    auto file = forge::tng::File::parseText(legacy);
+    CHECK(file.serialize() == legacy);
+    file.setThingProperty(0, "Health", "2.0");
+    CHECK(file.serialize().find("ScriptName \"Legacy\";") != std::string::npos);
+    albion::editor::Document legacyDoc;
+    CHECK(legacyDoc.openText("Legacy script name", legacy, error));
+    CHECK(legacyDoc.setPropertyValue(0, "", "ScriptName", "_CORRECTED_2"));
+    CHECK(legacyDoc.text().find("ScriptName _CORRECTED_2;") != std::string::npos);
+    legacyDoc.undo();
+    CHECK(legacyDoc.text() == legacy && legacyDoc.canRedo());
+    CHECK(!legacyDoc.setPropertyValue(0, "", "ScriptName", "15360"));
+    CHECK(legacyDoc.text() == legacy && legacyDoc.canRedo() && !legacyDoc.canUndo());
+    const std::string legacyTracks = "Version 2;\nXXXSectionStart NULL;\nNewThing TrackNode;\nUID 1;\nScriptName \"Legacy\";\nLinkedToUID1 0;\nLinkedToUID2 0;\nEndThing;\nNewThing TrackNode;\nUID 2;\nScriptName ROLE_ROUTE;\nLinkedToUID1 0;\nLinkedToUID2 0;\nEndThing;\nXXXSectionEnd;\n";
+    albion::editor::Document tracks;
+    CHECK(tracks.openText("Legacy tracks", legacyTracks, error));
+    const auto trackRevision = tracks.revision();
+    bool threw = false, linked = false;
+    try { linked = tracks.linkTrackNodes(0, 1, error); } catch (const std::invalid_argument&) { threw = true; }
+    CHECK(!threw && !linked && !error.empty());
+    CHECK(tracks.text() == legacyTracks && tracks.revision() == trackRevision && !tracks.canUndo());
+    // Correcting the name permits the same link operation.
+    if (tracks.text() == legacyTracks) {
+        CHECK(tracks.renameTrack(0, "_CORRECTED_ROUTE"));
+        CHECK(tracks.linkTrackNodes(0, 1, error));
+    }
+}
+
+
 void testLevelDocument() {
     auto near = [](float a, float b) { return std::fabs(a - b) < 1e-5f; };
     const std::string tng =
@@ -883,7 +1034,7 @@ void testLevelDocument() {
         "NewThing Marker;\r\n"
         "UID 18446744073709551614;\r\n"
         "DefinitionType \"MARKER_BASIC\";\r\n"
-        "ScriptName \"Start\";\r\n"
+        "ScriptName Start;\r\n"
         "EndThing;\r\n"
         "\r\n"
         "XXXSectionEnd;\r\n";
@@ -895,10 +1046,30 @@ void testLevelDocument() {
     CHECK(doc.thingCount() == 2);
     const auto s0 = doc.summary(0);
     CHECK(s0.definition == "OBJECT_BARREL_01" && s0.hasFrame && s0.scriptName.empty());
-    CHECK(doc.summary(1).scriptName == "\"Start\"" || doc.summary(1).scriptName == "Start");
+    CHECK(doc.summary(1).scriptName == "Start");
     albion::editor::Frame f;
     CHECK(doc.frameOf(0, f));
     CHECK(near(f.pos[0], 10.5f) && near(f.forward[1], 1.0f) && near(f.up[2], 1.0f) && near(f.scale, 1.0f));
+    for(bool owned:{false,true}) for(size_t component=0;component<10;++component)
+        for(const float invalid:{std::numeric_limits<float>::quiet_NaN(),std::numeric_limits<float>::infinity(),-std::numeric_limits<float>::infinity()}) {
+            albion::editor::Document candidate;CHECK(candidate.openText("Synthetic",tng,err));
+            auto invalidFrame=f;
+            float* value=component<3?&invalidFrame.pos[component]:component<6?&invalidFrame.forward[component-3]:
+                         component<9?&invalidFrame.up[component-6]:&invalidFrame.scale;
+            *value=invalid;
+            const auto revision=candidate.revision();
+            if(owned) candidate.setOwnedFrame(0,invalidFrame);else candidate.setFrame(0,invalidFrame);
+            CHECK(candidate.text()==tng && candidate.revision()==revision && !candidate.canUndo());
+        }
+    for(bool owned:{false,true}) {
+        albion::editor::Document candidate;CHECK(candidate.openText("Synthetic",tng,err));
+        auto moved=f;moved.pos[0]+=1;candidate.setFrame(0,moved);const auto changed=candidate.text();
+        CHECK(candidate.undo() && candidate.canRedo());const auto revision=candidate.revision();
+        moved.scale=std::numeric_limits<float>::infinity();
+        if(owned) candidate.setOwnedFrame(0,moved);else candidate.setFrame(0,moved);
+        CHECK(candidate.text()==tng && candidate.revision()==revision && !candidate.canUndo() && candidate.canRedo());
+        CHECK(candidate.redo() && candidate.text()==changed);
+    }
 
     // frame <-> matrix agree with thingBasis' convention and invert each other
     float m[16]; albion::editor::frameToMatrix(f, m);
@@ -907,6 +1078,32 @@ void testLevelDocument() {
     for (int r = 0; r < 3; ++r) for (int c = 0; c < 3; ++c) CHECK(near(m[r * 4 + c], basis[r * 3 + c]));
     albion::editor::Frame back; CHECK(albion::editor::matrixToFrame(m, back));
     CHECK(near(back.pos[1], 20.25f) && near(back.forward[1], 1.0f) && near(back.scale, 1.0f));
+    for(const float scale:{1e-5f,1.0f,1e20f,1e30f}) {
+        auto large=f;large.scale=scale;
+        float matrix[16];albion::editor::frameToMatrix(large,matrix);
+        albion::editor::Frame recovered;
+        CHECK(albion::editor::matrixToFrame(matrix,recovered));
+        CHECK(std::isfinite(recovered.scale) && std::abs(double(recovered.scale)/scale-1)<1e-6 &&
+              near(recovered.forward[1],1) && near(recovered.up[2],1));
+    }
+    {
+        auto large=f;large.forward[1]=1e30f;large.up[2]=1e30f;
+        float matrix[16];albion::editor::frameToMatrix(large,matrix);
+        for(size_t element=0;element<16;++element) CHECK(near(matrix[element],m[element]));
+    }
+    for(size_t element=0;element<16;++element)
+        for(const float bad:{std::numeric_limits<float>::quiet_NaN(),std::numeric_limits<float>::infinity(),-std::numeric_limits<float>::infinity()}) {
+        float invalid[16];std::copy(m,m+16,invalid);invalid[element]=bad;
+        auto preserved=f;CHECK(!albion::editor::matrixToFrame(invalid,preserved));
+        CHECK(std::equal(preserved.pos,preserved.pos+3,f.pos) && std::equal(preserved.forward,preserved.forward+3,f.forward) &&
+              std::equal(preserved.up,preserved.up+3,f.up) && preserved.scale==f.scale);
+    }
+    {
+        float oversized[16];std::copy(m,m+16,oversized);
+        oversized[0]=oversized[5]=oversized[10]=std::numeric_limits<float>::max();
+        auto preserved=f;CHECK(!albion::editor::matrixToFrame(oversized,preserved));
+        CHECK(preserved.pos[0]==f.pos[0] && preserved.scale==f.scale);
+    }
     float inv[16], id[16]; CHECK(albion::editor::invert(m, inv)); albion::editor::multiply(m, inv, id);
     CHECK(near(id[0], 1) && near(id[5], 1) && near(id[10], 1) && near(id[15], 1) && near(id[12], 0));
 
@@ -956,8 +1153,8 @@ void testLevelDocument() {
     bool removed = false; for (const auto& c : ch) removed = removed || c.rfind("removed OBJECT_BARREL_01", 0) == 0;
     CHECK(removed);
     // setProperty + markSaved
-    doc.setProperty(0, "ScriptName", "\"Exit\"");
-    CHECK(doc.text().find("ScriptName \"Exit\";") != std::string::npos);
+    doc.setProperty(0, "ScriptName", "Exit");
+    CHECK(doc.text().find("ScriptName Exit;") != std::string::npos);
     doc.markSaved();
     CHECK(!doc.dirty() && doc.changes().empty());
     // a batch is one undo step: two moves + a duplicate, one undo restores all
@@ -1057,7 +1254,7 @@ void testTerrainEditing(const fs::path& lev, const fs::path& dir) {
     CHECK(doc.undo() && near(doc.terrain().heights[size_t(2) * 5 + 2], h0) && near(doc.level()->heightAt(2, 2), h0) && !doc.terrainDirty());
     CHECK(doc.redo() && near(doc.terrain().heights[size_t(2) * 5 + 2], h0 + 2.0f));
     // walkable paint
-    b.mode = albion::editor::TerrainBrush::Mode::Blocked; b.radius = 0.6f; b.x = 1.5f; b.y = 1.5f;
+    b.mode = albion::editor::TerrainBrush::Mode::Blocked; b.radius = 0.25f; b.x = 1; b.y = 1;
     doc.beginStroke(b); doc.applyBrush(b, 0.1f); doc.endStroke();
     CHECK(doc.terrain().walkable[size_t(1) * 5 + 1] == 0 && !doc.level()->walkableAt(1, 1));
     CHECK(doc.level()->walkableAt(2, 2));   // even rows are walkable in the synthetic map
@@ -1220,6 +1417,41 @@ void testGameMapGrid(const fs::path& dir) {
 // Environment + sound painting through the document (vanilla ENVIRONMENT tab and
 // Survey > Sounds): brushes on the 4x4 game-map cells, a new environment theme in
 // a free atmos slot, dirty tracking, the loose save, undo.
+void testSurveyOverlay(const fs::path& dir) {
+    using Doc = albion::editor::Document;
+    using Colour = Doc::OverlayColour;
+    const auto path = writeGameMapLev(dir / "survey.lev");
+    auto lev = forge::lev::File::open(path);
+    lev.setAtmosAt(0, 0, {{1, 1, 1}, {85, 85, 85}});
+    lev.setAtmosAt(1, 0, {{1, 0, 0}, {255, 0, 0}});
+    lev.save(path);
+    Doc doc;
+    std::string err;
+    CHECK(doc.openText("Survey", "Version 2;\r\nXXXSectionStart NULL;\r\nXXXSectionEnd;\r\n", err));
+    CHECK(doc.loadLevel(path, err));
+    const Doc::OverlayLookup lookup = [](const std::string& name, const std::string& field) -> std::optional<Colour> {
+        if (name == "SOUND_A" && field == "EditColour") return Colour{200, 10, 20, 37};
+        if (name == "SOUND_B" && field == "EditColour") return Colour{5, 100, 250, 240};
+        if (name == "ENVIRONMENT_UNDERTREES" && field == "EditorColour") return Colour{2, 100, 255, 7};
+        return std::nullopt;
+    };
+    const auto all = doc.surveyOverlay(false, -1, lookup);
+    CHECK((all == std::vector<Colour>{{200,10,20,37}, {200,10,20,37}, {200,10,20,37}, {5,100,250,240}}));
+    CHECK((doc.surveyOverlay(false, 2, lookup) == std::vector<Colour>{{}, {}, {}, {5,100,250,240}}));
+    CHECK((doc.surveyOverlay(false, 0, lookup) == std::vector<Colour>(4)));
+    const auto atmosphere = doc.surveyOverlay(true, -1, lookup);
+    // Truncating each slot gives 0/99/255, rather than rounding the final sum.
+    CHECK((atmosphere == std::vector<Colour>{{0,99,255,128}, {2,100,255,128}, {0,0,0,128}, {0,0,0,128}}));
+    CHECK((doc.surveyOverlay(false, -1, [](const auto&, const auto&) { return std::optional<Colour>{}; }) == std::vector<Colour>(4)));
+    albion::editor::TerrainBrush brush;
+    brush.mode = albion::editor::TerrainBrush::Mode::Sound; brush.themeIndex = 2;
+    brush.x = 1; brush.y = 1; brush.radius = 1;
+    doc.beginStroke(brush); doc.applyBrush(brush, 0.1f);
+    CHECK((doc.surveyOverlay(false, -1, lookup)[0] == Colour{5,100,250,240}));
+    doc.endStroke(); CHECK(doc.undo());
+    CHECK(doc.surveyOverlay(false, -1, lookup) == all);
+}
+
 void testEnvironmentAndSoundPaint(const fs::path& dir) {
     namespace ed = albion::editor;
     const fs::path lev = writeGameMapLev(dir / "envsound.lev");
@@ -1256,7 +1488,7 @@ void testEnvironmentAndSoundPaint(const fs::path& dir) {
     CHECK(doc.terrain().cameraPassable.size() == size_t(doc.cellsX()) * doc.cellsY());
     b.mode = ed::TerrainBrush::Mode::CameraPass; b.x = 4.5f; b.y = 4.5f; b.radius = 0.6f;
     doc.beginStroke(b); doc.applyBrush(b, 0.1f); doc.endStroke();
-    b.mode = ed::TerrainBrush::Mode::CameraBlock; b.x = 1.5f; b.y = 1.5f;
+    b.mode = ed::TerrainBrush::Mode::CameraBlock; b.x = 1.25f; b.y = 1.25f;
     doc.beginStroke(b); doc.applyBrush(b, 0.1f); doc.endStroke();
     CHECK(doc.level()->cameraPassableAt(4, 4) && doc.level()->cameraPassableAt(1, 1));   // (1,1) is walkable: stays passable
     CHECK(doc.terrain().cameraPassable[size_t(1) * doc.cellsX() + 1] == 0 && doc.terrainDirty());
@@ -1268,6 +1500,624 @@ void testEnvironmentAndSoundPaint(const fs::path& dir) {
     CHECK(doc.level()->soundAt(1, 1) == 0 && doc.fillSound(0) == 0);       // mirrored; nothing left to change
     CHECK(doc.undo() && doc.environmentAndSoundAt(5.0f, 5.0f)->second == before);
     CHECK(doc.fillSound(2) > 0 && doc.level()->soundAt(0, 1) == 2);        // fill with a listed sound
+}
+
+void testSoundBrushFootprint(const fs::path& dir) {
+    namespace ed = albion::editor;
+    ed::Document doc;
+    std::string err;
+    CHECK(doc.openText("SoundFootprint", "Version 2;\r\nXXXSectionStart NULL;\r\nXXXSectionEnd;\r\n", err));
+    CHECK(doc.loadLevel(writeGameMapLev(dir / "sound_footprint.lev"), err));
+    CHECK(doc.fillSound(0) == 4);
+    const auto baseline = doc.terrain();
+    using Cells = std::vector<std::pair<int, int>>;
+    struct Case { float x, y, radius; Cells cells; };
+    for (const Case& c : std::vector<Case>{
+            {0, 0, .25f, {{0, 0}}}, {2, 2, 1, {{0, 0}}},
+            {2.5f, 2.5f, .25f, {{0, 0}}}, {3.5f, 3.5f, .25f, {{1, 1}}},
+            {3, 3, 1, {{0, 0}, {0, 1}, {1, 0}, {1, 1}}},
+            {4, 0, 1, {{0, 0}, {1, 0}}}, {7, 7, 1, {{1, 1}}},
+            {-.6f, -.6f, .25f, {}}, {-.5f, -.5f, .25f, {{0, 0}}}}) {
+        CHECK(doc.soundBrushCells(c.x, c.y, c.radius) == c.cells);
+        ed::TerrainBrush b;
+        b.mode = ed::TerrainBrush::Mode::Sound; b.themeIndex = 2;
+        b.x = c.x; b.y = c.y; b.radius = c.radius;
+        doc.beginStroke(b); doc.applyBrush(b, .1f); doc.applyBrush(b, .1f); doc.endStroke();
+        for (int gy = 0; gy < 2; ++gy) for (int gx = 0; gx < 2; ++gx) {
+            const bool hit = std::find(c.cells.begin(), c.cells.end(), std::make_pair(gx, gy)) != c.cells.end();
+            CHECK(doc.level()->soundAt(gx, gy) == (hit ? 2 : 0));
+        }
+        CHECK(doc.terrain().heights == baseline.heights && doc.terrain().atmosIndex == baseline.atmosIndex &&
+              doc.terrain().atmosStrength == baseline.atmosStrength && doc.terrain().themeIndex == baseline.themeIndex);
+        if (!c.cells.empty()) {
+            const fs::path root = dir / "sound_footprint_root";
+            CHECK(doc.saveTerrainLoose(root, err));
+            const auto saved = forge::lev::File::open(root / "data" / "Levels" / "FinalAlbion" / "SoundFootprint.lev");
+            for (int gy = 0; gy < 2; ++gy) for (int gx = 0; gx < 2; ++gx)
+                CHECK(saved.soundAt(gx, gy) == doc.level()->soundAt(gx, gy));
+        }
+        if (!c.cells.empty()) CHECK(doc.undo());
+        CHECK(doc.terrain().sound == baseline.sound);
+    }
+    ed::TerrainBrush b; b.mode = ed::TerrainBrush::Mode::Sound; b.themeIndex = 3; b.radius = 60;
+    doc.beginStroke(b); doc.applyBrush(b, 1); doc.endStroke();
+    CHECK(doc.terrain().sound == baseline.sound);   // unlisted sounds are refused
+}
+
+void testRecovery(const fs::path& dir) {
+    namespace ed=albion::editor;
+    forge::TemporaryDirectory scratch(dir,"recovery-");
+    const auto source=writeGameMapLev(scratch.path()/"Recovery.lev");
+    auto sourceBytes=readAll(source);
+    const auto cameraByte=forge::lev::File::open(source).cellDataOffset()+(size_t(7)*9+7)*21+16;
+    sourceBytes[cameraByte]=0x80; // unchanged noncanonical true must survive recovery serialization
+    std::ofstream(source,std::ios::binary).write(reinterpret_cast<const char*>(sourceBytes.data()),std::streamsize(sourceBytes.size()));
+    const std::string original="Version 2;\r\nXXXSectionStart NULL;\r\nXXXSectionEnd;\r\n";
+    std::string err;
+    ed::Document doc;
+    CHECK(doc.openText("Recovery",original,err) && doc.loadLevel(source,err));
+    const auto bank=doc.savedTerrain();
+    const auto cleanPath=scratch.path()/"clean.ffrecovery";
+    CHECK(doc.saveRecovery(cleanPath,err));
+    const auto cleanArchive=json::from_cbor(readAll(cleanPath));
+    const auto& cleanLevel=cleanArchive.at("lev").get_binary();
+    CHECK(std::equal(cleanLevel.begin(),cleanLevel.end(),sourceBytes.begin(),sourceBytes.end()));
+    forge::thingplacer::Placement object; object.definitionType="OBJECT_BARREL_01";
+    object.scriptName="Recovered"; object.position={1,2,3}; doc.place(object);
+    CHECK(doc.setVertexHeights({{4,4,12}},false));
+    ed::TerrainBrush b; b.x=4; b.y=4; b.radius=.25f;
+    b.mode=ed::TerrainBrush::Mode::Blocked; b.x=3; b.y=3;
+    doc.beginStroke(b); doc.applyBrush(b,0); doc.endStroke();
+    b.mode=ed::TerrainBrush::Mode::CameraBlock; b.x=4; b.y=4;
+    doc.beginStroke(b); doc.applyBrush(b,0); doc.endStroke();
+    b.mode=ed::TerrainBrush::Mode::ShoreSet;
+    doc.beginStroke(b); doc.applyBrush(b,0); doc.endStroke();
+    CHECK(doc.addSoundTheme("SOUND_RECOVERY",err)==3);
+    b.mode=ed::TerrainBrush::Mode::Sound; b.themeIndex=3;
+    doc.beginStroke(b); doc.applyBrush(b,0); doc.endStroke();
+    const auto wanted=doc.terrain(); const auto names=doc.level()->soundThemes();
+    const auto path=scratch.path()/"recovery.ffrecovery";
+    auto frozen=doc.recoveryWriteSnapshot();
+    CHECK(doc.setVertexHeights({{4,4,13}},false));
+    CHECK(frozen.saveRecovery(path,err));
+    CHECK(doc.terrain().heights[4*9+4]==13); // worker captures the earlier terrain and objects
+    CHECK(doc.dirty() && doc.terrainDraftDirty() && doc.savedTerrain()==bank);
+    CHECK(readAll(source)==sourceBytes);
+    ed::Document reopened;
+    CHECK(reopened.openText("Recovery",original,err) && reopened.loadLevel(source,err));
+    const auto oldWrite=reopened.terrainWriteSnapshot();
+    const auto oldHeights=reopened.terrain().heights;
+    const auto oldNames=reopened.level()->soundThemes();
+    CHECK(reopened.recover(path,err));
+    CHECK(reopened.thingCount()==1 && reopened.dirty() && reopened.terrainDraftDirty() && reopened.terrainDirty());
+    CHECK(reopened.terrain().heights==wanted.heights && reopened.terrain().sound==wanted.sound &&
+          reopened.terrain().shorePoint==wanted.shorePoint && reopened.terrain().cameraPassable==wanted.cameraPassable);
+    CHECK(reopened.terrain().walkable[4*9+4] && !reopened.terrain().cameraPassable[4*9+4]);
+    CHECK(reopened.level()->soundThemes()==names && !reopened.acceptTerrainWrite(oldWrite));
+    CHECK(reopened.undo() && reopened.thingCount()==0 && !reopened.dirty() && !reopened.terrainDraftDirty());
+    CHECK(reopened.terrain().heights==oldHeights && reopened.level()->soundThemes()==oldNames);
+    CHECK(reopened.redo() && reopened.level()->soundThemes()==names && reopened.terrain().sound==wanted.sound);
+    // Wrong-map, truncated and malformed archives must leave the document and undo intact.
+    auto bytes=readAll(path); auto archive=json::from_cbor(bytes);
+    const auto& navBytes=archive.at("nav_walkable").get_binary();
+    CHECK(std::equal(navBytes.begin(),navBytes.end(),bank->walkable.begin(),bank->walkable.end()));
+    CHECK(bank->walkable[3*9+3] && !wanted.walkable[3*9+3]);
+    CHECK(archive.at("lev").get_binary()[frozen.level()->cellDataOffset()+(size_t(7)*9+7)*21+16]==0x80);
+    archive["map"]="Other";
+    auto invalid=json::to_cbor(archive);
+    const auto bad=scratch.path()/"bad.ffrecovery";
+    auto writeBad=[&]() { std::ofstream out(bad,std::ios::binary); out.write(reinterpret_cast<const char*>(invalid.data()),std::streamsize(invalid.size())); };
+    writeBad(); CHECK(!reopened.recover(bad,err) && reopened.terrain().heights==wanted.heights);
+    archive["map"]="Recovery"; archive["nav_walkable"]=json::binary(std::vector<uint8_t>{2});
+    invalid=json::to_cbor(archive); writeBad();
+    CHECK(!reopened.recover(bad,err) && reopened.thingCount()==1);
+    invalid.resize(8); writeBad(); CHECK(!reopened.recover(bad,err));
+    CHECK(reopened.undo() && reopened.thingCount()==0);
+    fs::create_directory(scratch.path()/"blocked");
+    CHECK(!doc.saveRecovery(scratch.path()/"blocked",err) && readAll(path)==bytes);
+    doc.beginStroke(b); CHECK(!doc.saveRecovery(path,err) && !doc.recover(path,err)); doc.endStroke();
+    CHECK(readAll(path)==bytes && readAll(source)==sourceBytes);
+#ifdef _WIN32
+    const HANDLE locked=CreateFileW(path.c_str(),GENERIC_READ,FILE_SHARE_READ,nullptr,OPEN_EXISTING,FILE_ATTRIBUTE_NORMAL,nullptr);
+    CHECK(locked!=INVALID_HANDLE_VALUE);
+    if (locked!=INVALID_HANDLE_VALUE) {
+        CHECK(!doc.saveRecovery(path,err)); // failed replacement keeps the last successful archive
+        CloseHandle(locked);
+        CHECK(readAll(path)==bytes);
+    }
+#endif
+    CHECK(doc.saveRecovery(path,err) && readAll(path)!=bytes);
+    CHECK(reopened.recover(path,err) && reopened.terrain().heights[4*9+4]==13);
+    doc.beginBatch(); CHECK(doc.editActive());
+    CHECK(!doc.saveRecovery(path,err) && !doc.recover(path,err));
+    doc.endBatch(); CHECK(!doc.editActive());
+}
+
+void testTerrainDraft(const fs::path& dir) {
+    namespace ed=albion::editor;
+    forge::TemporaryDirectory scratch(dir, "terrain-draft-");
+    const auto root=scratch.path();
+    fs::create_directories(root / "data/Levels/FinalAlbion");
+    const auto source=writeGameMapLev(root / "data/Levels/FinalAlbion/Draft.lev");
+    auto file=forge::lev::File::open(source);
+    for(int y=0;y<9;++y) for(int x=0;x<9;++x) file.setCameraPassableAt(x,y,true);
+    file.save(source); const auto original=readAll(source);
+    ed::Document doc; std::string err;
+    CHECK(doc.openText("Draft","Version 2;\r\nXXXSectionStart NULL;\r\nXXXSectionEnd;\r\n",err));
+    CHECK(doc.loadLevel(source,err));
+    const auto bank=doc.savedTerrain();
+    CHECK(!doc.terrainDraftDirty() && !doc.terrainDirty());
+    CHECK(doc.setVertexHeights({{4,4,12}},false));
+    ed::TerrainBrush b; b.mode=ed::TerrainBrush::Mode::ShoreSet; b.x=4; b.y=4; b.radius=.25f;
+    doc.beginStroke(b); doc.applyBrush(b,0); doc.endStroke();
+    CHECK(doc.addSoundTheme("SOUND_DRAFT",err)==3);
+    b.mode=ed::TerrainBrush::Mode::Sound; b.themeIndex=3;
+    doc.beginStroke(b); doc.applyBrush(b,0); doc.endStroke();
+    CHECK(doc.terrainDraftDirty() && doc.terrainDirty());
+    CHECK(doc.saveTerrainDraft(root,err));
+    CHECK(!doc.terrainDraftDirty() && doc.terrainDirty() && doc.savedTerrain()==bank);
+    CHECK(readAll(source)==original); // active game LEV is untouched
+    const auto draft=doc.terrainDraftPath(root);
+    CHECK(fs::exists(draft.string()+".forge-created") && !fs::exists(draft.string()+".forge-orig"));
+    const auto saved=forge::lev::File::open(draft);
+    CHECK(saved.heightAt(4,4)==12 && saved.shorePointAt(4,4) && saved.soundAt(1,1)==3);
+    CHECK(saved.soundThemes().back()=="SOUND_DRAFT");
+    CHECK(doc.setVertexHeights({{4,4,13}},false) && doc.terrainDraftDirty());
+    CHECK(doc.undo() && !doc.terrainDraftDirty() && doc.terrainDirty());
+    CHECK(doc.saveTerrainDraft(root,err));
+    CHECK(!fs::exists(draft.string()+".forge-orig")); // repeats retain created semantics
+    ed::Document reopened;
+    CHECK(reopened.openText("Draft","Version 2;\r\nXXXSectionStart NULL;\r\nXXXSectionEnd;\r\n",err));
+    CHECK(reopened.loadLevel(source,err));
+    const auto oldWrite=reopened.terrainWriteSnapshot();
+    CHECK(reopened.loadTerrainDraft(root,err));
+    CHECK(!reopened.acceptTerrainWrite(oldWrite)); // loading a draft replaces the terrain session
+    CHECK(reopened.terrain().heights==doc.terrain().heights && reopened.terrain().shorePoint==doc.terrain().shorePoint &&
+          reopened.terrain().sound==doc.terrain().sound);
+    CHECK(reopened.terrainDirty() && !reopened.terrainDraftDirty());
+    CHECK(reopened.savedTerrain()->heights==bank->heights); // retain baked foliage baseline
+    CHECK(!reopened.loadTerrainDraft(root,err)); // refuse replacement of a pending document
+    CHECK(reopened.saveTerrainLoose(root,err)); // actual LEV write retires authoring draft
+    CHECK(!fs::exists(draft) && !reopened.terrainDirty() && !reopened.terrainDraftDirty());
+    CHECK(forge::lev::File::open(source).heightAt(4,4)==12);
+    // A wrong-grid draft is rejected without replacing the clean document.
+    writeGameMapLev(draft,12,12);
+    ed::Document mismatch;
+    CHECK(mismatch.openText("Draft","Version 2;\r\n",err) && mismatch.loadLevel(source,err));
+    const auto clean=mismatch.terrain().heights;
+    CHECK(!mismatch.loadTerrainDraft(root,err) && mismatch.terrain().heights==clean);
+    CHECK(err.find("different map or grid")!=std::string::npos);
+    // A blocked destination leaves dirty state and the real LEV unchanged.
+    const auto refused=root / "refused";
+    fs::create_directories(mismatch.terrainDraftPath(refused));
+    CHECK(mismatch.setVertexHeights({{2,2,20}},false));
+    CHECK(!mismatch.saveTerrainDraft(refused,err) && mismatch.terrainDraftDirty());
+    CHECK(forge::lev::File::open(source).heightAt(2,2)==0);
+    // Combined saves preflight every destination before publishing either draft.
+    forge::thingplacer::Placement object; object.definitionType="OBJECT_BARREL_01";
+    object.scriptName="JointDraft"; object.position={1,2,3}; mismatch.place(object);
+    const auto joint=root / "joint";
+    const auto tng=joint / "data/Levels/FinalAlbion/Draft.tng";
+    fs::create_directories(tng); // terrain candidate is valid, object target is blocked
+    CHECK(!mismatch.saveDraftLoose(joint,err));
+    CHECK(mismatch.dirty() && mismatch.terrainDraftDirty());
+    CHECK(!fs::exists(mismatch.terrainDraftPath(joint)));
+    CHECK(!fs::exists(mismatch.terrainDraftPath(joint).string()+".forge-created"));
+    fs::remove(tng);
+    CHECK(mismatch.saveDraftLoose(joint,err));
+    CHECK(!mismatch.dirty() && !mismatch.terrainDraftDirty() && mismatch.terrainDirty());
+    CHECK(forge::lev::File::open(mismatch.terrainDraftPath(joint)).heightAt(2,2)==20);
+    const auto objectBytes=readAll(tng);
+    CHECK(std::string(objectBytes.begin(),objectBytes.end()).find("JointDraft")!=std::string::npos);
+    CHECK(fs::exists(tng.string()+".forge-created"));
+    CHECK(mismatch.savedTerrain()->heights==clean);
+}
+
+void testPassabilityPen(const fs::path& dir) {
+    namespace ed = albion::editor;
+    using Mode=ed::TerrainBrush::Mode;
+    int fixture=0;
+    for (const auto mode : {Mode::Walkable,Mode::Blocked,Mode::CameraPass,Mode::CameraBlock}) {
+        const auto path=writeGameMapLev(dir / ("passability_pen_"+std::to_string(fixture++)+".lev"));
+        auto level=forge::lev::File::open(path);
+        const bool walkMode=mode==Mode::Walkable || mode==Mode::Blocked;
+        const bool set=mode==Mode::Walkable || mode==Mode::CameraPass;
+        for (int y=0;y<9;++y) for (int x=0;x<9;++x) {
+            level.setWalkableAt(x,y,mode==Mode::Blocked);
+            level.setCameraPassableAt(x,y,!set);
+        }
+        level.save(path); const auto before=readAll(path);
+        ed::Document doc; std::string err;
+        CHECK(doc.openText("PassabilityPen","Version 2;\r\nXXXSectionStart NULL;\r\nXXXSectionEnd;\r\n",err));
+        CHECK(doc.loadLevel(path,err)); const auto baseline=doc.terrain();
+        ed::TerrainBrush brush; brush.mode=mode; brush.x=3.5f; brush.y=3.5f; brush.radius=1; brush.strength=0;
+        const auto revision=doc.terrainRevision();
+        doc.beginStroke(brush); doc.applyBrush(brush,0); doc.applyBrush(brush,0);
+        CHECK(doc.terrainRevision()==revision+1); doc.endStroke();
+        auto expected=before;
+        for (int y=0;y<9;++y) for (int x=0;x<9;++x) {
+            const size_t n=size_t(y)*9+x;
+            const bool hit=x>=3 && x<=5 && y>=3 && y<=5;
+            CHECK(doc.terrain().walkable[n]==(walkMode && hit ? uint8_t(set) : baseline.walkable[n]));
+            CHECK(doc.terrain().cameraPassable[n]==(!walkMode && hit ? uint8_t(set) : baseline.cameraPassable[n]));
+            if (hit) {
+                const size_t off=level.cellDataOffset()+n*21;
+                expected[off+(walkMode?15:16)]=uint8_t(set);
+                if (mode==Mode::Walkable) expected[off+16]=1; // confirmed native saver OR
+            }
+        }
+        CHECK(doc.terrain().heights==baseline.heights && doc.terrain().shorePoint==baseline.shorePoint &&
+              doc.terrain().sound==baseline.sound && doc.terrain().atmosIndex==baseline.atmosIndex &&
+              doc.terrain().atmosStrength==baseline.atmosStrength && doc.terrain().themeIndex==baseline.themeIndex &&
+              doc.terrain().themeStrength==baseline.themeStrength);
+        CHECK(doc.saveTerrainLoose(dir / ("passability_root_"+std::to_string(fixture)),err));
+        CHECK(readAll(dir / ("passability_root_"+std::to_string(fixture)) / "data/Levels/FinalAlbion/PassabilityPen.lev")==expected);
+        CHECK(doc.undo() && doc.terrain().walkable==baseline.walkable && doc.terrain().cameraPassable==baseline.cameraPassable);
+        brush.radius=.25f; doc.beginStroke(brush); doc.applyBrush(brush,0); doc.endStroke();
+        size_t changed=0; const auto& flags=walkMode ? doc.terrain().walkable : doc.terrain().cameraPassable;
+        const auto& oldFlags=walkMode ? baseline.walkable : baseline.cameraPassable;
+        for(size_t n=0;n<flags.size();++n) changed+=flags[n]!=oldFlags[n];
+        CHECK(changed==1 && flags[size_t(4)*9+4]==uint8_t(set));
+        CHECK(doc.undo());
+        brush.x=8; brush.y=8; doc.beginStroke(brush); doc.applyBrush(brush,0); doc.endStroke();
+        CHECK(!doc.undo()); // regular cells only; extra boundary vertex excluded
+    }
+}
+
+void testShorePoints(const fs::path& dir) {
+    namespace ed = albion::editor;
+    using Cells = std::vector<std::pair<int, int>>;
+    const auto path = writeGameMapLev(dir / "shore.lev");
+    auto level = forge::lev::File::open(path);
+    // Canonical camera bytes avoid the existing saver's walkable OR during the delta check.
+    for (int y=0; y<level.cellsY(); ++y) for (int x=0; x<level.cellsX(); ++x) level.setCameraPassableAt(x,y,true);
+    level.save(path);
+    auto original = readAll(path);
+    original[level.cellDataOffset()+(size_t(7)*9+7)*21+19]=0x80; // noncanonical true byte
+    std::ofstream(path,std::ios::binary|std::ios::trunc).write(reinterpret_cast<const char*>(original.data()),std::streamsize(original.size()));
+    level=forge::lev::File::open(path);
+    const size_t offset = level.cellDataOffset() + (size_t(3) * level.cellsX() + 2) * 21 + 19;
+    level.setShorePointAt(2,3,true);
+    const auto patched = dir / "shore_patch.lev"; level.save(patched);
+    auto expected = original; expected[offset] = 1;
+    CHECK(readAll(patched) == expected); // exactly one byte; unknown/trailing data stay
+    CHECK(forge::lev::File::open(patched).shorePointAt(2,3));
+    level.setShorePointAt(2,3,false); level.save(patched);
+    CHECK(readAll(patched) == original);
+    bool threw = false;
+    try { level.setShorePointAt(-1,0,true); } catch (const std::exception&) { threw = true; }
+    CHECK(threw);
+    ed::Document doc; std::string err;
+    CHECK(doc.openText("Shore", "Version 2;\r\nXXXSectionStart NULL;\r\nXXXSectionEnd;\r\n", err));
+    CHECK(doc.loadLevel(path,err));
+    CHECK((doc.surveyBrushVertices(3.5f,3.5f,.25f) == Cells{{4,4}})); // half-even caller
+    CHECK((doc.surveyBrushVertices(2.5f,2.5f,.25f) == Cells{{2,2}}));
+    CHECK((doc.surveyBrushVertices(4,4,.5f) == Cells{{4,4}})); // distance 1 excluded strictly
+    CHECK((doc.surveyBrushVertices(4,4,1) == Cells{{3,3},{4,3},{5,3},{3,4},{4,4},{5,4},{3,5},{4,5},{5,5}}));
+    CHECK((doc.surveyBrushVertices(0,0,1) == Cells{{0,0},{1,0},{0,1},{1,1}}));
+    CHECK(doc.surveyBrushVertices(8,8,.25f).empty()); // extra boundary vertices not regular cells
+    const auto baseline = doc.terrain();
+    ed::TerrainBrush brush; brush.mode=ed::TerrainBrush::Mode::ShoreSet;
+    brush.x=4; brush.y=4; brush.radius=1; brush.strength=0;
+    const auto revision=doc.terrainRevision();
+    doc.beginStroke(brush); doc.applyBrush(brush,0);
+    CHECK(doc.terrainRevision() == revision+1);
+    const auto colours=doc.shoreOverlay();
+    CHECK(colours.size() == 64 && (colours[4*8+4] == ed::Document::OverlayColour{255,0,0,128}));
+    CHECK((colours[0] == ed::Document::OverlayColour{}));
+    doc.applyBrush(brush,0); CHECK(doc.terrainRevision() == revision+1); // repeated stamp is a no-op
+    doc.endStroke(); CHECK(doc.terrainDirty());
+    expected=original;
+    for (const auto [x,y] : Cells{{3,3},{4,3},{5,3},{3,4},{4,4},{5,4},{3,5},{4,5},{5,5}})
+        expected[level.cellDataOffset()+(size_t(y)*9+x)*21+19]=1;
+    const auto root=dir / "shore_root";
+    CHECK(doc.saveTerrainLoose(root,err));
+    CHECK(readAll(root / "data/Levels/FinalAlbion/Shore.lev") == expected);
+    CHECK(!doc.terrainDirty());
+    CHECK(doc.terrain().heights==baseline.heights && doc.terrain().walkable==baseline.walkable &&
+          doc.terrain().cameraPassable==baseline.cameraPassable && doc.terrain().sound==baseline.sound &&
+          doc.terrain().atmosIndex==baseline.atmosIndex && doc.terrain().atmosStrength==baseline.atmosStrength &&
+          doc.terrain().themeIndex==baseline.themeIndex && doc.terrain().themeStrength==baseline.themeStrength);
+    brush.mode=ed::TerrainBrush::Mode::ShoreClear;
+    doc.beginStroke(brush); doc.applyBrush(brush,0); doc.endStroke();
+    CHECK(doc.terrain().shorePoint==baseline.shorePoint && doc.terrainDirty());
+    CHECK(doc.undo() && doc.terrain().shorePoint[size_t(4)*9+4]);
+    CHECK(doc.undo() && doc.terrain().shorePoint==baseline.shorePoint);
+    doc.beginStroke(brush); doc.applyBrush(brush,0); doc.endStroke(); // clear empty region adds no undo
+    CHECK(!doc.undo());
+    ed::Document legacy;
+    CHECK(legacy.openText("ShoreLegacy", "Version 2;\r\nXXXSectionStart NULL;\r\nXXXSectionEnd;\r\n",err));
+    CHECK(legacy.loadLevel(writeSyntheticLev(dir / "shore_legacy.lev",8,8,[](int,int){return 0.f;}),err));
+    CHECK(!legacy.hasGameMap());
+    brush.mode=ed::TerrainBrush::Mode::ShoreSet; brush.radius=.25f;
+    legacy.beginStroke(brush); legacy.applyBrush(brush,0); legacy.endStroke();
+    CHECK(legacy.terrain().shorePoint[size_t(4)*9+4] && legacy.shoreOverlay().size()==64);
+    CHECK(legacy.undo() && !legacy.terrain().shorePoint[size_t(4)*9+4]);
+}
+
+void testGroundThemeSmear(const fs::path& dir) {
+    namespace terrain=forge::terrain;
+    using Slots=std::array<uint8_t,3>;
+    std::array<bool,256> allowed{}; allowed[1]=allowed[2]=allowed[3]=true;
+    std::vector<Slots> indices{{1,0,0},{1,0,0},{2,0,0},{2,0,0},{2,0,0},{3,0,0},{0,0,0},{0,0,0},{0,0,0}};
+    std::vector<Slots> strengths{{250,0,5},{250,0,5},{233,0,22},{233,0,22},{234,0,21},{100,0,155},{255,0,0},{255,0,0},{255,0,0}};
+    const auto originalIndices=indices,originalStrengths=strengths;
+    CHECK(terrain::smearThemeBlends(indices,strengths,3,3,{{1,1}},allowed)==1);
+    // Native duplicates class 1 here; Forge retains all three distinct themes.
+    CHECK((indices[4]==Slots{2,1,3}));
+    CHECK((strengths[4]==Slots{137,98,20}));
+    for (size_t i=0;i<9;++i) if (i!=4) CHECK(indices[i]==originalIndices[i] && strengths[i]==originalStrengths[i]);
+    indices={{1,0,0},{1,0,0},{2,0,0}}; strengths.assign(3,{255,0,0});
+    CHECK(terrain::smearThemeBlends(indices,strengths,3,1,{{1,0},{2,0},{2,0},{-1,0}},allowed)==2);
+    CHECK((indices[1]==Slots{1,2,0} && strengths[1]==Slots{170,85,0}));
+    CHECK((indices[2]==Slots{1,2,0} && strengths[2]==Slots{128,127,0})); // frozen neighbour; in-place would be 85/170
+    indices.assign(9,{3,0,0}); strengths.assign(9,{255,0,0});
+    CHECK(terrain::smearThemeBlends(indices,strengths,3,3,{{0,0},{1,1},{2,2}},allowed)==0);
+    allowed.fill(false);
+    CHECK(terrain::smearThemeBlends(indices,strengths,3,3,{{1,1}},allowed)==0); // empty eligible neighbourhood
+    const auto saved=indices;
+    bool rejected=false;
+    try { terrain::smearThemeBlends(indices,strengths,4,3,{{1,1}},allowed); } catch (const std::invalid_argument&) { rejected=true; }
+    CHECK(rejected && indices==saved);
+
+    const auto path=writeGameMapLev(dir / "ground_smear.lev",20,20);
+    auto level=forge::lev::File::open(path);
+    level.setGroundTheme(1,"GROUND_A",17); level.setGroundTheme(2,"GROUND_B",23);
+    for (int y=0;y<level.cellsY();++y) for(int x=0;x<level.cellsX();++x)
+        level.setThemeBlendAt(x,y,{uint8_t(x<4?1:2),0,0},{255,0,0});
+    level.save(path); const auto originalBytes=readAll(path);
+    albion::editor::Document doc; std::string error;
+    CHECK(doc.openText("GroundSmear","Version 2;\r\nXXXSectionStart NULL;\r\nXXXSectionEnd;\r\n",error));
+    CHECK(doc.loadLevel(path,error)); const auto baseline=doc.terrain(); const auto objectText=doc.file().serialize();
+    albion::editor::TerrainBrush brush; brush.mode=albion::editor::TerrainBrush::Mode::ThemeSmear;
+    brush.x=4.9f;brush.y=4.9f;brush.radius=.25f;brush.strength=0;
+    doc.beginStroke(brush);doc.applyBrush(brush,0);doc.endStroke();
+    const size_t vertex=size_t(4)*doc.cellsX()+4;
+    CHECK((doc.terrain().themeIndex[vertex]==Slots{2,1,0} && doc.terrain().themeStrength[vertex]==Slots{170,85,0}));
+    for (size_t i=0;i<baseline.themeIndex.size();++i) if(i!=vertex)
+        CHECK(doc.terrain().themeIndex[i]==baseline.themeIndex[i] && doc.terrain().themeStrength[i]==baseline.themeStrength[i]);
+    CHECK(doc.terrain().heights==baseline.heights && doc.terrain().walkable==baseline.walkable &&
+        doc.terrain().cameraPassable==baseline.cameraPassable && doc.terrain().shorePoint==baseline.shorePoint &&
+        doc.terrain().sound==baseline.sound && doc.terrain().atmosIndex==baseline.atmosIndex &&
+        doc.terrain().atmosStrength==baseline.atmosStrength && doc.file().serialize()==objectText);
+    const auto root=dir / "ground_smear_root";
+    CHECK(doc.saveTerrainLoose(root,error));
+    const auto reloaded=forge::lev::File::open(root / "data/Levels/FinalAlbion/GroundSmear.lev");
+    for(int slot=0;slot<3;++slot) CHECK(reloaded.themeIndexAt(4,4,slot)==doc.terrain().themeIndex[vertex][slot] &&
+        reloaded.themeStrengthAt(4,4,slot)==doc.terrain().themeStrength[vertex][slot]);
+    auto expectedBytes=originalBytes;
+    const size_t blendOffset=level.cellDataOffset()+vertex*21;
+    // Only the five stored theme bytes may change (third strength is implicit).
+    // In particular, the fixture has
+    // walkable=true/camera=false: theme-only writes must not apply the saver OR.
+    for (size_t slot=0;slot<3;++slot) {
+        expectedBytes[blendOffset+slot+10]=doc.terrain().themeIndex[vertex][slot];
+        if (slot<2) expectedBytes[blendOffset+slot+13]=doc.terrain().themeStrength[vertex][slot];
+    }
+    CHECK(readAll(root / "data/Levels/FinalAlbion/GroundSmear.lev")==expectedBytes);
+    CHECK(doc.undo());doc.level()->save(dir / "ground_smear_undo.lev");
+    CHECK(readAll(dir / "ground_smear_undo.lev")==originalBytes);
+    CHECK(doc.redo());
+    brush.x=10;brush.y=10;
+    doc.beginStroke(brush);doc.applyBrush(brush,0);doc.endStroke(); // uniform no-op drops its undo entry
+    CHECK(doc.undo() && doc.terrain().themeIndex==baseline.themeIndex && doc.terrain().themeStrength==baseline.themeStrength);
+}
+
+void testAtmosSmear(const fs::path& dir) {
+    namespace terrain = forge::terrain;
+    using Slots = std::array<uint8_t, 3>;
+    using Cells = std::vector<std::pair<int, int>>;
+    CHECK(terrain::atmosSmearFootprint(5,5,5,5,1).empty());
+    CHECK((terrain::atmosSmearFootprint(5,5,5,5,1.25f) == Cells{{1,1}}));
+    CHECK((terrain::atmosSmearFootprint(5,5,0,0,1.25f) == Cells(4,{0,0})));
+    CHECK((terrain::atmosSmearFootprint(5,5,0,0,1.25f,1024,1024) == Cells{{0,0}}));
+    CHECK((terrain::atmosSmearFootprint(5,5,0,0,0) == Cells{{0,0}})); // minimum radius 1
+    CHECK(terrain::atmosSmearFootprint(5,5,0,0,std::numeric_limits<float>::infinity()).empty());
+    const Cells cross{{2,1},{1,2},{2,2},{3,2},{2,3}};
+    CHECK(terrain::atmosSmearFootprint(5,5,8,8,4) == cross);
+    std::vector<Slots> indices{{1,0,0},{2,0,0}}, strengths(2,{255,0,0});
+    CHECK(terrain::blurAtmos(indices,strengths,2,1,0,0,1) == 1);
+    CHECK((indices[0] == Slots{2,1,0} && strengths[0] == Slots{127,127,1}));
+    indices = {{1,0,0},{2,0,0}}; strengths.assign(2,{255,0,0});
+    CHECK(terrain::blurAtmos(indices,strengths,2,1,0,0,1.25f) == 4);
+    CHECK((indices[0] == Slots{2,1,0} && strengths[0] == Slots{239,15,1}));
+    indices.assign(9,{1,0,0}); strengths.assign(9,{255,0,0});
+    CHECK(terrain::blurAtmos(indices,strengths,3,3,4,4,4) == 0); // uniform canonical area
+    indices.assign(9,{1,1,1}); strengths.assign(9,{255,0,0});
+    CHECK(terrain::blurAtmos(indices,strengths,3,3,4,4,1) == 0); // only one key; unused indices stay
+    strengths.assign(9,{0,0,0});
+    CHECK(terrain::blurAtmos(indices,strengths,3,3,4,4,1) == 0); // malformed zero denominator
+
+    const auto path = writeGameMapLev(dir / "atmos_smear.lev",20,20);
+    auto level = forge::lev::File::open(path);
+    level.setAtmosTheme(2,"ENVIRONMENT_HAUNTED",88);
+    for (int y=0;y<5;++y) for(int x=0;x<5;++x)
+        level.setAtmosAt(x,y,{{uint8_t(x<2?1:2),0,0},{255,0,0}});
+    level.save(path);
+    albion::editor::Document doc; std::string err;
+    CHECK(doc.openText("AtmosSmear","Version 2;\r\nXXXSectionStart NULL;\r\nXXXSectionEnd;\r\n",err));
+    CHECK(doc.loadLevel(path,err));
+    const auto baseline = doc.terrain();
+    albion::editor::TerrainBrush brush;
+    brush.mode = albion::editor::TerrainBrush::Mode::EnvironmentSmear;
+    brush.x=8; brush.y=8; brush.radius=4; brush.strength=0;
+    doc.beginStroke(brush); doc.applyBrush(brush,0);
+    CHECK((doc.liveTerrain().atmosStrength[12] == Slots{168,86,1}));
+    doc.endStroke();
+    const std::vector<Slots> expected{{170,85,0},{179,75,1},{168,86,1},{235,19,1},{166,88,1}};
+    for (int y=0;y<5;++y) for (int x=0;x<5;++x) {
+        const size_t n=size_t(y)*5+x;
+        const auto visit=std::find(cross.begin(),cross.end(),std::make_pair(x,y));
+        if (visit==cross.end()) {
+            CHECK(doc.terrain().atmosIndex[n] == baseline.atmosIndex[n] && doc.terrain().atmosStrength[n] == baseline.atmosStrength[n]);
+        } else {
+            const size_t k=size_t(visit-cross.begin());
+            CHECK(doc.terrain().atmosStrength[n] == expected[k]);
+            CHECK((doc.terrain().atmosIndex[n] == (k==1 ? Slots{1,2,0} : Slots{2,1,0})));
+        }
+    }
+    CHECK(doc.terrain().heights==baseline.heights && doc.terrain().sound==baseline.sound &&
+          doc.terrain().themeIndex==baseline.themeIndex && doc.terrain().themeStrength==baseline.themeStrength);
+    const auto root=dir / "atmos_smear_root";
+    CHECK(doc.saveTerrainLoose(root,err));
+    const auto saved=forge::lev::File::open(root / "data/Levels/FinalAlbion/AtmosSmear.lev");
+    for(int y=0;y<5;++y) for(int x=0;x<5;++x) {
+        const size_t n=size_t(y)*5+x;
+        const auto cell=saved.atmosAt(x,y);
+        CHECK(cell.indices==doc.terrain().atmosIndex[n] && cell.strengths==doc.terrain().atmosStrength[n]);
+        CHECK(saved.soundAt(x,y)==baseline.sound[n]);
+    }
+    CHECK(doc.undo());
+    CHECK(doc.terrain().atmosIndex==baseline.atmosIndex && doc.terrain().atmosStrength==baseline.atmosStrength);
+}
+
+void testGroundThemeStamp(const fs::path& dir) {
+    namespace ed = albion::editor;
+    const auto path = writeGameMapLev(dir / "ground_stamp.lev");
+    auto level = forge::lev::File::open(path);
+    for (int y = 0; y < level.cellsY(); ++y) for (int x = 0; x < level.cellsX(); ++x)
+        level.setThemeBlendAt(x, y, {2, 3, 4}, {100, 100, 55});
+    level.save(path);
+    ed::Document doc; std::string err;
+    CHECK(doc.openText("GroundStamp", "Version 2;\r\nXXXSectionStart NULL;\r\nXXXSectionEnd;\r\n", err));
+    CHECK(doc.loadLevel(path, err));
+    const auto baseline = doc.terrain();
+    using Vertices = std::vector<std::pair<int, int>>;
+    struct Case { float x, y, radius; Vertices vertices; };
+    for (const Case& c : std::vector<Case>{
+            {3.75f,3.75f,.25f,{{3,3}}}, {3.75f,3.75f,1,{{3,3}}},
+            {3.75f,3.75f,2,{{2,2},{3,2},{4,2},{2,3},{3,3},{4,3},{2,4},{3,4},{4,4}}},
+            {0,0,1.5f,{{0,0},{1,0},{0,1},{1,1}}}, {-1,-1,.25f,{}}, {3,3,0,{}}}) {
+        ed::TerrainBrush b; b.mode = ed::TerrainBrush::Mode::Theme; b.themeStamp = true;
+        b.themeIndex = 9; b.x = c.x; b.y = c.y; b.radius = c.radius; b.strength = 0;
+        doc.beginStroke(b); doc.applyBrush(b, 0);
+        const auto revision = doc.terrainRevision();
+        doc.applyBrush(b, 10); CHECK(doc.terrainRevision() == revision); // repeated stamp is idempotent
+        doc.endStroke();
+        for (int y = 0; y < doc.cellsY(); ++y) for (int x = 0; x < doc.cellsX(); ++x) {
+            const bool hit = std::find(c.vertices.begin(), c.vertices.end(), std::make_pair(x,y)) != c.vertices.end();
+            const size_t i = size_t(y)*doc.cellsX()+x;
+            CHECK((doc.terrain().themeIndex[i] == (hit ? std::array<uint8_t,3>{9,0,0} : baseline.themeIndex[i])));
+            CHECK((doc.terrain().themeStrength[i] == (hit ? std::array<uint8_t,3>{255,0,0} : baseline.themeStrength[i])));
+        }
+        CHECK(doc.terrain().heights == baseline.heights && doc.terrain().walkable == baseline.walkable &&
+              doc.terrain().sound == baseline.sound && doc.terrain().atmosIndex == baseline.atmosIndex);
+        if (!c.vertices.empty()) {
+            const auto root = dir / "ground_stamp_root";
+            CHECK(doc.saveTerrainLoose(root, err));
+            const auto saved = forge::lev::File::open(root / "data/Levels/FinalAlbion/GroundStamp.lev");
+            for (int y = 0; y < doc.cellsY(); ++y) for (int x = 0; x < doc.cellsX(); ++x)
+                for (int k = 0; k < 3; ++k) {
+                    const size_t i = size_t(y)*doc.cellsX()+x;
+                    CHECK(saved.themeIndexAt(x,y,k) == doc.terrain().themeIndex[i][k]);
+                    CHECK(saved.themeStrengthAt(x,y,k) == doc.terrain().themeStrength[i][k]);
+                }
+            CHECK(doc.undo());
+        }
+        CHECK(doc.terrain().themeIndex == baseline.themeIndex && doc.terrain().themeStrength == baseline.themeStrength);
+    }
+    ed::TerrainBrush b; b.mode = ed::TerrainBrush::Mode::Theme; b.themeStamp = true;
+    b.themeIndex = 0; b.x = 3; b.y = 3; b.radius = 6;
+    doc.beginStroke(b); doc.applyBrush(b, 1); doc.endStroke();
+    CHECK(doc.terrain().themeIndex == baseline.themeIndex && doc.terrain().themeStrength == baseline.themeStrength);
+    b.themeStamp = false; b.themeIndex = 9; b.strength = 0; // existing soft brush still honours strength
+    doc.beginStroke(b); doc.applyBrush(b, 1); doc.endStroke();
+    CHECK(doc.terrain().themeIndex == baseline.themeIndex && doc.terrain().themeStrength == baseline.themeStrength);
+}
+
+void testReplaceBrushFootprint(const fs::path& dir) {
+    namespace ed = albion::editor;
+    const auto path = writeSyntheticLev(dir / "replace_footprint.lev", 8, 8, [](int, int) { return 20.0f; });
+    {
+        auto level = forge::lev::File::open(path);
+        for (int y = 0; y < level.cellsY(); ++y) for (int x = 0; x < level.cellsX(); ++x)
+            level.setThemeBlendAt(x, y, {2, 3, 4}, {100, 100, 55});
+        level.save(path);
+    }
+    ed::Document doc; std::string err;
+    CHECK(doc.openText("ReplaceFootprint", "Version 2;\r\nXXXSectionStart NULL;\r\nXXXSectionEnd;\r\n", err));
+    CHECK(doc.loadLevel(path, err));
+    std::array<uint32_t, 256> families{}; families[2] = families[3] = 1933;
+    doc.setThemeFamilies(families);
+    const auto baseline = doc.terrain();
+    using Vertices = std::vector<std::pair<int, int>>;
+    struct Case { float x, y, radius; Vertices vertices; };
+    for (const Case& c : std::vector<Case>{
+            {3.5f, 3.5f, .25f, {{3, 3}}}, {3.9f, 3.9f, 1, {{3, 3}}},
+            {4.5f, 4.5f, 1, {{4, 4}}},
+            {3, 3, std::nextafter(1.0f, 2.0f), {{3, 2}, {2, 3}, {3, 3}, {4, 3}, {3, 4}}},
+            {3, 3, 2, {{2, 2}, {3, 2}, {4, 2}, {2, 3}, {3, 3}, {4, 3}, {2, 4}, {3, 4}, {4, 4}}},
+            {0, 0, 1.5f, {{0, 0}, {1, 0}, {0, 1}, {1, 1}}},
+            {-.5f, -.5f, .25f, {{0, 0}}}, {-.6f, -.6f, .25f, {{0, 0}}},
+            {3, 3, 0, {}}, {-1, -1, .25f, {}}}) {
+        CHECK(doc.themeBrushVertices(c.x, c.y, c.radius) == c.vertices);
+        ed::TerrainBrush b; b.mode = ed::TerrainBrush::Mode::ReplaceTheme;
+        b.replaceFrom = 2; b.themeIndex = 9; b.x = c.x; b.y = c.y; b.radius = c.radius;
+        doc.beginStroke(b); doc.applyBrush(b, .1f); doc.endStroke();
+        for (int y = 0; y < doc.cellsY(); ++y) for (int x = 0; x < doc.cellsX(); ++x) {
+            const bool hit = std::find(c.vertices.begin(), c.vertices.end(), std::make_pair(x, y)) != c.vertices.end();
+            const size_t i = size_t(y) * doc.cellsX() + x;
+            CHECK(doc.terrain().themeIndex[i][0] == (hit ? 9 : 2));
+            CHECK(doc.terrain().themeIndex[i][1] == (hit ? 9 : 3));
+            CHECK(doc.terrain().themeIndex[i][2] == 4);
+            CHECK((doc.terrain().themeStrength[i] == (hit ? std::array<uint8_t, 3>{200, 0, 55} : baseline.themeStrength[i])));
+        }
+        CHECK(doc.terrain().heights == baseline.heights && doc.terrain().walkable == baseline.walkable);
+        if (!c.vertices.empty()) CHECK(doc.undo());
+        CHECK(doc.terrain().themeIndex == baseline.themeIndex && doc.terrain().themeStrength == baseline.themeStrength);
+    }
+}
+
+void testEnvironmentBrushFootprint(const fs::path& dir) {
+    namespace ed = albion::editor;
+    const auto path = writeGameMapLev(dir / "environment_footprint.lev");
+    {
+        auto level = forge::lev::File::open(path);
+        level.setAtmosTheme(2, "ENVIRONMENT_HAUNTED", 88);
+        level.setAtmosTheme(3, "ENVIRONMENT_TEST", 99);
+        for (int gy = 0; gy < 2; ++gy) for (int gx = 0; gx < 2; ++gx)
+            level.setAtmosAt(gx, gy, {{1, 2, 3}, {120, 80, 55}});
+        level.save(path);
+    }
+    ed::Document doc; std::string err;
+    CHECK(doc.openText("EnvironmentFootprint", "Version 2;\r\nXXXSectionStart NULL;\r\nXXXSectionEnd;\r\n", err));
+    CHECK(doc.loadLevel(path, err));
+    const auto baseline = doc.terrain();
+    using Cells = std::vector<std::pair<int, int>>;
+    struct Case { float x, y, radius; Cells cells; };
+    for (const uint8_t target : {uint8_t(0), uint8_t(1)})
+        for (const Case& c : std::vector<Case>{
+                {3.5f, 3.5f, .25f, {{0, 0}}}, {4.5f, 4.5f, .25f, {{1, 1}}},
+                {3, 3, 1, {{0, 0}}},
+                {3, 3, std::nextafter(1.0f, 2.0f), {{0, 0}, {0, 1}, {1, 0}}},
+                {3, 3, 1.5f, {{0, 0}, {0, 1}, {1, 0}, {1, 1}}},
+                {0, 0, 1.5f, {{0, 0}}}, {7, 7, 1.5f, {{1, 1}}}, {-1, -1, .25f, {}}}) {
+            CHECK(doc.environmentBrushCells(c.x, c.y, c.radius) == c.cells);
+            ed::TerrainBrush b; b.mode = ed::TerrainBrush::Mode::Environment;
+            b.themeIndex = target; b.x = c.x; b.y = c.y; b.radius = c.radius; b.strength = 0;
+            doc.beginStroke(b); doc.applyBrush(b, 0); doc.applyBrush(b, 0); doc.endStroke();
+            for (int gy = 0; gy < 2; ++gy) for (int gx = 0; gx < 2; ++gx) {
+                const bool hit = std::find(c.cells.begin(), c.cells.end(), std::make_pair(gx, gy)) != c.cells.end();
+                const size_t g = size_t(gy) * 2 + gx;
+                CHECK((doc.terrain().atmosIndex[g] == (hit ? std::array<uint8_t, 3>{target, 0, 0} : baseline.atmosIndex[g])));
+                CHECK((doc.terrain().atmosStrength[g] == (hit ? std::array<uint8_t, 3>{255, 0, 0} : baseline.atmosStrength[g])));
+            }
+            CHECK(doc.terrain().heights == baseline.heights && doc.terrain().themeIndex == baseline.themeIndex &&
+                  doc.terrain().themeStrength == baseline.themeStrength && doc.terrain().sound == baseline.sound);
+            if (!c.cells.empty()) {
+                const auto root = dir / "environment_footprint_root";
+                CHECK(doc.saveTerrainLoose(root, err));
+                const auto saved = forge::lev::File::open(root / "data" / "Levels" / "FinalAlbion" / "EnvironmentFootprint.lev");
+                for (int gy = 0; gy < 2; ++gy) for (int gx = 0; gx < 2; ++gx) {
+                    const size_t g = size_t(gy) * 2 + gx;
+                    CHECK(saved.atmosAt(gx, gy).indices == doc.terrain().atmosIndex[g]);
+                    CHECK(saved.atmosAt(gx, gy).strengths == doc.terrain().atmosStrength[g]);
+                    CHECK(saved.soundAt(gx, gy) == baseline.sound[g]);
+                }
+                CHECK(doc.undo());
+            }
+            CHECK(doc.terrain().atmosIndex == baseline.atmosIndex && doc.terrain().atmosStrength == baseline.atmosStrength);
+        }
 }
 
 // World-view tiles (src/worldtiles): the decimation keeps the far edge, heights interpolate
@@ -1419,6 +2269,45 @@ void testHeightPens() {
     CHECK(hp::lcgStep(seed) == 0x26F80001u);
     CHECK(std::fabs(hp::speedToOpacity(0.5f) - 0.29289f) < 1e-4f && hp::speedToOpacity(1.0f) > 0.9999f && hp::speedToOpacity(0.0f) == 0.0f);
     CHECK(hp::sizeToRadius(-2.0f) == 0.25f && hp::sizeToRadius(5.0f) == 32.0f);
+    // Cursor footprints match both real pen outputs, including half-even centres,
+    // the strict radius boundary and clipped map corners.
+    for (const auto [x, y, radius, count] : std::vector<std::array<float, 4>>{
+             {2.5f, 3.0f, 0.25f, 1}, {3.5f, 3.0f, 0.25f, 1},
+             {3.0f, 3.0f, 0.5f, 1}, {3.0f, 3.0f, std::nextafter(0.5f, 1.0f), 5},
+             {3.2f, 3.4f, 1.0f, 9}, {0.0f, 0.0f, 1.0f, 4}, {3.0f, 3.0f, 3.0f, 37}}) {
+        Heightfield raised(8, 8, 5.0f), painted(8, 8, 5.0f);
+        const auto footprint = hp::discFootprint(raised.cellsX(), raised.cellsY(), x, y, radius);
+        CHECK(footprint.size() == size_t(count));
+        std::vector<uint8_t> altered;
+        CHECK(hp::changeHeight(raised, x, y, radius, 1.0f, altered) == footprint.size());
+        CHECK(hp::paintHeight(painted, x, y, radius, 6.0f, 1.0f) == footprint.size());
+        for (int by = 0; by < raised.cellsY(); ++by)
+            for (int bx = 0; bx < raised.cellsX(); ++bx) {
+                const bool touched = std::find(footprint.begin(), footprint.end(), std::pair{bx, by}) != footprint.end();
+                CHECK(raised.at(bx, by) == (touched ? 6.0f : 5.0f));
+                CHECK(painted.at(bx, by) == raised.at(bx, by));
+            }
+    }
+    CHECK(hp::discFootprint(8, 8, 2.5f, 3.0f, 0.25f).front() == std::pair(2, 3));
+    CHECK(hp::discFootprint(8, 8, 3.5f, 3.0f, 0.25f).front() == std::pair(4, 3));
+    CHECK(hp::discFootprint(8, 8, -20, -20, 1).empty());
+    // Smear's strict integer-radius disc is symmetric despite its half-open
+    // loop bounds. A checkerboard makes every considered vertex change.
+    for (const auto [x, y, radius, count] : std::vector<std::array<float, 4>>{
+             {2.5f, 3.0f, 0.25f, 1}, {3.5f, 3.0f, 1.9f, 1},
+             {3.0f, 3.0f, 2.0f, 9}, {3.0f, 3.0f, 3.0f, 25}, {0.0f, 0.0f, 2.0f, 4}}) {
+        Heightfield f(8, 8, 0.0f);
+        for (int by = 0; by < f.cellsY(); ++by)
+            for (int bx = 0; bx < f.cellsX(); ++bx) f.at(bx, by) = (bx + by) % 2 ? 10.0f : 20.0f;
+        const auto footprint = hp::smearFootprint(f.cellsX(), f.cellsY(), x, y, radius);
+        CHECK(footprint.size() == size_t(count));
+        CHECK(hp::smear(f, x, y, radius, 1.0f, 0.0f) == footprint.size());
+        for (int by = 0; by < f.cellsY(); ++by)
+            for (int bx = 0; bx < f.cellsX(); ++bx) {
+                const bool touched = std::find(footprint.begin(), footprint.end(), std::pair{bx, by}) != footprint.end();
+                CHECK((f.at(bx, by) != ((bx + by) % 2 ? 10.0f : 20.0f)) == touched);
+            }
+    }
     // Change Height: a hard disc (d < r + 0.5) round the rounded centre, once per block per stroke
     {
         Heightfield f(8, 8, 5.0f);
@@ -1430,6 +2319,22 @@ void testHeightPens() {
         CHECK(hp::changeHeight(f, 2.5f, 3.0f, 0.25f, 3000.0f, altered) == 1 && f.at(2, 3) == hp::kMaxHeight);   // 2.5 -> 2 (half to even), clamped
     }
     // the -/= keys: r = 1 is the plus of 5 blocks (corners at 1.41 are out), applied again on every call
+    for (const auto [x, y, radius, count] : std::vector<std::array<float, 4>>{
+             {3.0f, 3.0f, 0.25f, 0}, {3.0f, 3.0f, 0.5f, 0},
+             {3.0f, 3.0f, 1.0f, 5}, {3.0f, 3.0f, 1.5f, 4},
+             {3.0f, 3.0f, 2.0f, 13}, {0.0f, 0.0f, 1.5f, 1}}) {
+        Heightfield f(8, 8, 5.0f);
+        const auto footprint = hp::heightAdditionFootprint(f.cellsX(), f.cellsY(), x, y, radius);
+        CHECK(footprint.size() == size_t(count));
+        const size_t applications = hp::heightAddition(f, x, y, radius, 1.0f);
+        CHECK(applications == (x == 0.0f ? 4u : size_t(count)));
+        for (int by = 0; by < f.cellsY(); ++by)
+            for (int bx = 0; bx < f.cellsX(); ++bx) {
+                const bool touched = std::find(footprint.begin(), footprint.end(), std::pair{bx, by}) != footprint.end();
+                CHECK((f.at(bx, by) != 5.0f) == touched);
+            }
+        if (x == 0.0f) CHECK(f.at(0, 0) == 9.0f); // four truncated samples, one cursor dot
+    }
     {
         Heightfield f(8, 8, 5.0f);
         CHECK(hp::heightAddition(f, 4.0f, 4.0f, 1.0f, 0.5f) == 5);
@@ -1745,6 +2650,13 @@ void testListEntries() {
     ed::Document doc;
     std::string err;
     CHECK(doc.openText("Lists", tng, err));
+    for (const size_t index : {size_t(0),size_t(1)}) {
+        const auto before=doc.text();
+        const auto revision=doc.revision();
+        CHECK(!doc.addListEntry(index,"CTCCreatureGenerator","CreatureFamilies",std::string("\"a\0b\"",5)));
+        CHECK(doc.text()==before && doc.revision()==revision && !doc.canUndo());
+    }
+
     CHECK((doc.listEntries(0, "CTCCreatureGenerator", "CreatureFamilies") == std::vector<std::string>{"\"BEETLES_02\"", "\"HOBBES_02_A\""}));
     CHECK(doc.addListEntry(0, "CTCCreatureGenerator", "CreatureFamilies", "\"WASPS_01\""));
     CHECK(doc.text().find("CreatureFamilies[1] \"HOBBES_02_A\";\r\nCreatureFamilies[2] \"WASPS_01\";\r\nGenerationRadius") != std::string::npos);
@@ -1855,9 +2767,9 @@ void testQuestSections() {
     namespace ed = albion::editor;
     const std::string tng =
         "Version 2;\r\nXXXSectionStart NULL;\r\n"
-        "NewThing Object;\r\nUID 100;\r\nDefinitionType \"OBJECT_BARREL_01\";\r\nScriptName NULL;\r\nEndThing;\r\n\r\n"
+        "NewThing Object;\r\nPlayer 4;\r\nUID 100;\r\nDefinitionType \"OBJECT_BARREL_01\";\r\nScriptName NULL;\r\nEndThing;\r\n\r\n"
         "XXXSectionEnd;\r\n\r\nXXXSectionStart Q_TEST;\r\n"
-        "NewThing Object;\r\nUID 200;\r\nDefinitionType \"OBJECT_CRATE_01\";\r\nScriptName NULL;\r\nEndThing;\r\n\r\n"
+        "NewThing Object;\r\nPlayer 4;\r\nUID 200;\r\nDefinitionType \"OBJECT_CRATE_01\";\r\nScriptName NULL;\r\nEndThing;\r\n\r\n"
         "XXXSectionEnd;\r\n";
     ed::Document doc;
     std::string err;
@@ -1897,9 +2809,9 @@ void testDayNightSections() {
     CHECK((ed::Document::splitDayNight("Q_TEST%dayonly").second == 0));   // the engine compares exactly
     const std::string tng =
         "Version 2;\r\nXXXSectionStart NULL;\r\n"
-        "NewThing Object;\r\nUID 100;\r\nDefinitionType \"OBJECT_BARREL_01\";\r\nScriptName NULL;\r\nEndThing;\r\n\r\n"
+        "NewThing Object;\r\nPlayer 4;\r\nUID 100;\r\nDefinitionType \"OBJECT_BARREL_01\";\r\nScriptName NULL;\r\nEndThing;\r\n\r\n"
         "XXXSectionEnd;\r\n\r\nXXXSectionStart Q_TEST;\r\n"
-        "NewThing Object;\r\nUID 200;\r\nDefinitionType \"OBJECT_CRATE_01\";\r\nScriptName NULL;\r\nEndThing;\r\n\r\n"
+        "NewThing Object;\r\nPlayer 4;\r\nUID 200;\r\nDefinitionType \"OBJECT_CRATE_01\";\r\nScriptName NULL;\r\nEndThing;\r\n\r\n"
         "XXXSectionEnd;\r\n";
     ed::Document doc;
     std::string err;
@@ -1907,8 +2819,10 @@ void testDayNightSections() {
     const auto day = doc.setDayNight(1, 1);
     CHECK(day && doc.sectionOf(*day) == "Q_TEST%DayOnly" && doc.summary(*day).definition == "OBJECT_CRATE_01");
     CHECK(doc.text().find("XXXSectionStart Q_TEST%DayOnly;") != std::string::npos);
+    CHECK(forge::defexternal::reviewTng(doc.text()).definitionIndependent);
     const auto night = doc.setDayNight(*day, 2);
     CHECK(night && doc.sectionOf(*night) == "Q_TEST%NightOnly");
+    CHECK(forge::defexternal::reviewTng(doc.text()).definitionIndependent);
     const auto both = doc.setDayNight(*night, 0);
     CHECK(both && doc.sectionOf(*both) == "Q_TEST");
     CHECK(doc.setDayNight(*both, 0) == both);                     // already there: nothing to do
@@ -1931,6 +2845,33 @@ void testDayNightSections() {
         return std::string("none");
     };
     CHECK(player(c) == "2" && player(v) == "4");
+    // Section names use a delimited native string, so numeric names and spaces
+    // stay supported. A new header cannot contain statement/line delimiters.
+    for (const std::string name : {std::string(""), std::string(" "), std::string("\t"),
+                                  std::string(" Quest"), std::string("Quest "),
+                                  std::string("Q;Other"), std::string("Q\nOther"),
+                                  std::string("Q\rOther"), std::string("Q\0Other",7)}) {
+        const std::string empty = "Version 2;\r\n";
+        auto file = forge::tng::File::parseText(empty);
+        bool refused = false;
+        try { file.addSection(name); } catch (const std::exception&) { refused = true; }
+        CHECK(refused && file.serialize()==empty);
+        file = forge::tng::File::parseText(empty);
+        refused = false;
+        try { file.insertThingBlock(name, "NewThing Object;\r\nUID 1;\r\nEndThing;\r\n"); }
+        catch (const std::exception&) { refused = true; }
+        CHECK(refused && file.serialize()==empty && file.things().empty());
+    }
+    auto names = forge::tng::File::parseText("Version 2;\n");
+    CHECK(names.addSection("15360") && names.addSection("Quest Label") && names.addSection("NULL%DayOnly"));
+    CHECK(names.sectionNames()==std::vector<std::string>({"15360","Quest Label","NULL%DayOnly"}));
+    // Preserve an imported unsupported header rather than partially editing it.
+    const std::string legacy = "Version 2;\nXXXSectionStart Q;Legacy;\nNewThing Object;\nUID 1;\nDefinitionType \"OBJECT_A\";\nEndThing;\nXXXSectionEnd;\n";
+    ed::Document legacyDoc;
+    CHECK(legacyDoc.openText("Legacy section",legacy,err));
+    const auto revision = legacyDoc.revision();
+    CHECK(!legacyDoc.setDayNight(0,1));
+    CHECK(legacyDoc.text()==legacy && legacyDoc.revision()==revision && !legacyDoc.canUndo());
 }
 
 // The per-component property grid (vanilla Thing Properties tabs): kinds, the
@@ -1959,6 +2900,70 @@ void testThingProperties() {
     CHECK(find("CTCDoor", "StartOpen") && find("CTCDoor", "StartOpen")->kind == K::Bool);
     CHECK(find("CTCDoor", "LockLevel") && find("CTCDoor", "LockLevel")->kind == K::Int);
     CHECK(!find("", "UID") && !find("", "DefinitionType") && !find("CTCPhysicsStandard", "PositionX") && !find("CTCOwnedEntity", "OwnerUID"));
+    // A quoted value must still occupy one serialized line. Refuse before undo.
+    for (const std::string value : {std::string("\"a\nb\""), std::string("\"a\rb\""),
+                                    std::string("\"a\0b\"",5)}) {
+        ed::Document unsafe;
+        CHECK(unsafe.openText("Unsafe property", tng, err));
+        const auto revision = unsafe.revision();
+        CHECK(!unsafe.setPropertyValue(0, "", "ScriptData", value));
+        CHECK(unsafe.text()==tng && unsafe.revision()==revision && !unsafe.canUndo());
+    }
+    // Numeric-looking text must fit the serialized float before creating undo.
+    for (const std::string value : {std::string(40,'9'), "-"+std::string(40,'9'),
+                                    std::string(40,'9')+".0"}) {
+        ed::Document unsafe;
+        CHECK(unsafe.openText("Float property range",tng,err));
+        const auto revision=unsafe.revision();
+        CHECK(!unsafe.setPropertyValue(0,"","Health",value));
+        CHECK(unsafe.text()==tng && unsafe.revision()==revision && !unsafe.canUndo());
+    }
+    for (const std::string value : {"0","-2.5","+2.5","99999999999999999999999999999999999999"}) {
+        ed::Document valid;
+        CHECK(valid.openText("Finite float property",tng,err));
+        CHECK(valid.setPropertyValue(0,"","Health",value));
+        auto expected=tng;
+        expected.replace(expected.find("Health 1.0;"),11,"Health "+value+";");
+        CHECK(valid.text()==expected);
+        CHECK(valid.undo() && valid.text()==tng);
+    }
+    {
+        ed::Document sequence;
+        CHECK(sequence.openText("Float integer spelling",tng,err));
+        CHECK(sequence.setPropertyValue(0,"","Health","3"));
+        bool typedFloat=false;
+        for(const auto& row:sequence.propertiesOf(0))
+            if(row.ctc.empty() && row.key=="Health") typedFloat=row.kind==K::Float;
+        CHECK(typedFloat);
+        const auto before=sequence.text();
+        const auto revision=sequence.revision();
+        CHECK(!sequence.setPropertyValue(0,"","Health",std::string(40,'9')));
+        CHECK(sequence.text()==before && sequence.revision()==revision);
+        CHECK(sequence.undo() && sequence.text()==tng);
+    }
+    for(const auto& [type,key]:std::vector<std::pair<std::string,std::string>>{
+            {"Object","ObjectScale"},{"Marker","Health"},{"Building","Health"},
+            {"Village","Health"},{"Holy Site","Health"},{"TrackNode","Health"},
+            {"Switch","TriggerRadius"},{"Switch","TimeToChangeEnvironmentDef"},
+            {"AICreature","InitialPosX"}}) {
+        const std::string input="Version 2;\nXXXSectionStart NULL;\nNewThing "+type+
+            ";\nUID 1;\nDefinitionType \"TEST\";\n"+key+" 3;\nEndThing;\nXXXSectionEnd;\n";
+        ed::Document typed;
+        CHECK(typed.openText("Native scalar kind",input,err));
+        const auto revision=typed.revision();
+        CHECK(!typed.setPropertyValue(0,"",key,std::string(40,'9')));
+        CHECK(typed.text()==input && typed.revision()==revision && !typed.canUndo());
+        CHECK(typed.setPropertyValue(0,"",key,"2.5"));
+        CHECK(typed.undo() && typed.text()==input);
+    }
+    for(const std::string type:{"Thing","UnknownThing"}) {
+        ed::Document raw;
+        const std::string input="Version 2;\nXXXSectionStart NULL;\nNewThing "+type+
+            ";\nHealth 3;\nEndThing;\nXXXSectionEnd;\n";
+        CHECK(raw.openText("Unclassified scalar",input,err));
+        CHECK(!raw.setPropertyValue(0,"","Health","2.5"));
+        CHECK(raw.text()==input && !raw.canUndo());
+    }
     CHECK(doc.setPropertyValue(0, "CTCDoor", "StartOpen", "TRUE"));
     CHECK(doc.text().find("StartOpen TRUE;") != std::string::npos);
     CHECK(!doc.setPropertyValue(0, "CTCDoor", "StartOpen", "3"));      // a bool stays a bool
@@ -2183,9 +3188,9 @@ void testNavPatch(const fs::path& dir) {
     CHECK(doc.openText("nav32", "Version 2;\r\nXXXSectionStart NULL;\r\nXXXSectionEnd;\r\n", err));
     CHECK(doc.loadLevel(base, err));
     albion::editor::TerrainBrush b;
-    b.mode = albion::editor::TerrainBrush::Mode::Blocked; b.radius = 0.4f; b.x = 20.5f; b.y = 12.5f; b.strength = 1;
+    b.mode = albion::editor::TerrainBrush::Mode::Blocked; b.radius = 0.25f; b.x = 20; b.y = 12; b.strength = 1;
     doc.beginStroke(b); doc.applyBrush(b, 0.1f); doc.endStroke();
-    b.mode = albion::editor::TerrainBrush::Mode::Walkable; b.x = 5.5f; b.y = 7.5f;
+    b.mode = albion::editor::TerrainBrush::Mode::Walkable; b.x = 5; b.y = 7;
     doc.beginStroke(b); doc.applyBrush(b, 0.1f); doc.endStroke();
     CHECK(!doc.terrain().walkable[size_t(12) * 33 + 20] && doc.terrain().walkable[size_t(7) * 33 + 5]);
     const fs::path root = dir / "nav_root";
@@ -2255,6 +3260,20 @@ void testTerrainSaveFailure(const fs::path& dir) {
         CHECK(doc.terrainDirty() && notes.empty());
         CHECK(existing ? readAll(output) == original : !fs::exists(output));
         CHECK(!fs::exists(output.string() + ".forge-orig") && !fs::exists(output.string() + ".forge-created"));
+        // A terrain serialization failure cannot publish a pending object edit.
+        forge::thingplacer::Placement object; object.definitionType="OBJECT_BARREL_01";
+        object.scriptName="MustStayPending"; object.position={1,2,3}; doc.place(object);
+        const auto objects=output.parent_path() / "SaveFailure.tng";
+        fs::create_directories(objects.parent_path());
+        const std::string oldObjects="Version 2;\r\n";
+        { std::ofstream(objects,std::ios::binary) << oldObjects; }
+        CHECK(!doc.saveDraftLoose(root,error,&notes));
+        CHECK(error.find("unsupported block version")!=std::string::npos);
+        CHECK(doc.dirty() && doc.terrainDraftDirty() && notes.empty());
+        const auto unchanged=readAll(objects);
+        CHECK(std::string(unchanged.begin(),unchanged.end())==oldObjects);
+        CHECK(!fs::exists(doc.terrainDraftPath(root)) && !fs::exists(objects.string()+".forge-orig"));
+        CHECK(doc.undo() && !doc.dirty());
         CHECK(doc.undo() && !doc.terrainDirty());
     }
 }
@@ -2480,6 +3499,15 @@ void testVanillaPlacement() {
     CHECK(std::fabs(fq.x - tp::kGroundUpZ) < 1e-6f && std::fabs(fq.y) < 1e-5f);
     // constant height never goes under the ground
     CHECK(tp::constantPlacementHeight(10.0f, 4.0f) == 10.0f && tp::constantPlacementHeight(2.0f, 4.0f) == 4.0f);
+    const auto cell = tp::snapToCellCentre(3.7f, 12.99f);
+    CHECK(cell.x == 3.5f && cell.y == 12.5f);
+    const auto edge = tp::snapToCellCentre(0.0f, 1.0f);
+    CHECK(edge.x == 0.5f && edge.y == 1.5f);
+    // Native _ftol truncates toward zero, including negative inputs.
+    const auto negative = tp::snapToCellCentre(-3.7f, -0.75f);
+    CHECK(negative.x == -2.5f && negative.y == 0.5f);
+    const auto again = tp::snapToCellCentre(cell.x, cell.y);
+    CHECK(again.x == cell.x && again.y == cell.y);
 }
 
 void testBudgetSurvey() {
@@ -2605,6 +3633,35 @@ void testMeshCompose() {
         payload.insert(payload.begin()+lodSize,c.payload.begin(),c.payload.begin()+lodSize);
         const auto chain=forge::meshpreview::decodeLods(payload,info,1);
         CHECK(chain.size()==2 && chain[1].triangles.size()==6);
+        auto changedPayload=payload;
+        for(size_t lod=0;lod<chain.size();++lod) {
+            CHECK(chain[lod].materials[0].textureWordOffsets.has_value());
+            const auto& slots=*chain[lod].materials[0].textureWordOffsets;
+            const auto& firstSlots=*chain[0].materials[0].textureWordOffsets;
+            for(size_t slot=0;slot<4;++slot) {
+                CHECK(slots[slot]==firstSlots[slot]+lod*lodSize);
+                CHECK(slots[slot]+4<=lodSize*(lod+1));
+                int32_t actual=0;
+                std::memcpy(&actual,payload.data()+slots[slot],4);
+                const int32_t expected=slot==0?chain[lod].materials[0].diffuseTexture:
+                    slot==1?chain[lod].materials[0].bumpTexture:
+                    slot==2?chain[lod].materials[0].reflectionTexture:
+                            chain[lod].materials[0].alphaMapTexture;
+                CHECK(actual==expected);
+                const int32_t replacement=10000+int32_t(lod)*100+int32_t(slot);
+                std::memcpy(changedPayload.data()+slots[slot],&replacement,4);
+            }
+        }
+        const auto changed=forge::meshpreview::decodeLods(changedPayload,info,1);
+        CHECK(changed[0].materials[0].diffuseTexture==10000);
+        CHECK(changed[1].materials[0].alphaMapTexture==10103);
+        for(size_t at=0;at<payload.size();++at) {
+            bool referenceByte=false;
+            for(const auto& lod:chain)
+                for(size_t slot:*lod.materials[0].textureWordOffsets)
+                    referenceByte|=at>=slot&&at<slot+4;
+            CHECK(referenceByte||changedPayload[at]==payload[at]);
+        }
         for (int malformed=0;malformed<4;++malformed) {
             auto bad=info;
             if (malformed==0) bad.resize(46);
@@ -2626,7 +3683,40 @@ void testMeshCompose() {
         CHECK(g.vertices[4].nz > 0.9f);
     }
     CHECK(packNormal({0, 0, 1}) == (uint32_t(511) << 22));
+    {
+        auto native=m;native.name="";native.originalId=7;native.originalMapFlags=0x81234567;
+        native.diffuseId=0x80000002;native.bumpId=9;native.reflectId=10;native.illumId=11;
+        native.decalId=12;native.selfIllum=-1;native.nativeFlags=std::array<uint8_t,5>{2,3,4,0,1};
+        native.filenames={"diff.bin","bump.bin","reflect.bin","illum.bin"};
+        Material sentinel;sentinel.name="DegenerateTriangles";sentinel.originalId=0;
+        sentinel.nativeFlags=std::array<uint8_t,5>{0,0,0,1,0};
+        const auto source=composeStatic("MESH_PRESERVED_MATERIALS",{p},{native,sentinel},false,0,false);
+        const auto decoded=forge::meshpreview::decodeLod0(source.payload,1);
+        CHECK(decoded.materials.size()==2 && decoded.materials[0].name.empty() && decoded.materials[0].id==7);
+        CHECK(decoded.materials[0].nativeFlags==*native.nativeFlags && decoded.materials[0].filenames==native.filenames);
+        CHECK(decoded.materials[0].decalId==12 && decoded.materials[0].textureFlags==0x81234567 && decoded.materials[0].glowStrength==UINT32_MAX);
+        CHECK(decoded.triangles.size()==p.faces.size() && decoded.triangles.front().material==0);
+        auto changed=p;changed.verts[4].z=3;
+        const auto replaced=composeStatic("MESH_PRESERVED_MATERIALS",{changed},{native,sentinel},true,0,false);
+        const auto after=forge::meshpreview::decodeLod0(replaced.payload,1);
+        for(size_t slot=0;slot<2;++slot) {
+            const auto& a=decoded.materials[slot];const auto& b=after.materials[slot];
+            const size_t aWord=(*a.textureWordOffsets)[0],bWord=(*b.textureWordOffsets)[0];
+            const size_t aStart=aWord-a.name.size()-9,bStart=bWord-b.name.size()-9;
+            size_t length=aWord+29-aStart;
+            if(a.nativeFlags[4]) for(const auto& filename:a.filenames) length+=filename.size()+1;
+            CHECK(std::equal(source.payload.begin()+aStart,source.payload.begin()+aStart+length,replaced.payload.begin()+bStart));
+        }
+        CHECK(after.vertices[4].z==3);
+    }
     CHECK(compressUv(0.0f) == 16384 && compressUv(1.0f) == 18432);
+    CHECK(compressUv(1e20f)==32767 && compressUv(-1e20f)==-32768);
+    CHECK(compressUv(std::numeric_limits<float>::max())==32767);
+    bool invalidUv=false;
+    try { (void)compressUv(std::numeric_limits<float>::quiet_NaN()); }
+    catch(const std::invalid_argument&) { invalidUv=true; }
+    CHECK(invalidUv);
+
     bool threw = false;
     try { composeStatic("NOTMESH", {p}, {m}); } catch (const std::invalid_argument&) { threw = true; }
     CHECK(threw);
@@ -2644,6 +3734,13 @@ void testMeshCacheLifetime(const fs::path& dir) {
         forge::big::Entry entry;
         entry.id = 77; entry.type = 1; entry.name = "MESH_CACHE_LIFETIME";
         entry.data = mesh.payload; entry.subHeader = mesh.info;
+        // Two authored LODs also exercise the deferred read after another
+        // install becomes active and the process-wide cache is closed.
+        uint32_t lodSize=0, two=2;
+        std::memcpy(&lodSize,mesh.info.data()+48,4);
+        std::memcpy(entry.subHeader.data()+44,&two,4);
+        entry.subHeader.insert(entry.subHeader.begin()+52,mesh.info.begin()+48,mesh.info.begin()+52);
+        entry.data.insert(entry.data.begin()+lodSize,mesh.payload.begin(),mesh.payload.begin()+lodSize);
         bank.entries.push_back(std::move(entry));
         const auto bytes = file.serialize();
         std::ofstream out(path, std::ios::binary);
@@ -2680,6 +3777,139 @@ void testMeshCacheLifetime(const fs::path& dir) {
     resume.set_value();
     CHECK(reader.get());
     CHECK(lifetime.expired()); // no retired-bank leak after the last reader exits
+
+    CHECK(fe::openMeshBank(first, error));
+    auto before = fe::cachedMesh(77, error);
+    const auto stamp = fs::last_write_time(first);
+    writeBank(first, 12);
+    fs::last_write_time(first, stamp + std::chrono::seconds(2));
+    CHECK(fe::openMeshBank(first, error));
+    auto changed = fe::cachedMesh(77, error);
+    CHECK(changed && changed->vertices[2].z == 12 && changed != before);
+    CHECK(before && before->vertices[2].z == 2);
+    fs::remove(first);
+    CHECK(!fe::openMeshBank(first, error));
+    CHECK(!error.empty());
+    CHECK(!fe::cachedMesh(77, error) && fe::meshName(77).empty());
+    writeBank(first, 15);
+    CHECK(fe::openMeshBank(first, error));
+    CHECK(error.empty());
+    auto restored = fe::cachedMesh(77, error);
+    CHECK(restored && restored->vertices[2].z == 15);
+    { std::ofstream corrupt(first, std::ios::binary); corrupt << "bad"; }
+    CHECK(!fe::openMeshBank(first, error));
+    CHECK(!error.empty());
+    CHECK(changed && changed->vertices[2].z == 12);
+    CHECK(!fe::cachedMesh(77, error) && fe::meshIdByName("MESH_CACHE_LIFETIME") == 0);
+    fe::closeMeshBank();
+
+    writeBank(first, 2);
+    albion::thingsexport::Options options;
+    options.gameRoot=dir/"mesh-worker-no-effects";
+    options.graphicsBig=first; options.particles=true; options.textures=false;
+    options.tngText="Version 2;\nXXXSectionStart NULL;\nNewThing Object;\nUID 1;\n"
+        "DefinitionType \"OBJECT_TEST\";\nGraphicOverride \"MESH_CACHE_LIFETIME\";\n"
+        "StartCTCPhysicsStandard;\nPositionX 1;\nPositionY 2;\nPositionZ 3;\n"
+        "EndCTCPhysicsStandard;\nEndThing;\nXXXSectionEnd;\n";
+    bool switched=false;
+    options.log=[&](const std::string& message) {
+        if(message.find("particle effects unavailable:")==std::string::npos) return;
+        // Force another worker to open a different install between this
+        // export's bank open and its first model lookup, without timing races.
+        auto other=std::async(std::launch::async,[&] {
+            std::string detail;return fe::openMeshBank(second,detail);
+        });
+        switched=other.get();
+    };
+    albion::terrainexport::Context context;
+    auto scene=albion::thingsexport::load("fixture",options,context);
+    CHECK(switched && scene.meshes.size()==1);
+    if(!scene.meshes.empty()) CHECK(scene.meshes[0].geometry.vertices[2].z==2);
+    auto otherMesh=fe::cachedMesh(77,error);
+    CHECK(otherMesh && otherMesh->vertices[2].z==9);
+    std::weak_ptr<fe::MeshBank> retained=scene.meshBank;
+    fe::closeMeshBank();
+    auto sceneMesh=fe::cachedMesh(scene.meshBank,77,error);
+    CHECK(sceneMesh && sceneMesh->vertices[2].z==2 && !retained.expired());
+    fe::loadWorldLods(scene,context);
+    CHECK(scene.meshes.size()==1 && scene.meshes[0].lods.size()==1);
+    if(!scene.meshes.empty() && !scene.meshes[0].lods.empty())
+        CHECK(scene.meshes[0].lods[0].geometry.vertices[2].z==2);
+    scene.meshBank.reset();
+    CHECK(retained.expired());
+    auto ambiguous=forge::big::File::openFully(second);
+    auto duplicate=ambiguous.banks()[0].entries[0];
+    duplicate.data=ambiguous.entryData(duplicate);
+    duplicate.name="OTHER_MESH_WITH_SAME_ID";
+    ambiguous.banks()[0].entries.push_back(duplicate);
+    const auto ambiguousPath=dir/"mesh_ambiguous_id.big";
+    {
+        const auto bytes=ambiguous.serialize();std::ofstream out(ambiguousPath,std::ios::binary);
+        out.write(reinterpret_cast<const char*>(bytes.data()),bytes.size());
+    }
+    CHECK(!fe::openMeshBank(ambiguousPath,error));
+    CHECK(error.find("duplicate mesh entry ID")!=std::string::npos);
+    bool refused=false;
+    try { (void)forge::meshpreview::readLod0(ambiguousPath,77); }
+    catch(const std::exception& e) { refused=std::string(e.what()).find("duplicate mesh entry ID")!=std::string::npos; }
+    CHECK(refused);
+    fe::closeMeshBank();
+}
+
+void testParticleExportReload(const fs::path& dir) {
+    const auto root=dir/"effects-export-reload";
+    const auto effectPath=root/"data/Misc/pc/effects.big";
+    const auto meshPath=root/"data/graphics/graphics.big";
+    auto write=[&](const fs::path& path,const std::vector<uint8_t>& data) {
+        fs::create_directories(path.parent_path());
+        std::ofstream out(path,std::ios::binary);
+        out.write(reinterpret_cast<const char*>(data.data()),data.size());
+    };
+    forge::big::File graphics;graphics.addBank("MBANK_ALLMESHES",205);
+    write(meshPath,graphics.serialize());
+    std::vector<uint8_t> payload;
+    auto u32=[&](uint32_t n){for(int k=0;k<4;++k)payload.push_back(uint8_t(n>>(8*k)));};
+    auto str=[&](const char* value){do{payload.push_back(uint8_t(*value));}while(*value++);};
+    u32(100);str("Reload light");payload.insert(payload.end(),7+5*4+4+5,0);
+    u32(1);str("light");payload.push_back(1);payload.push_back(0);
+    u32(0);u32(0);u32(0);u32(1);str("CPSCLight");u32(0);payload.push_back(1);
+    std::vector<uint8_t> light(71,0);const float radius=3;
+    std::memcpy(light.data()+20,&radius,4);light[50]=1;
+    std::fill(light.begin()+59,light.begin()+63,255);
+    payload.insert(payload.end(),light.begin(),light.end());payload.push_back(0x7b);payload.push_back(0x26);
+    forge::big::File effects;auto& bank=effects.addBank("PARTICLE_MAIN_PC",111);
+    forge::big::Entry entry;entry.name="RELOAD_LIGHT";entry.id=1;entry.data=payload;bank.entries.push_back(entry);
+    const auto good=effects.serialize();write(effectPath,good);
+    albion::thingsexport::Options options;options.gameRoot=root;options.particles=true;options.textures=false;
+    options.tngText="Version 2;\nXXXSectionStart NULL;\nNewThing Object;\nUID 1;\n"
+        "DefinitionType \"PARTICLE_EMITTER_PLACEABLE\";\nStartCTCPhysicsStandard;\n"
+        "PositionX 1;\nPositionY 2;\nPositionZ 3;\nEndCTCPhysicsStandard;\n"
+        "StartCTCDParticleEmitter;\nParticleTypeName \"RELOAD_LIGHT\";\nEndCTCDParticleEmitter;\n"
+        "EndThing;\nXXXSectionEnd;\n";
+    albion::terrainexport::Context context;albion::thingsexport::Stats stats;
+    auto scene=albion::thingsexport::load("fixture",options,context,&stats);
+    CHECK(scene.lights.size()==1 && stats.particlesPlaced==1 && stats.particlesUnknown==0);
+    auto held=albion::effects::byName(root,"RELOAD_LIGHT");
+    write(effectPath,{1,2,3});
+    scene=albion::thingsexport::load("fixture",options,context,&stats);
+    CHECK(scene.lights.empty() && stats.particlesPlaced==0 && stats.particlesUnknown==1);
+    CHECK(std::any_of(scene.warnings.begin(),scene.warnings.end(),[](const auto& warning){
+        return warning.find("particle effects unavailable:")!=std::string::npos;
+    }));
+    CHECK(held && held->lights.size()==1);
+    fs::remove(effectPath);
+    scene=albion::thingsexport::load("fixture",options,context,&stats);
+    CHECK(scene.lights.empty() && stats.particlesUnknown==1);
+    write(effectPath,good);
+    scene=albion::thingsexport::load("fixture",options,context,&stats);
+    CHECK(scene.lights.size()==1 && stats.particlesPlaced==1 && stats.particlesUnknown==0);
+    auto duplicate=entry;duplicate.id=2;bank.entries.push_back(duplicate);
+    write(effectPath,effects.serialize());
+    scene=albion::thingsexport::load("fixture",options,context,&stats);
+    CHECK(scene.lights.empty() && stats.particlesUnknown==1);
+    CHECK(std::any_of(scene.warnings.begin(),scene.warnings.end(),[](const auto& warning){
+        return warning.find("has no unique match in effects.big")!=std::string::npos;
+    }));
 }
 
 void testEffectsBankLifetime(const fs::path& dir) {
@@ -2734,6 +3964,49 @@ void testEffectsBankLifetime(const fs::path& dir) {
     const auto changed=fx::byName(first,"SAME_EFFECT");
     CHECK(changed && changed->displayName=="Changed size automatically invalidates");
     CHECK(fresh && fresh->displayName=="Fresh");
+    const auto namesRoot=dir/"effects-name-collisions";
+    writeBank(namesRoot,"Names");
+    const auto namesPath=namesRoot/"data/Misc/pc/effects.big";
+    auto namesFile=forge::big::File::openFully(namesPath);
+    auto* namesBank=namesFile.findBank("PARTICLE_MAIN_PC");
+    auto firstName=namesBank->entries.front(); firstName.id=100; firstName.name="Mixed";
+    auto secondName=firstName; secondName.id=101; secondName.name="MIXED";
+    namesBank->entries.push_back(firstName); namesBank->entries.push_back(secondName);
+    const auto nameBytes=namesFile.serialize();
+    { std::ofstream out(namesPath,std::ios::binary);
+      out.write(reinterpret_cast<const char*>(nameBytes.data()),nameBytes.size()); }
+    CHECK(fx::openBank(namesRoot,error,true));
+    const auto mixed=fx::byName(namesRoot,"Mixed"), upperMixed=fx::byName(namesRoot,"MIXED");
+    CHECK(mixed && mixed->id==100 && upperMixed && upperMixed->id==101);
+    CHECK(!fx::byName(namesRoot,"mixed")); // ambiguous case-insensitive convenience query
+    CHECK(fx::entryNames(namesRoot)==std::vector<std::string>({"MIXED","Mixed","SAME_EFFECT"}));
+    CHECK(fx::byName(namesRoot,"same_effect")->id==42);
+    CHECK(fx::byName(namesRoot,"same_effect")==fx::byName(namesRoot,"SAME_EFFECT"));
+    namesBank->entries.push_back(firstName);
+    const auto duplicateBytes=namesFile.serialize();
+    { std::ofstream out(namesPath,std::ios::binary);
+      out.write(reinterpret_cast<const char*>(duplicateBytes.data()),duplicateBytes.size()); }
+    CHECK(fx::openBank(namesRoot,error,true));
+    CHECK(!fx::byName(namesRoot,"Mixed") && !fx::byName(namesRoot,"mixed"));
+    CHECK(fx::byName(namesRoot,"MIXED")->id==101);
+    CHECK(mixed && mixed->id==100); // retained snapshot survives the ambiguous reload
+
+    auto& unrelated=namesFile.addBank("PARTICLE_FRONTEND_PC",111);
+    auto unrelatedEntry=firstName; unrelatedEntry.data=namesFile.entryData(firstName); unrelatedEntry.name="SAME_EFFECT"; unrelatedEntry.id=999;
+    unrelated.entries.push_back(unrelatedEntry);
+    const auto multiBank=namesFile.serialize();
+    { std::ofstream out(namesPath,std::ios::binary);
+      out.write(reinterpret_cast<const char*>(multiBank.data()),multiBank.size()); }
+    CHECK(fx::openBank(namesRoot,error,true));
+    const auto mainOnly=fx::byName(namesRoot,"SAME_EFFECT");
+    CHECK(mainOnly && mainOnly->id==42 && fx::entryCount()==4);
+    forge::big::File missingMain;
+    missingMain.addBank("PARTICLE_FRONTEND_PC",111).entries.push_back(unrelatedEntry);
+    const auto missingBytes=missingMain.serialize();
+    { std::ofstream out(namesPath,std::ios::binary);
+      out.write(reinterpret_cast<const char*>(missingBytes.data()),missingBytes.size()); }
+    CHECK(!fx::openBank(namesRoot,error,true));
+    CHECK(error.find("PARTICLE_MAIN_PC")!=std::string::npos);
     std::weak_ptr<const fx::Effect> originalLifetime=held, refreshedLifetime=fresh;
     held.reset(); fresh.reset();
     CHECK(originalLifetime.expired() && refreshedLifetime.expired());
@@ -2776,6 +4049,27 @@ void testNavigationDetail() {
         rejected = false;
         try { decodeHull(bytes, {}); } catch (const std::runtime_error&) { rejected = true; }
         CHECK(rejected);
+    }
+}
+
+void testNavigationPhysicsReferences(const fs::path& dir) {
+    forge::meshcompose::Primitive primitive;
+    primitive.verts={{0,0,0},{1,0,0},{0,1,0}};primitive.faces={{0,1,2}};
+    for(uint32_t physics:{0u,0x7fffffffu,0x80000000u,0xfffffffeu,0xffffffffu}) {
+        forge::big::File fixture;
+        auto& bank=fixture.addBank("MBANK_ALLMESHES",205);
+        forge::big::Entry render;render.id=1;render.type=1;render.name="MESH_REFERENCE";
+        render.subHeader.resize(4);std::memcpy(render.subHeader.data(),&physics,4);
+        forge::big::Entry collision;collision.id=physics;collision.type=3;collision.name="MESH_REFERENCE[PHYSICS]";
+        collision.data=forge::meshcompose::composePhysics({primitive});
+        bank.entries.push_back(std::move(render));bank.entries.push_back(std::move(collision));
+        const auto bytes=fixture.serialize();const auto path=dir/("physics-reference-"+std::to_string(physics)+".big");
+        {std::ofstream out(path,std::ios::binary);out.write(reinterpret_cast<const char*>(bytes.data()),bytes.size());}
+        const auto archive=forge::big::File::open(path);
+        albion::navlines::HullCache cache(archive,{});
+        const auto* hull=cache.forRenderMesh(1);
+        CHECK((hull!=nullptr)==(physics!=0 && physics!=0xffffffffu));
+        if(hull) CHECK(hull->radius>0);
     }
 }
 
@@ -2894,7 +4188,25 @@ void testGroundNavigation(const fs::path& dir) {
     CHECK(rejected);
 }
 
-int main() {
+int main(int argc, char** argv) {
+    if (argc==3 && std::string_view(argv[1])=="--effects-bank") {
+        const auto bank=forge::big::File::open(argv[2]);
+        size_t count=0,complete=0;
+        for (const auto& b:bank.banks()) if (b.name=="PARTICLE_MAIN_PC")
+            for (const auto& entry:b.entries) {
+                ++count;
+                const auto effect=albion::effects::decode(bank.entryData(entry));
+                if(effect.parsedFully) ++complete;
+                else {
+                    std::cerr << entry.name << ":";
+                    for(const auto& reason:effect.previewUnsupported) std::cerr << " " << reason;
+                    std::cerr << '\n';
+                }
+            }
+        std::cout << "Effect payload decode: " << complete << '/' << count << " complete\n";
+        return count && complete==count ? 0 : 1;
+    }
+    if(argc!=1) return 2;
     const fs::path dir = fs::temp_directory_path() / "FableForgeTests";
     fs::create_directories(dir);
     const fs::path lev = writeSyntheticLev(dir / "synthetic.lev", 4, 3,
@@ -2907,8 +4219,10 @@ int main() {
     testFoliageGlb(lev, dir);
     testThingBasis();
     testNavigationDetail();
+    testNavigationPhysicsReferences(dir);
     testGroundNavigation(dir);
     testWater(dir);
+    testScriptNameSafety();
     testLevelDocument();
     testTerrainEditing(lev, dir);
     testThemeToolsAndPaths(dir);
@@ -2920,11 +4234,23 @@ int main() {
     testParticlePreviewParameters();
     testParticleOrbitAttractorParameters();
     testEffectsBankLifetime(dir);
+    testParticleExportReload(dir);
     testThingLinks();
     testQuestSections();
     testDayNightSections();
     testGameMapGrid(dir);
     testEnvironmentAndSoundPaint(dir);
+    testSurveyOverlay(dir);
+    testSoundBrushFootprint(dir);
+    testGroundThemeStamp(dir);
+    testGroundThemeSmear(dir);
+    testAtmosSmear(dir);
+    testShorePoints(dir);
+    testPassabilityPen(dir);
+    testTerrainDraft(dir);
+    testRecovery(dir);
+    testReplaceBrushFootprint(dir);
+    testEnvironmentBrushFootprint(dir);
     testHeightPens();
     testTrackPath();
     testFractal();

@@ -20,6 +20,19 @@
 #include <set>
 #include <unordered_map>
 #include <stdexcept>
+#include <system_error>
+
+#ifdef _WIN32
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#undef near
+#undef far
+#endif
 
 #include "forge/heightpen.hpp"
 #include "forge/navpatch.hpp"
@@ -41,6 +54,14 @@ namespace albion::editor {
 namespace {
 
 constexpr size_t kUndoDepth = 128;
+
+std::vector<std::pair<int, int>> gameCellsForVertices(std::vector<std::pair<int, int>> cells, int gw, int gh) {
+    for (auto& [gx, gy] : cells) { gx /= 4; gy /= 4; }
+    std::erase_if(cells, [&](const auto& cell) { return cell.first >= gw || cell.second >= gh; });
+    std::sort(cells.begin(), cells.end());
+    cells.erase(std::unique(cells.begin(), cells.end()), cells.end());
+    return cells;
+}
 
 std::string lower(std::string s) { for (auto& c : s) c = char(std::tolower(uint8_t(c))); return s; }
 
@@ -78,6 +99,13 @@ const forge::tng::CtcBlock* physicsOf(const forge::tng::Thing& t) {
     const auto* phys = t.findCtc("CTCPhysicsStandard");
     if (!phys) phys = t.findCtc("CTCPhysicsNavigator");
     return phys;
+}
+
+bool finiteFrame(const Frame& frame) {
+    if(!std::isfinite(frame.scale)) return false;
+    for(size_t axis=0;axis<3;++axis)
+        if(!std::isfinite(frame.pos[axis]) || !std::isfinite(frame.forward[axis]) || !std::isfinite(frame.up[axis])) return false;
+    return true;
 }
 
 namespace {
@@ -125,8 +153,8 @@ bool parseUid(const std::string& raw, uint64_t& out) {
 }
 
 void normalise3(float v[3]) {
-    const float l = std::sqrt(v[0] * v[0] + v[1] * v[1] + v[2] * v[2]);
-    if (l > 1e-12f) { v[0] /= l; v[1] /= l; v[2] /= l; }
+    const double l=std::hypot(double(v[0]),double(v[1]),double(v[2]));
+    if (l > 1e-12f) for(size_t axis=0;axis<3;++axis) v[axis]=float(v[axis]/l);
 }
 
 std::string readFile(const fs::path& p) {
@@ -155,14 +183,17 @@ void frameToMatrix(const Frame& f, float m[16]) {
 }
 
 bool matrixToFrame(const float m[16], Frame& f) {
-    const float l1 = std::sqrt(m[4] * m[4] + m[5] * m[5] + m[6] * m[6]);
-    const float l2 = std::sqrt(m[8] * m[8] + m[9] * m[9] + m[10] * m[10]);
-    const float l0 = std::sqrt(m[0] * m[0] + m[1] * m[1] + m[2] * m[2]);
+    if(!std::all_of(m,m+16,[](float value){return std::isfinite(value);})) return false;
+    const double l1=std::hypot(double(m[4]),double(m[5]),double(m[6]));
+    const double l2=std::hypot(double(m[8]),double(m[9]),double(m[10]));
+    const double l0=std::hypot(double(m[0]),double(m[1]),double(m[2]));
     if (l1 < 1e-9f || l2 < 1e-9f || l0 < 1e-9f) return false;
-    f.forward[0] = -m[4] / l1; f.forward[1] = -m[5] / l1; f.forward[2] = -m[6] / l1;
-    f.up[0] = m[8] / l2; f.up[1] = m[9] / l2; f.up[2] = m[10] / l2;
+    const double scale=((l0+l1+l2)/3.0)/0.01;
+    if(scale>std::numeric_limits<float>::max()) return false;
+    f.forward[0] = float(-m[4] / l1); f.forward[1] = float(-m[5] / l1); f.forward[2] = float(-m[6] / l1);
+    f.up[0] = float(m[8] / l2); f.up[1] = float(m[9] / l2); f.up[2] = float(m[10] / l2);
     f.pos[0] = m[12]; f.pos[1] = m[13]; f.pos[2] = m[14];
-    f.scale = ((l0 + l1 + l2) / 3.0f) / 0.01f;
+    f.scale = float(scale);
     return true;
 }
 
@@ -254,6 +285,7 @@ bool Document::loadLevel(const fs::path& levPath, std::string& error) {
         const int cx = level_->cellsX(), cy = level_->cellsY();
         t->heights.resize(size_t(cx) * cy);
         t->walkable.resize(size_t(cx) * cy);
+        t->shorePoint.resize(size_t(cx) * cy);
         t->cameraPassable.resize(size_t(cx) * cy);
         t->themeIndex.resize(size_t(cx) * cy);
         t->themeStrength.resize(size_t(cx) * cy);
@@ -275,11 +307,13 @@ bool Document::loadLevel(const fs::path& levPath, std::string& error) {
                 const size_t i = size_t(y) * cx + x;
                 t->heights[i] = level_->heightAt(x, y);
                 t->walkable[i] = level_->walkableAt(x, y) ? 1 : 0;
+                t->shorePoint[i] = level_->shorePointAt(x, y) ? 1 : 0;
                 t->cameraPassable[i] = level_->cameraPassableAt(x, y) ? 1 : 0;
                 for (int k = 0; k < 3; ++k) { t->themeIndex[i][k] = level_->themeIndexAt(x, y, k); t->themeStrength[i][k] = level_->themeStrengthAt(x, y, k); }
             }
         terrain_ = t;
         savedTerrain_ = t;
+        draftTerrain_ = t; draftSoundThemes_ = level_->soundThemes();
         navWalkable_ = t->walkable;
         ++terrainRev_;
     }
@@ -463,6 +497,14 @@ std::optional<float> Document::groundHeight(float x, float y) const {
 
 Document::Snapshot Document::snapshot() const { return Snapshot{file_.serialize(), terrain_}; }
 
+Document::Snapshot Document::recoverySnapshot() const {
+    auto out = snapshot();
+    out.recoveryLevel = level_ ? std::make_shared<forge::lev::File>(*level_) : nullptr;
+    out.recoveryNav = navWalkable_;
+    out.recoverySoundListGrew = soundListGrew_;
+    return out;
+}
+
 void Document::pushUndo() {
     if (batchDepth_ > 0) {
         if (batchPushed_) return;
@@ -535,6 +577,15 @@ std::vector<size_t> Document::paste(const Fragment& fragment, const float at[3],
 void Document::restore(const Snapshot& s) {
     file_ = forge::tng::File::parseText(s.tng, mapName_ + ".tng");
     ++revision_;
+    if (s.recoveryLevel) {
+        level_ = std::make_shared<forge::lev::File>(*s.recoveryLevel);
+        terrain_ = s.terrain;
+        navWalkable_ = s.recoveryNav;
+        soundListGrew_ = s.recoverySoundListGrew;
+        terrainSession_ = std::make_shared<const uint8_t>(0);
+        ++terrainRev_; ++themeRev_;
+        return;
+    }
     if (s.terrain && s.terrain != terrain_) {
         const bool themes = s.terrain->themeIndex != terrain_->themeIndex || s.terrain->themeStrength != terrain_->themeStrength;
         terrain_ = s.terrain;
@@ -551,14 +602,26 @@ void Document::writeTerrainToLevel() {
         if (pal[i].name != terrain_->palette[i].name || pal[i].value != terrain_->palette[i].value)
             level_->setGroundTheme(i, terrain_->palette[i].name, terrain_->palette[i].value);
     const int cx = level_->cellsX(), cy = level_->cellsY();
+    bool passabilityChanged=false;
+    if (!terrain_->cameraPassable.empty())
+        for (int y=0;y<cy && !passabilityChanged;++y) for(int x=0;x<cx;++x) {
+            const size_t vertex=size_t(y)*cx+x;
+            if (level_->walkableAt(x,y)!=(terrain_->walkable[vertex]!=0) ||
+                level_->cameraPassableAt(x,y)!=(terrain_->cameraPassable[vertex]!=0)) { passabilityChanged=true;break; }
+        }
     for (int y = 0; y < cy; ++y)
         for (int x = 0; x < cx; ++x) {
             const size_t i = size_t(y) * cx + x;
             if (level_->heightAt(x, y) != terrain_->heights[i]) level_->setHeightAt(x, y, terrain_->heights[i]);
-            if (level_->walkableAt(x, y) != (terrain_->walkable[i] != 0)) level_->setWalkableAt(x, y, terrain_->walkable[i] != 0);
-            if (!terrain_->cameraPassable.empty()) {
-                const bool cam = terrain_->cameraPassable[i] != 0 || terrain_->walkable[i] != 0;   // the saver's OR
-                if (level_->cameraPassableAt(x, y) != cam) level_->setCameraPassableAt(x, y, cam);
+            const bool walkChanged=level_->walkableAt(x,y)!=(terrain_->walkable[i]!=0);
+            if (walkChanged) level_->setWalkableAt(x,y,terrain_->walkable[i]!=0);
+            if (!terrain_->shorePoint.empty() && level_->shorePointAt(x, y) != (terrain_->shorePoint[i] != 0))
+                level_->setShorePointAt(x, y, terrain_->shorePoint[i] != 0);
+            // Preserve untouched camera bytes, including noncanonical retail data.
+            // Explicit walkability/camera edits retain the native saver's OR rule.
+            if (passabilityChanged) {
+                const bool cam=terrain_->cameraPassable[i]!=0 || terrain_->walkable[i]!=0;
+                if (level_->cameraPassableAt(x,y)!=cam) level_->setCameraPassableAt(x,y,cam);
             }
             bool sameTheme = true;
             for (int k = 0; k < 3; ++k) sameTheme = sameTheme && level_->themeIndexAt(x, y, k) == terrain_->themeIndex[i][k] && level_->themeStrengthAt(x, y, k) == terrain_->themeStrength[i][k];
@@ -597,31 +660,55 @@ void Document::applyBrush(const TerrainBrush& brush, float dt) {
     if (!stroke_ || !working_) return;
     const int cx = level_->cellsX(), cy = level_->cellsY();
     using Mode = TerrainBrush::Mode;
-    if (brush.mode == Mode::CameraPass || brush.mode == Mode::CameraBlock) {
-        const int x0 = std::max(0, int(std::floor(brush.x - brush.radius))), x1 = std::min(cx - 1, int(std::ceil(brush.x + brush.radius)));
-        const int y0 = std::max(0, int(std::floor(brush.y - brush.radius))), y1 = std::min(cy - 1, int(std::ceil(brush.y + brush.radius)));
-        for (int y = y0; y <= y1; ++y)
-            for (int x = x0; x <= x1; ++x) {
-                const float dx = float(x) + 0.5f - brush.x, dy = float(y) + 0.5f - brush.y;
-                if (dx * dx + dy * dy <= brush.radius * brush.radius)
-                    working_->cameraPassable[size_t(y) * cx + x] = brush.mode == Mode::CameraPass ? 1 : 0;
-            }
-        ++terrainRev_;
+    if (brush.mode == Mode::ShoreSet || brush.mode == Mode::ShoreClear ||
+        brush.mode == Mode::CameraPass || brush.mode == Mode::CameraBlock ||
+        brush.mode == Mode::Walkable || brush.mode == Mode::Blocked) {
+        auto& flags = brush.mode == Mode::ShoreSet || brush.mode == Mode::ShoreClear ? working_->shorePoint
+                    : brush.mode == Mode::CameraPass || brush.mode == Mode::CameraBlock ? working_->cameraPassable
+                    : working_->walkable;
+        const uint8_t next = brush.mode == Mode::ShoreSet || brush.mode == Mode::CameraPass || brush.mode == Mode::Walkable ? 1 : 0;
+        bool changed = false;
+        for (const auto [x, y] : surveyBrushVertices(brush.x, brush.y, brush.radius)) {
+            auto& value = flags[size_t(y) * cx + x];
+            if (value != next) { value = next; changed = true; }
+        }
+        if (changed) ++terrainRev_;
         return;
     }
-    if (brush.mode == Mode::Walkable || brush.mode == Mode::Blocked) {
-        const int x0 = std::max(0, int(std::floor(brush.x - brush.radius))), x1 = std::min(cx - 1, int(std::ceil(brush.x + brush.radius)));
-        const int y0 = std::max(0, int(std::floor(brush.y - brush.radius))), y1 = std::min(cy - 1, int(std::ceil(brush.y + brush.radius)));
-        for (int y = y0; y <= y1; ++y)
-            for (int x = x0; x <= x1; ++x) {
-                const float dx = float(x) + 0.5f - brush.x, dy = float(y) + 0.5f - brush.y;
-                if (dx * dx + dy * dy <= brush.radius * brush.radius)
-                    working_->walkable[size_t(y) * cx + x] = brush.mode == Mode::Walkable ? 1 : 0;
+    if (brush.mode == Mode::ThemeSmear) {
+        std::array<bool,256> allowed{};
+        for (size_t slot=1;slot<working_->palette.size() && slot<allowed.size();++slot)
+            allowed[slot]=!working_->palette[slot].name.empty() && working_->palette[slot].name!="X0-NULL Theme";
+        const auto vertices=themeBrushVertices(brush.x,brush.y,std::trunc(std::max(brush.radius,1.f)));
+        const size_t changed=forge::terrain::smearThemeBlends(working_->themeIndex,working_->themeStrength,cx,cy,vertices,allowed);
+        if (changed) {
+            for (const auto [x,y] : vertices) {
+                const size_t vertex=size_t(y)*cx+x;
+                bool same=true;
+                for (size_t slot=0;slot<3;++slot)
+                    same=same && level_->themeIndexAt(x,y,int(slot))==working_->themeIndex[vertex][slot] &&
+                        level_->themeStrengthAt(x,y,int(slot))==working_->themeStrength[vertex][slot];
+                if (!same) level_->setThemeBlendAt(x,y,working_->themeIndex[vertex],working_->themeStrength[vertex]);
             }
-        ++terrainRev_;
+            ++terrainRev_;
+        }
         return;
     }
     if (brush.mode == Mode::Theme) {
+        if (brush.themeStamp) {
+            if (brush.themeIndex == 0) return; // native ENGINE rejects None
+            const std::array<uint8_t, 3> indices{brush.themeIndex, 0, 0}, strengths{255, 0, 0};
+            bool changed = false;
+            for (const auto [x, y] : themeBrushVertices(brush.x, brush.y, brush.radius)) {
+                const size_t i = size_t(y) * cx + x;
+                if (working_->themeIndex[i] == indices && working_->themeStrength[i] == strengths) continue;
+                working_->themeIndex[i] = indices; working_->themeStrength[i] = strengths;
+                level_->setThemeBlendAt(x, y, indices, strengths);
+                changed = true;
+            }
+            if (changed) ++terrainRev_;
+            return;
+        }
         // paint straight into the level (the library brush keeps the 3-slot invariant), then mirror the touched cells
         forge::terrain::ThemeBrush tb;
         tb.centerX = brush.x; tb.centerY = brush.y; tb.radius = brush.radius;
@@ -638,46 +725,56 @@ void Document::applyBrush(const TerrainBrush& brush, float dt) {
         ++terrainRev_;
         return;
     }
-    if (brush.mode == Mode::Environment || brush.mode == Mode::Sound) {
-        // game-map cells (4x4 height cells each) whose centre is under the brush
+    if (brush.mode == Mode::Sound) {
+        if (!level_->hasGameMap() || working_->sound.empty() || brush.themeIndex > level_->soundThemes().size()) return;
+        // EditSetSounds tests height vertices, then EditSetSound maps each to
+        // its 4x4 game cell. Repeated vertices set the same sound only once.
+        const int gw = level_->gameMapWidth();
+        bool changed = false;
+        for (const auto [gx, gy] : soundBrushCells(brush.x, brush.y, brush.radius)) {
+            auto& sound = working_->sound[size_t(gy) * gw + gx];
+            if (sound != brush.themeIndex) { sound = brush.themeIndex; changed = true; }
+        }
+        if (changed) ++terrainRev_;
+        return;
+    }
+    if (brush.mode == Mode::Environment) {
+        // Native EditPlaceEngineThemeUndoable with ATMOS sets slot 0 to the
+        // target, clears slots 1/2 and sets blends 255/0 (third is implicit).
         if (!level_->hasGameMap() || working_->sound.empty()) return;
-        const int gw = level_->gameMapWidth(), gh = level_->gameMapHeight();
-        const float opacity = std::clamp(brush.strength * dt, 0.0f, 1.0f);
-        for (int gy = 0; gy < gh; ++gy)
-            for (int gx = 0; gx < gw; ++gx) {
-                const float dx = float(gx) * 4.0f + 2.0f - brush.x, dy = float(gy) * 4.0f + 2.0f - brush.y;
-                if (dx * dx + dy * dy > brush.radius * brush.radius) continue;
-                const size_t g = size_t(gy) * gw + gx;
-                if (brush.mode == Mode::Sound) {
-                    if (brush.themeIndex <= level_->soundThemes().size()) working_->sound[g] = brush.themeIndex;
-                    continue;
-                }
-                forge::terrain::ThemeBlend blend{working_->atmosIndex[g], working_->atmosStrength[g]};
-                if (unsigned(blend.strengths[0]) + blend.strengths[1] + blend.strengths[2] != 255) blend = {{blend.indices[0], 0, 0}, {255, 0, 0}};
-                const auto next = forge::terrain::paintThemeBlend(blend, brush.themeIndex, opacity);
-                working_->atmosIndex[g] = next.indices; working_->atmosStrength[g] = next.strengths;
+        const int gw = level_->gameMapWidth();
+        const std::array<uint8_t, 3> indices{brush.themeIndex, 0, 0}, strengths{255, 0, 0};
+        bool changed = false;
+        for (const auto [gx, gy] : environmentBrushCells(brush.x, brush.y, brush.radius)) {
+            const size_t g = size_t(gy) * gw + gx;
+            if (working_->atmosIndex[g] != indices || working_->atmosStrength[g] != strengths) {
+                working_->atmosIndex[g] = indices; working_->atmosStrength[g] = strengths;
+                changed = true;
             }
-        ++terrainRev_;
+        }
+        if (changed) ++terrainRev_;
+        return;
+    }
+    if (brush.mode == Mode::EnvironmentSmear) {
+        if (!hasGameMap()) return;
+        if (forge::terrain::blurAtmos(working_->atmosIndex, working_->atmosStrength,
+                level_->gameMapWidth(), level_->gameMapHeight(), brush.x, brush.y, brush.radius, worldX_, worldY_)) ++terrainRev_;
         return;
     }
     if (brush.mode == Mode::ReplaceTheme) {
-        // a hard swap under the pen (cell centres inside the radius), mirrored into the level like Theme;
+        // Native Replace uses truncated integer vertices and a strict disc;
+        // mirror the swapped blends into the level like Theme.
         // the slot match is replaceTheme's (index or water family, any strength)
         if (brush.themeIndex == 0) return;
         const auto match = replaceMatchSet(brush.replaceFrom);
-        const int x0 = std::max(0, int(std::floor(brush.x - brush.radius))), x1 = std::min(cx - 1, int(std::ceil(brush.x + brush.radius)));
-        const int y0 = std::max(0, int(std::floor(brush.y - brush.radius))), y1 = std::min(cy - 1, int(std::ceil(brush.y + brush.radius)));
-        for (int y = y0; y <= y1; ++y)
-            for (int x = x0; x <= x1; ++x) {
-                const float dx = float(x) + 0.5f - brush.x, dy = float(y) + 0.5f - brush.y;
-                if (dx * dx + dy * dy > brush.radius * brush.radius) continue;
-                const size_t i = size_t(y) * cx + x;
-                const forge::terrain::ThemeBlend blend{working_->themeIndex[i], working_->themeStrength[i]};
-                const auto next = forge::terrain::replaceThemesInBlend(blend, match, brush.themeIndex);
-                if (next.indices == blend.indices && next.strengths == blend.strengths) continue;
-                working_->themeIndex[i] = next.indices; working_->themeStrength[i] = next.strengths;
-                level_->setThemeBlendAt(x, y, next.indices, next.strengths);
-            }
+        for (const auto [x, y] : themeBrushVertices(brush.x, brush.y, brush.radius)) {
+            const size_t i = size_t(y) * cx + x;
+            const forge::terrain::ThemeBlend blend{working_->themeIndex[i], working_->themeStrength[i]};
+            const auto next = forge::terrain::replaceThemesInBlend(blend, match, brush.themeIndex);
+            if (next.indices == blend.indices && next.strengths == blend.strengths) continue;
+            working_->themeIndex[i] = next.indices; working_->themeStrength[i] = next.strengths;
+            level_->setThemeBlendAt(x, y, next.indices, next.strengths);
+        }
         ++terrainRev_;
         return;
     }
@@ -722,7 +819,7 @@ void Document::endStroke() {
     stroke_ = false;
     const auto& w = *working_;
     const auto& t = *terrain_;
-    if (w.heights == t.heights && w.walkable == t.walkable && w.cameraPassable == t.cameraPassable && w.themeIndex == t.themeIndex &&
+    if (w.heights == t.heights && w.walkable == t.walkable && w.cameraPassable == t.cameraPassable && w.shorePoint == t.shorePoint && w.themeIndex == t.themeIndex &&
         w.themeStrength == t.themeStrength && w.atmosIndex == t.atmosIndex && w.atmosStrength == t.atmosStrength && w.sound == t.sound) {
         // nothing painted (an empty stroke, a no-op tool): drop the undo step beginStroke pushed
         working_.reset();
@@ -767,6 +864,84 @@ bool Document::setVertexHeights(const std::vector<VertexHeight>& edits, bool fol
 
 namespace {
 constexpr float kMaxVertexHeight = 2048.0f - 1e-4f;   // vanilla GFLimit(h, 0, 2048 - 1e-4)
+
+// Preserve the authored X/Y spelling and whitespace when changing a camera Z.
+std::optional<std::string> raisedCameraCoord(const std::string& raw, float delta) {
+    if (delta == 0 || raw.rfind("C3DCoordF(", 0) != 0 || raw.back() != ')') return std::nullopt;
+    size_t begin = 10;
+    for (int axis = 0; axis < 3; ++axis) {
+        const size_t end = axis == 2 ? raw.size() - 1 : raw.find(',', begin);
+        if (end == std::string::npos) return std::nullopt;
+        const std::string token = raw.substr(begin, end - begin);
+        char* tail = nullptr;
+        const float value = std::strtof(token.c_str(), &tail);
+        if (tail == token.c_str() || !std::isfinite(value)) return std::nullopt;
+        while (*tail && std::isspace(static_cast<unsigned char>(*tail))) ++tail;
+        if (*tail) return std::nullopt;
+        if (axis == 2) {
+            if (!std::isfinite(value + delta)) return std::nullopt;
+            size_t first = begin, last = end;
+            while (first < last && std::isspace(static_cast<unsigned char>(raw[first]))) ++first;
+            while (last > first && std::isspace(static_cast<unsigned char>(raw[last - 1]))) --last;
+            std::string result = raw;
+            result.replace(first, last - first, formatFloat(value + delta));
+            return result;
+        }
+        begin = end + 1;
+    }
+    return std::nullopt;
+}
+
+void raiseCameraPoint(forge::tng::File& file, size_t index, float delta, bool movedPhysics) {
+    // SetHeightDeltaZ base 024f4900, spline 025cea00; OnSerialise 024f3e20.
+    // CoordBase is saved relative to the parent when its flag is set. Account
+    // for that parent's simultaneous physics move when editing serialized Z.
+    struct Edit { std::string ctc, key, value; };
+    std::vector<Edit> edits;
+    for (const auto& block : file.things()[index].ctcBlocks) {
+        static const std::set<std::string> types{
+            "CTCCameraPointDefinitionBase", "CTCCameraPointBuilding", "CTCCameraPointFixedPoint",
+            "CTCCameraPointFixedDolly", "CTCCameraPointTrack", "CTCCameraPointGeneralCase",
+            "CTCCameraPointDead", "CTCCameraPointScripted", "CTCCameraPointScriptedSpline"};
+        if (!types.count(block.name)) continue;
+        if (std::count_if(file.things()[index].ctcBlocks.begin(), file.things()[index].ctcBlocks.end(),
+            [&](const auto& other) { return other.name == block.name; }) != 1) continue;
+        auto truth = [&](const char* key) -> std::optional<bool> {
+            for (const auto& property : block.properties)
+                if (lower(property.key) == lower(key)) {
+                    const auto value = lower(property.value);
+                    if (value == "true" || value == "1") return true;
+                    if (value == "false" || value == "0") return false;
+                    return std::nullopt;
+                }
+            return false;   // native persistence defaults for both flags
+        };
+        const auto relative = truth("UsingRelativeCoords"), parent = truth("IsCoordBaseRelativeToParent");
+        const float baseDelta = relative && parent ? ((*relative ? delta : 0.0f) -
+            (movedPhysics && *parent ? delta : 0.0f)) : 0.0f;
+        for (const auto& property : block.properties) {
+            const auto key = lower(property.key);
+            if (std::count_if(block.properties.begin(), block.properties.end(),
+                [&](const auto& other) { return lower(other.key) == key; }) != 1) continue;
+            float amount = 0.0f;
+            if (key == "coordbase") amount = baseDelta;
+            else if (block.name == "CTCCameraPointScriptedSpline" && key.rfind("keycameras[", 0) == 0) {
+                const size_t close = key.find(']', 11);
+                if (close == std::string::npos || key.substr(close) != "].position") continue;
+                const auto digits = key.substr(11, close - 11);
+                if (digits.empty() || digits.find_first_not_of("0123456789") != std::string::npos) continue;
+                // Native loads exactly NumKeyCameras keys; orphan rows stay untouched.
+                const float count = propF(block, "NumKeyCameras", 0);
+                if (!std::isfinite(count) || count < 0 || std::trunc(count) != count ||
+                    std::strtod(digits.c_str(), nullptr) >= count) continue;
+                amount = delta;
+            }
+            if (const auto value = raisedCameraCoord(property.value, amount))
+                edits.push_back({block.name, property.key, *value});
+        }
+    }
+    for (const auto& edit : edits) file.setCtcProperty(index, edit.ctc, edit.key, edit.value);
+}
 }
 
 size_t Document::raiseHeights(float d, bool moveThings) {
@@ -782,12 +957,14 @@ size_t Document::raiseHeights(float d, bool moveThings) {
     if (moveThings)   // same undo step: setVertexHeights pushed it
         for (size_t i = 0; i < file_.things().size(); ++i) {
             Frame f;
-            if (!frameOf(i, f)) continue;
-            const auto* physics = physicsOf(file_.things()[i]);
-            if (!physics) continue;
-            f.pos[2] += d;
-            file_.setCtcProperty(i, physics->name, "PositionZ", formatFloat(f.pos[2]));
-            writeInitialPosition(file_, i, f.pos, worldX_, worldY_);
+            const bool moved = frameOf(i, f);
+            if (moved) {
+                const std::string physics = physicsOf(file_.things()[i])->name;
+                f.pos[2] += d;
+                file_.setCtcProperty(i, physics, "PositionZ", formatFloat(f.pos[2]));
+                writeInitialPosition(file_, i, f.pos, worldX_, worldY_);
+            }
+            raiseCameraPoint(file_, i, d, moved);
         }
     ++revision_;
     return edits.size();
@@ -848,6 +1025,93 @@ int Document::addSoundTheme(const std::string& name, std::string& error) {
         ++terrainRev_;
         return idx;
     } catch (const std::exception& e) { error = e.what(); return -1; }
+}
+
+std::vector<std::pair<int, int>> Document::themeBrushVertices(float x, float y, float radius) const {
+    std::vector<std::pair<int, int>> vertices;
+    if (!hasTerrain() || !std::isfinite(x) || !std::isfinite(y) || !std::isfinite(radius) || radius <= 0) return vertices;
+    const double centreX = std::trunc(double(x)), centreY = std::trunc(double(y));
+    const int cx = cellsX(), cy = cellsY();
+    if (centreX + radius < 0 || centreY + radius < 0 ||
+        centreX - radius > cx - 1 || centreY - radius > cy - 1) return vertices;
+    // Clamp floating bounds before integer conversion, including off-map pens.
+    const int x0 = int(std::clamp(std::trunc(centreX - radius), 0.0, double(cx - 1)));
+    const int x1 = int(std::clamp(std::floor(centreX + radius), 0.0, double(cx - 1)));
+    const int y0 = int(std::clamp(std::trunc(centreY - radius), 0.0, double(cy - 1)));
+    const int y1 = int(std::clamp(std::floor(centreY + radius), 0.0, double(cy - 1)));
+    const double radiusSquared = double(radius) * radius;
+    for (int by = y0; by <= y1; ++by) for (int bx = x0; bx <= x1; ++bx) {
+        const double dx = bx - centreX, dy = by - centreY;
+        if (dx * dx + dy * dy < radiusSquared) vertices.emplace_back(bx, by);
+    }
+    return vertices;
+}
+
+std::vector<std::pair<int, int>> Document::surveyBrushVertices(float x, float y, float radius) const {
+    if (!hasTerrain()) return {};
+    // Native PassabilityInput / ReflectionsInput round the world point before local conversion.
+    return forge::heightpen::discFootprint(cellsX() - 1, cellsY() - 1,
+        std::nearbyint(float(worldX_) + x) - float(worldX_),
+        std::nearbyint(float(worldY_) + y) - float(worldY_), radius);
+}
+
+std::vector<Document::OverlayColour> Document::shoreOverlay() const {
+    if (!hasTerrain()) return {};
+    const auto& flags = liveTerrain().shorePoint;
+    std::vector<OverlayColour> colours(size_t(cellsX() - 1) * (cellsY() - 1));
+    for (int y = 0; y < cellsY() - 1; ++y) for (int x = 0; x < cellsX() - 1; ++x)
+        if (flags[size_t(y) * cellsX() + x]) colours[size_t(y) * (cellsX() - 1) + x] = {255, 0, 0, 128};
+    return colours;
+}
+
+std::vector<std::pair<int, int>> Document::soundBrushCells(float x, float y, float radius) const {
+    if (!hasTerrain() || !hasGameMap()) return {};
+    return gameCellsForVertices(forge::heightpen::discFootprint(cellsX(), cellsY(), x, y, radius),
+                               level_->gameMapWidth(), level_->gameMapHeight());
+}
+
+std::vector<std::pair<int, int>> Document::environmentBrushCells(float x, float y, float radius) const {
+    if (!hasTerrain() || !hasGameMap()) return {};
+    return gameCellsForVertices(themeBrushVertices(x, y, radius), level_->gameMapWidth(), level_->gameMapHeight());
+}
+
+std::vector<std::pair<int, int>> Document::environmentSmearBrushCells(float x, float y, float radius) const {
+    if (!hasTerrain() || !hasGameMap()) return {};
+    auto cells = forge::terrain::atmosSmearFootprint(level_->gameMapWidth(), level_->gameMapHeight(), x, y, radius, worldX_, worldY_);
+    std::sort(cells.begin(), cells.end());
+    cells.erase(std::unique(cells.begin(), cells.end()), cells.end());
+    return cells;
+}
+
+std::vector<Document::OverlayColour> Document::surveyOverlay(bool environment, int soundFilter, const OverlayLookup& lookup) const {
+    if (!hasGameMap() || !hasTerrain()) return {};
+    const auto& t = liveTerrain();
+    const size_t count = size_t(level_->gameMapWidth()) * level_->gameMapHeight();
+    if (environment ? t.atmosIndex.size() != count || t.atmosStrength.size() != count : t.sound.size() != count) return {};
+    std::array<OverlayColour, 256> colours{};
+    if (environment) {
+        for (size_t i = 1; i < t.atmosPalette.size() && i < colours.size(); ++i)
+            if (!t.atmosPalette[i].name.empty())
+                colours[i] = lookup(t.atmosPalette[i].name, "EditorColour").value_or(OverlayColour{});
+    } else {
+        const auto& sounds = soundThemes();
+        for (size_t i = 0; i < sounds.size() && i + 1 < colours.size(); ++i)
+            if (soundFilter < 0 || soundFilter == int(i + 1))
+                colours[i + 1] = lookup(sounds[i], "EditColour").value_or(OverlayColour{});
+    }
+    std::vector<OverlayColour> result(count);
+    for (size_t cell = 0; cell < count; ++cell) {
+        if (!environment) { result[cell] = colours[t.sound[cell]]; continue; }
+        auto& out = result[cell];
+        for (int slot = 0; slot < 3; ++slot) {
+            const float weight = float(t.atmosStrength[cell][slot]) / 255.0f;
+            const auto& colour = colours[t.atmosIndex[cell][slot]];
+            for (int channel = 0; channel < 3; ++channel)
+                out[channel] = uint8_t(std::min(255, int(double(out[channel]) + double(colour[channel]) * double(weight))));
+        }
+        out[3] = 128;
+    }
+    return result;
 }
 
 std::optional<std::pair<uint8_t, uint8_t>> Document::environmentAndSoundAt(float x, float y) const {
@@ -1204,19 +1468,26 @@ bool Document::themesDirty() const {
 }
 
 bool Document::terrainDirty() const {
-    if (!terrain_ || !savedTerrain_) return false;
-    if (soundListGrew_) return true;
-    if (terrain_ == savedTerrain_) return false;
-    if (terrain_->heights != savedTerrain_->heights || terrain_->walkable != savedTerrain_->walkable || terrain_->cameraPassable != savedTerrain_->cameraPassable ||
-        terrain_->themeIndex != savedTerrain_->themeIndex || terrain_->themeStrength != savedTerrain_->themeStrength) return true;
-    if (terrain_->atmosIndex != savedTerrain_->atmosIndex || terrain_->atmosStrength != savedTerrain_->atmosStrength ||
-        terrain_->sound != savedTerrain_->sound) return true;
-    if (terrain_->atmosPalette.size() != savedTerrain_->atmosPalette.size()) return true;
+    return hasTerrain() && (soundListGrew_ || terrainDiffersFrom(savedTerrain_));
+}
+
+bool Document::terrainDraftDirty() const {
+    return hasTerrain() && (level_->soundThemes() != draftSoundThemes_ || terrainDiffersFrom(draftTerrain_));
+}
+
+bool Document::terrainDiffersFrom(const std::shared_ptr<const TerrainState>& baseline) const {
+    if (!terrain_ || !baseline) return false;
+    if (terrain_ == baseline) return false;
+    if (terrain_->heights != baseline->heights || terrain_->walkable != baseline->walkable || terrain_->cameraPassable != baseline->cameraPassable || terrain_->shorePoint != baseline->shorePoint ||
+        terrain_->themeIndex != baseline->themeIndex || terrain_->themeStrength != baseline->themeStrength) return true;
+    if (terrain_->atmosIndex != baseline->atmosIndex || terrain_->atmosStrength != baseline->atmosStrength ||
+        terrain_->sound != baseline->sound) return true;
+    if (terrain_->atmosPalette.size() != baseline->atmosPalette.size()) return true;
     for (size_t i = 0; i < terrain_->atmosPalette.size(); ++i)
-        if (terrain_->atmosPalette[i].name != savedTerrain_->atmosPalette[i].name || terrain_->atmosPalette[i].value != savedTerrain_->atmosPalette[i].value) return true;
-    if (terrain_->palette.size() != savedTerrain_->palette.size()) return true;
+        if (terrain_->atmosPalette[i].name != baseline->atmosPalette[i].name || terrain_->atmosPalette[i].value != baseline->atmosPalette[i].value) return true;
+    if (terrain_->palette.size() != baseline->palette.size()) return true;
     for (size_t i = 0; i < terrain_->palette.size(); ++i)
-        if (terrain_->palette[i].name != savedTerrain_->palette[i].name || terrain_->palette[i].value != savedTerrain_->palette[i].value) return true;
+        if (terrain_->palette[i].name != baseline->palette[i].name || terrain_->palette[i].value != baseline->palette[i].value) return true;
     return false;
 }
 
@@ -1425,6 +1696,172 @@ void Document::prepareTerrainLoose(const fs::path& prepared, std::shared_ptr<for
     }
 }
 
+fs::path Document::terrainDraftPath(const fs::path& gameRoot) const {
+    const fs::path lev = external() ? externalLev_ : gameRoot / "data/Levels/FinalAlbion" / (mapName_ + ".lev");
+    return fs::path(lev.string() + ".forge-draft");
+}
+
+Document Document::recoveryWriteSnapshot() const {
+    if (stroke_ || batchDepth_) throw std::logic_error("finish the active edit before taking a recovery snapshot");
+    auto out = terrainWriteSnapshot();
+    out.file_ = file_;
+    out.worldX_ = worldX_; out.worldY_ = worldY_;
+    return out;
+}
+
+bool Document::saveRecovery(const fs::path& path, std::string& error) const {
+    if (!hasTerrain() || stroke_ || batchDepth_) { error = "finish the active edit before taking a recovery snapshot"; return false; }
+    try {
+        const auto target = fs::absolute(path).lexically_normal();
+        if (fs::exists(target) && !fs::is_regular_file(target))
+            throw std::runtime_error("recovery destination is not a file: " + target.string());
+        forge::TemporaryDirectory scratch(target.parent_path(), ".forge-recovery-");
+        auto lev = *level_;
+        // Game serialization ORs camera flags with walkability. Recovery retains
+        // the authored channel independently, including extra boundary vertices.
+        for (int y=0; y<cellsY(); ++y) for (int x=0; x<cellsX(); ++x) {
+            const bool camera = terrain_->cameraPassable[size_t(y)*cellsX()+x] != 0;
+            if (lev.cameraPassableAt(x,y) != camera) lev.setCameraPassableAt(x,y,camera);
+        }
+        const auto levPath = scratch.path()/"terrain.lev";
+        lev.save(levPath);
+        const auto levText = readFile(levPath);
+        const std::vector<uint8_t> levBytes(levText.begin(),levText.end());
+        const nlohmann::json archive = {
+            {"version",1}, {"map",mapName_}, {"world_x",worldX_}, {"world_y",worldY_},
+            {"tng",file_.serialize()}, {"lev",nlohmann::json::binary(levBytes)},
+            {"nav_walkable",nlohmann::json::binary(navWalkable_)}, {"sound_list_grew",soundListGrew_}
+        };
+        const auto bytes = nlohmann::json::to_cbor(archive);
+        const auto prepared = scratch.path()/"archive.ffrecovery";
+        std::ofstream out;
+        out.exceptions(std::ios::failbit | std::ios::badbit);
+        out.open(prepared,std::ios::binary);
+        out.write(reinterpret_cast<const char*>(bytes.data()),std::streamsize(bytes.size())); out.close();
+        // Keep the old archive at its public name until the complete new file
+        // replaces it. A failed replacement retains the last successful snapshot.
+#ifdef _WIN32
+        if (!MoveFileExW(prepared.c_str(),target.c_str(),MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH))
+            throw std::system_error(int(GetLastError()),std::system_category(),"cannot publish recovery " + target.string());
+#else
+        fs::rename(prepared,target);
+#endif
+        return true;
+    } catch (const std::exception& e) { error=e.what(); return false; }
+}
+
+bool Document::recover(const fs::path& path, std::string& error) {
+    if (!hasTerrain() || stroke_ || batchDepth_) { error = "finish the active edit before recovering"; return false; }
+    try {
+        const auto bytes = readFile(path);
+        const auto archive = nlohmann::json::from_cbor(bytes.begin(),bytes.end());
+        if (archive.at("version").get<int>() != 1 || archive.at("map").get<std::string>() != mapName_ ||
+            archive.at("world_x").get<int>() != worldX_ || archive.at("world_y").get<int>() != worldY_)
+            throw std::runtime_error("recovery belongs to a different map or world origin");
+        auto things = forge::tng::File::parseText(archive.at("tng").get<std::string>(),mapName_+".tng");
+        const auto& levBytes = archive.at("lev").get_binary();
+        forge::TemporaryDirectory scratch(fs::temp_directory_path(),"FableForgeRecovery-");
+        const auto levPath = scratch.path()/"terrain.lev";
+        std::ofstream out;
+        out.exceptions(std::ios::failbit | std::ios::badbit);
+        out.open(levPath,std::ios::binary);
+        out.write(reinterpret_cast<const char*>(levBytes.data()),std::streamsize(levBytes.size())); out.close();
+        Document candidate;
+        if (!candidate.loadLevel(levPath,error)) return false;
+        if (candidate.cellsX()!=cellsX() || candidate.cellsY()!=cellsY() || candidate.level_->uid()!=level_->uid())
+            throw std::runtime_error("recovery belongs to a different map or grid");
+        const auto& navBytes = archive.at("nav_walkable").get_binary();
+        std::vector<uint8_t> nav(navBytes.begin(),navBytes.end());
+        if (nav.size()!=candidate.terrain_->walkable.size() ||
+            std::any_of(nav.begin(),nav.end(),[](uint8_t v){return v>1;}))
+            throw std::runtime_error("invalid recovery navigation baseline");
+        const bool sounds = archive.at("sound_list_grew").get<bool>();
+        auto before = recoverySnapshot();
+        undo_.push_back(std::move(before));
+        if (undo_.size()>kUndoDepth) undo_.erase(undo_.begin());
+        redo_.clear();
+        file_=std::move(things); level_=std::move(candidate.level_); terrain_=std::move(candidate.terrain_);
+        navWalkable_=std::move(nav); soundListGrew_=sounds;
+        terrainSession_=candidate.terrainSession_;
+        ++revision_; ++terrainRev_; ++themeRev_;
+        // original_, savedTerrain_ and draftTerrain_ remain the pre-recovery baselines.
+        return true;
+    } catch (const std::exception& e) { error=e.what(); return false; }
+}
+
+bool Document::saveDraftLoose(const fs::path& gameRoot, std::string& error, std::vector<std::string>* notes) {
+    return saveDraftFiles(gameRoot, error, notes, true);
+}
+
+bool Document::saveTerrainDraft(const fs::path& gameRoot, std::string& error, std::vector<std::string>* notes) {
+    return saveDraftFiles(gameRoot, error, notes, false);
+}
+
+bool Document::saveDraftFiles(const fs::path& gameRoot, std::string& error, std::vector<std::string>* notes, bool includeObjects) {
+    if ((!hasTerrain() && !includeObjects) || stroke_) { error = "no terrain, or finish the active stroke first"; return false; }
+    const bool writeObjects = includeObjects && dirty();
+    const bool writeTerrain = hasTerrain() && (!includeObjects || terrainDraftDirty());
+    if (!writeObjects && !writeTerrain) return true;
+    const auto terrainPath = terrainDraftPath(gameRoot);
+    const fs::path objectPath = external() ? loosePath_ : gameRoot / "data/Levels/FinalAlbion" / (mapName_ + ".tng");
+    try {
+        if (writeObjects && writeTerrain && fs::absolute(terrainPath.parent_path()).lexically_normal() != fs::absolute(objectPath.parent_path()).lexically_normal())
+            throw std::runtime_error("terrain and object drafts must share a level folder");
+        detail::PendingBanks pending(writeTerrain ? terrainPath.parent_path() : objectPath.parent_path(), ".forge-draft-save-");
+        std::shared_ptr<forge::lev::File> nextLevel;
+        bool patchedNavigation = false;
+        std::vector<std::string> preparedNotes;
+        std::vector<fs::path> targets;
+        // Complete serialization of both files before any backup or publication.
+        if (writeTerrain) {
+            prepareTerrainLoose(pending.prepare(terrainPath.filename()), nextLevel, patchedNavigation, preparedNotes);
+            targets.push_back(terrainPath);
+        }
+        std::string text;
+        if (writeObjects) {
+            text = file_.serialize();
+            std::ofstream out;
+            out.exceptions(std::ios::failbit | std::ios::badbit);
+            out.open(pending.prepare(objectPath.filename()), std::ios::binary);
+            out.write(text.data(), std::streamsize(text.size())); out.close();
+            targets.push_back(objectPath);
+        }
+        for (const auto& path : targets)
+            if (fs::exists(path) && !fs::is_regular_file(path)) throw std::runtime_error("draft destination is not a file: " + path.string());
+        for (const auto& path : targets) if (!backupOnce(path, error)) return false;
+        for (const auto& path : targets) if (!fs::exists(path)) backups::markCreated(path);
+        if (!pending.install(false, error)) return false;
+        if (writeTerrain) {
+            level_ = std::move(nextLevel);
+            if (patchedNavigation) navWalkable_ = terrain_->walkable;
+            draftTerrain_ = terrain_; draftSoundThemes_ = level_->soundThemes();
+            // savedTerrain_ remains the baseline for the game's baked terrain/foliage.
+        }
+        if (writeObjects) { loosePath_ = objectPath; original_ = std::move(text); dirtyRev_ = ~0ull; }
+        if (notes) notes->insert(notes->end(), preparedNotes.begin(), preparedNotes.end());
+        return true;
+    } catch (const std::exception& e) { error = e.what(); return false; }
+}
+
+bool Document::loadTerrainDraft(const fs::path& gameRoot, std::string& error) {
+    if (!hasTerrain() || stroke_ || dirty() || terrainDirty()) { error = "open a clean terrain document before loading its draft"; return false; }
+    try {
+        Document candidate;
+        if (!candidate.loadLevel(terrainDraftPath(gameRoot), error)) return false;
+        if (candidate.cellsX() != cellsX() || candidate.cellsY() != cellsY() || candidate.level_->uid() != level_->uid()) {
+            error = "terrain draft belongs to a different map or grid"; return false;
+        }
+        const auto bankSounds = level_->soundThemes();
+        terrainSession_ = candidate.terrainSession_;
+        level_ = std::move(candidate.level_); terrain_ = std::move(candidate.terrain_);
+        draftTerrain_ = terrain_; draftSoundThemes_ = level_->soundThemes();
+        navWalkable_ = terrain_->walkable;
+        soundListGrew_ = level_->soundThemes() != bankSounds;
+        ++terrainRev_; ++themeRev_;
+        return true;
+    } catch (const std::exception& e) { error = e.what(); return false; }
+}
+
 bool Document::saveTerrainLoose(const fs::path& gameRoot, std::string& error, std::vector<std::string>* notes) {
     if (!hasTerrain()) { error = "no terrain loaded"; return false; }
     const fs::path path = external() && packOut_.empty() ? externalLev_ : gameRoot / "data" / "Levels" / "FinalAlbion" / (mapName_ + ".lev");
@@ -1440,10 +1877,13 @@ bool Document::saveTerrainLoose(const fs::path& gameRoot, std::string& error, st
             if (!backupOnce(path, error)) return false;
             if (!fs::exists(path)) albion::backups::markCreated(path);
         }
+        const fs::path draft = fs::path(path.string() + ".forge-draft");
+        if (fs::exists(draft)) pending.remove(draft.filename());
         if (!pending.install(false, error)) return false;
         level_ = std::move(nextLevel);
         if (patchedNavigation) navWalkable_ = terrain_->walkable;
         savedTerrain_ = terrain_;
+        draftTerrain_ = terrain_; draftSoundThemes_ = level_->soundThemes();
         soundListGrew_ = false;
         if (notes) notes->insert(notes->end(), preparedNotes.begin(), preparedNotes.end());
         return true;
@@ -1458,6 +1898,7 @@ Document Document::terrainWriteSnapshot() const {
     out.externalLev_ = externalLev_;
     out.terrain_ = terrain_;
     out.savedTerrain_ = savedTerrain_;
+    out.draftTerrain_ = draftTerrain_; out.draftSoundThemes_ = draftSoundThemes_;
     out.level_ = level_ ? std::make_shared<forge::lev::File>(*level_) : nullptr;
     out.navWalkable_ = navWalkable_;
     out.soundListGrew_ = soundListGrew_;
@@ -1468,6 +1909,7 @@ Document Document::terrainWriteSnapshot() const {
 bool Document::acceptTerrainWrite(const Document& written) {
     if (terrainSession_ != written.terrainSession_ || !level_ || !written.level_) return false;
     savedTerrain_ = written.savedTerrain_;
+    draftTerrain_ = written.draftTerrain_; draftSoundThemes_ = written.draftSoundThemes_;
     soundListGrew_ = level_->soundThemes() != written.level_->soundThemes();
     // Keep the current LEV and its navWalkable_ together. If the worker patched
     // navigation, the next write can apply that patch again to this older nav
@@ -1535,6 +1977,8 @@ bool Document::deployTerrainSteps(const fs::path& gameRoot, std::vector<std::str
         prepareTerrainLoose(levPrepared, nextLevel, patchedNavigation, preparedNotes);
         const std::string levBytes = readFile(levPrepared);
         preparedNotes.push_back("wrote " + loose.string());
+        const fs::path draftRelative = fs::path(levRelative.string() + ".forge-draft");
+        if (inPlace && fs::exists(outputRoot / draftRelative)) pending.remove(draftRelative);
         const auto finish = [&]() {
             if (inPlace && backups::gameRunningIn(gameRoot)) { error = "Fable started during terrain deployment; quit to the desktop first"; return false; }
             if (inPlace && !fs::exists(loose)) {
@@ -1546,6 +1990,7 @@ bool Document::deployTerrainSteps(const fs::path& gameRoot, std::vector<std::str
             level_ = std::move(nextLevel);
             if (patchedNavigation) navWalkable_ = terrain_->walkable;
             savedTerrain_ = terrain_;
+            if (inPlace) { draftTerrain_ = terrain_; draftSoundThemes_ = level_->soundThemes(); }
             soundListGrew_ = false;
             notes.insert(notes.end(), preparedNotes.begin(), preparedNotes.end());
             return true;
@@ -1780,7 +2225,7 @@ bool Document::setLocked(size_t index,bool locked) {
 
 void Document::setFrame(size_t index, const Frame& frame) {
     if (index >= file_.things().size()) throw std::out_of_range("setFrame: bad thing index");
-    if (isLocked(index)) return;
+    if (isLocked(index) || !finiteFrame(frame)) return;
     if (!physicsOf(file_.things()[index])) throw std::runtime_error("setFrame: thing has no physics block");
     pushUndo();
     writeFrame(file_, index, frame,worldX_,worldY_);
@@ -1789,6 +2234,7 @@ void Document::setFrame(size_t index, const Frame& frame) {
 
 void Document::setOwnedFrame(size_t index, const Frame& frame) {
     if (index >= file_.things().size()) throw std::out_of_range("setOwnedFrame: bad thing index");
+    if (!finiteFrame(frame)) return;
     if (!physicsOf(file_.things()[index])) throw std::runtime_error("setOwnedFrame: thing has no physics block");
     pushUndo();
     writeFrame(file_, index, frame,worldX_,worldY_);
@@ -1811,6 +2257,8 @@ bool Document::setHeight(size_t index, float height) {
 void Document::setProperty(size_t index, const std::string& key, const std::string& value) {
     if (index >= file_.things().size()) throw std::out_of_range("setProperty: bad thing index");
     if (isLocked(index) && lower(key)=="objectscale") return;
+    if (forge::tng::isIdentifierProperty(file_.things()[index].type,key) && !forge::tng::isUnquotedIdentifier(value))
+        throw std::invalid_argument(key + " must be an unquoted identifier");
     pushUndo();
     file_.setThingProperty(index, key, value);
     ++revision_;
@@ -1875,14 +2323,26 @@ std::vector<Document::PropertyRow> Document::propertiesOf(size_t index) const {
     std::vector<PropertyRow> out;
     if (index >= file_.things().size()) return out;
     const auto& t = file_.things()[index];
-    const bool trackNode = lower(t.type) == "tracknode";
+    const auto type=lower(t.type);
+    const bool trackNode = type == "tracknode";
+    const bool physical=type=="object" || type=="marker" || type=="building" ||
+        type=="village" || type=="holy site" || trackNode || type=="switch" || type=="aicreature";
+    const auto topLevelKind=[&](const forge::tng::Property& property) {
+        const auto key=lower(property.key);
+        // Confirmed native float transfers retain their type when written as integers.
+        if ((physical && (key=="health" || key=="objectscale" || key=="anglexy" || key=="angleyz" || key=="anglexz")) ||
+            (type=="switch" && (key=="triggerradius" || key=="timetochangeenvironmentdef")) ||
+            (type=="aicreature" && (key=="initialposx" || key=="initialposy" || key=="initialposz")))
+            return PropertyRow::Kind::Float;
+        return kindOf(property.value);
+    };
     for (const auto& p : t.properties) {
         if (hiddenProperty("", p.key)) continue;
         if (trackNode && lower(p.key) == "scriptname") continue;   // renamed through the Tracks card (the whole chain)
         // a key written twice (ScriptName on some things): one row, showing the copy the loader reads (the last)
         auto dup = std::find_if(out.begin(), out.end(), [&](const PropertyRow& r) { return r.ctc.empty() && lower(r.key) == lower(p.key); });
-        if (dup != out.end()) { dup->value = p.value; dup->kind = kindOf(p.value); continue; }
-        out.push_back({"", p.key, p.value, kindOf(p.value)});
+        if (dup != out.end()) { dup->value = p.value; dup->kind = topLevelKind(p); continue; }
+        out.push_back({"", p.key, p.value, topLevelKind(p)});
     }
     for (const auto& b : t.ctcBlocks)
         for (const auto& p : b.properties)
@@ -1943,6 +2403,11 @@ bool Document::setComponentOverride(size_t index,const std::string& ctc,const st
     } else {
         const auto [end,error]=std::from_chars(value.data(),value.data()+value.size(),number);
         if(error!=std::errc() || end!=value.data()+value.size() || !std::isfinite(number) || std::abs(number)>std::numeric_limits<float>::max()) return false;
+        // Preserve the authored double-range check, but also require representable
+        // float storage: a tiny double must not silently become zero in the game.
+        float storage=0;
+        const auto [storageEnd,storageError]=std::from_chars(value.data(),value.data()+value.size(),storage);
+        if(storageError!=std::errc() || storageEnd!=value.data()+value.size() || !std::isfinite(storage)) return false;
     }
     if(metadata->hasRange && (number<metadata->min || number>metadata->max)) return false;
     if(row->present && row->row.value==stored) return true;
@@ -1965,27 +2430,41 @@ bool Document::resetComponentOverride(size_t index,const std::string& ctc,const 
 
 bool Document::setPropertyValue(size_t index, const std::string& ctc, const std::string& key, const std::string& value) {
     if (index >= file_.things().size() || hiddenProperty(ctc, key)) return false;
+    // Property-grid edits serialize one directive per line, even for quoted text.
+    if (value.find_first_of("\r\n\0", 0, 3) != std::string::npos) return false;
     if (isLocked(index)) {
         const auto block=lower(ctc),field=lower(key);
         if (block.empty() && field=="objectscale") return false;
+        const bool position=field=="positionx" || field=="positiony" || field=="positionz";
         if ((block=="ctcphysicsstandard" || block=="ctcphysicsnavigator") &&
-            (field=="positionx" || field=="positiony" || field=="positionz" ||
-             field=="rhsetforwardx" || field=="rhsetforwardy" || field=="rhsetforwardz" ||
+            (position || field=="rhsetforwardx" || field=="rhsetforwardy" || field=="rhsetforwardz" ||
              field=="rhsetupx" || field=="rhsetupy" || field=="rhsetupz")) return false;
+        // Light inherits native Base position storage, without Standard's RHS fields.
+        if (block=="ctcphysicslight" && position) return false;
     }
     std::optional<PropertyRow> row;
     for (const auto& r : propertiesOf(index))
         if (r.ctc == ctc && lower(r.key) == lower(key)) row = r;
     if (!row) return false;
+    const bool identifierName = ctc.empty() && forge::tng::isIdentifierProperty(file_.things()[index].type,key);
+    if (identifierName && !forge::tng::isUnquotedIdentifier(value)) return false;
     if (row->value == value) return true;
     using K = PropertyRow::Kind;
     const K k = kindOf(value);
     // keep the field's kind: an int field takes ints, a float field ints or floats, a string a quoted string
-    const bool fits = row->kind == K::Raw ? (!value.empty() && value.find(';') == std::string::npos && value.find('\n') == std::string::npos)
+    const bool fits = identifierName ? true
+                    : row->kind == K::Raw ? (!value.empty() && value.find(';') == std::string::npos && value.find('\n') == std::string::npos)
                     : row->kind == K::Float ? (k == K::Float || k == K::Int)
                     : row->kind == K::String ? (k == K::String && value.find('"', 1) == value.size() - 1)
                     : k == row->kind;
     if (!fits) return false;
+    if (row->kind == K::Float && !identifierName) {
+        std::string_view numeric=value;
+        if (numeric.starts_with('+')) numeric.remove_prefix(1);
+        float parsed=0;
+        const auto [end,error]=std::from_chars(numeric.data(),numeric.data()+numeric.size(),parsed);
+        if (error!=std::errc() || end!=numeric.data()+numeric.size() || !std::isfinite(parsed)) return false;
+    }
     pushUndo();
     if (ctc.empty()) { if (!file_.setThingPropertyAll(index, key, value)) file_.setThingProperty(index, key, value); }   // every copy of a doubled key
     else {
@@ -2085,6 +2564,8 @@ std::vector<Document::Track> Document::tracks() const {
 }
 
 size_t Document::placeTrackNode(float x, float y, float z, const std::string& name) {
+    if (!forge::tng::isScriptName(name))
+        throw std::invalid_argument("ScriptName must be an unquoted identifier");
     pushUndo();
     const uint64_t uid = forge::thingplacer::nextUid(file_);
     char pos[160];
@@ -2114,10 +2595,14 @@ bool Document::linkTrackNodes(size_t a, size_t b, std::string& error) {
     if (chainA.back() != a && chainA.front() == a) std::reverse(chainA.begin(), chainA.end());
     if (chainB.front() != b && chainB.back() == b) std::reverse(chainB.begin(), chainB.end());
     if (chainA.back() != a || chainB.front() != b) { error = "a node inside a track already has two links"; return false; }
+    std::string name=trackNameOf(file_.things()[chainA.front()]);
+    if (!placeholderTrackName(name) && !forge::tng::isScriptName(name)) {
+        error = "rename the selected track with a letter or underscore first; use ASCII letters, digits and underscores";
+        return false;
+    }
     pushUndo();
     std::vector<size_t> joined = chainA;
     joined.insert(joined.end(), chainB.begin(), chainB.end());
-    std::string name=trackNameOf(file_.things()[joined.front()]);
     if (placeholderTrackName(name)) name=nextTrackTempName();
     // re-link the whole joined chain in order (a flipped part gets its links swapped)
     for (size_t i = 0; i < joined.size(); ++i) {
@@ -2146,8 +2631,7 @@ bool Document::flipTrack(size_t node) {
 }
 
 bool Document::renameTrack(size_t node, const std::string& name) {
-    if (!isTrackNode(node) || name.empty()) return false;
-    for (const char c : name) if (!(std::isalnum(static_cast<unsigned char>(c)) || c == '_')) return false;
+    if (!isTrackNode(node) || !forge::tng::isScriptName(name)) return false;
     pushUndo();
     nameChain(trackChain(node), name);
     ++revision_;
@@ -2222,7 +2706,7 @@ bool Document::listEditable(size_t index, const std::string& ctc, const std::str
 }
 
 bool Document::addListEntry(size_t index, const std::string& ctc, const std::string& base, const std::string& value) {
-    if (!listEditable(index,ctc,base) || kindOf(value)!=PropertyRow::Kind::String || value.find_first_of(";\r\n")!=std::string::npos) return false;
+    if (!listEditable(index,ctc,base) || kindOf(value)!=PropertyRow::Kind::String || value.find_first_of(";\r\n\0",0,4)!=std::string::npos) return false;
     const auto cur = listEntries(index, ctc, base);
     pushUndo();
     const std::string after = cur.empty() ? std::string() : base + "[" + std::to_string(cur.size() - 1) + "]";
@@ -2597,6 +3081,7 @@ std::optional<size_t> Document::setDayNight(size_t index, int mode) {
     const auto split = splitDayNight(section);
     if (split.second == mode) return index;
     const std::string target = split.first + (mode == 1 ? "%DayOnly" : mode == 2 ? "%NightOnly" : "");
+    if (!forge::tng::isSafeSectionName(target)) return std::nullopt;
     beginBatch();   // the new section and the move are one undo step
     try {
         bool have = false;
@@ -2766,6 +3251,8 @@ std::vector<size_t> Document::duplicateGroup(const std::vector<size_t>& indices)
 }
 
 size_t Document::place(forge::thingplacer::Placement placement) {
+    if (!placement.scriptName.empty() && !forge::tng::isScriptName(placement.scriptName))
+        throw std::invalid_argument("ScriptName must be an unquoted identifier");
     pushUndo();
     try {
         const auto r = forge::thingplacer::place(file_, std::move(placement));
@@ -2778,6 +3265,8 @@ size_t Document::place(forge::thingplacer::Placement placement) {
 }
 
 size_t Document::placeFishingSpot(const float pos[3], const std::string& reward, const std::string& scriptName) {
+    if (!scriptName.empty() && !forge::tng::isScriptName(scriptName))
+        throw std::invalid_argument("ScriptName must be an unquoted identifier");
     pushUndo();
     try {
         // the retail block: 32 MARKER_FISHING_SPOT things across FinalAlbion share it,
@@ -2819,6 +3308,8 @@ size_t Document::placeFishingSpot(const float pos[3], const std::string& reward,
 
 size_t Document::placeCreatureGenerator(const float pos[3], const std::vector<std::string>& families,
                                         float radius, int activeLimit, const std::string& scriptName) {
+    if (!scriptName.empty() && !forge::tng::isScriptName(scriptName))
+        throw std::invalid_argument("ScriptName must be an unquoted identifier");
     if (families.empty()) throw std::invalid_argument("a spawner needs at least one creature family");
     pushUndo();
     try {
@@ -2876,6 +3367,8 @@ size_t Document::placeCreatureGenerator(const float pos[3], const std::vector<st
 }
 
 size_t Document::placeCreature(const float pos[3], const float forward[2], const std::string& definition, const std::string& scriptName, int player) {
+    if (!scriptName.empty() && !forge::tng::isScriptName(scriptName))
+        throw std::invalid_argument("ScriptName must be an unquoted identifier");
     if (definition.empty()) throw std::invalid_argument("a creature needs a definition");
     pushUndo();
     try {
@@ -2934,6 +3427,8 @@ size_t Document::placeCreature(const float pos[3], const float forward[2], const
 }
 
 size_t Document::placeVillage(const float pos[3], const std::string& definition, const std::string& scriptName, int player) {
+    if (!scriptName.empty() && !forge::tng::isScriptName(scriptName))
+        throw std::invalid_argument("ScriptName must be an unquoted identifier");
     if (definition.empty()) throw std::invalid_argument("a village needs a definition");
     pushUndo();
     try {
@@ -2989,6 +3484,8 @@ size_t Document::placeVillage(const float pos[3], const std::string& definition,
 }
 
 size_t Document::placeEmitter(const float pos[3], const std::string& effectName, const std::string& scriptName) {
+    if (!scriptName.empty() && !forge::tng::isScriptName(scriptName))
+        throw std::invalid_argument("ScriptName must be an unquoted identifier");
     if (effectName.empty()) throw std::invalid_argument("an emitter needs an effect name");
     pushUndo();
     try {
@@ -3180,7 +3677,7 @@ size_t Document::removeWithOwned(const std::vector<size_t>& roots, bool includeO
 
 bool Document::undo() {
     if (undo_.empty() || stroke_) return false;
-    redo_.push_back(snapshot());
+    redo_.push_back(undo_.back().recoveryLevel ? recoverySnapshot() : snapshot());
     restore(undo_.back());
     undo_.pop_back();
     return true;
@@ -3188,7 +3685,7 @@ bool Document::undo() {
 
 bool Document::redo() {
     if (redo_.empty() || stroke_) return false;
-    undo_.push_back(snapshot());
+    undo_.push_back(redo_.back().recoveryLevel ? recoverySnapshot() : snapshot());
     restore(redo_.back());
     redo_.pop_back();
     return true;

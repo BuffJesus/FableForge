@@ -6,9 +6,23 @@
 #include <array>
 #include <cstdint>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace forge::terrain {
+
+// Native atmosphere Blur visits world-aligned 4-unit grid points. This is an
+// ordered list of game cells: fractional pens can revisit a cell at world zero.
+// Radius is clamped to at least 1; only this map's game grid is included.
+std::vector<std::pair<int, int>> atmosSmearFootprint(int gameWidth, int gameHeight,
+    float x, float y, float radius, int worldX = 0, int worldY = 0);
+
+// In-place 3x3 atmosphere averaging, highest weights first (higher palette index
+// wins ties). The first two strengths truncate; the third takes the remainder.
+// Missing neighbours contribute zero. Returns changed writes, including revisits.
+size_t blurAtmos(std::vector<std::array<uint8_t, 3>>& indices,
+    std::vector<std::array<uint8_t, 3>>& strengths, int gameWidth, int gameHeight,
+    float x, float y, float radius, int worldX = 0, int worldY = 0);
 
 // Editable vertex-height grid for one LEV map. width/height are map extents;
 // the stored vertex grid is (width+1) x (height+1).
@@ -92,6 +106,14 @@ struct ThemeBlend {
 // sum of 255 by largest remainder. No semantic mapping is inferred here.
 ThemeBlend projectMaterialWeights(const std::vector<float>& weights,
                                   const std::vector<uint8_t>& themeIndices);
+
+// Forge ground-theme smear: freeze the input for a 3x3 neighbourhood pass,
+// merge allowed palette weights, then use projectMaterialWeights to keep three
+// distinct themes with strengths totaling 255. Empty neighbourhoods stay intact.
+// This is corrected Forge blending, not the native duplicate-selection algorithm.
+size_t smearThemeBlends(std::vector<std::array<uint8_t, 3>>& indices,
+    std::vector<std::array<uint8_t, 3>>& strengths, int width, int height,
+    const std::vector<std::pair<int, int>>& footprint, const std::array<bool, 256>& allowedThemes);
 
 // Bilinear row-major sampling of one normalized material raster. World bounds
 // are inclusive at both ends, matching the Fable2RE preview export contract.

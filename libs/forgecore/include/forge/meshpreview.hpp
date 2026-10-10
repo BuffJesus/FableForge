@@ -4,6 +4,7 @@
 // it is intentionally rendering-agnostic so GUI previews and thumbnails share it.
 
 #include <cstdint>
+#include <cstddef>
 #include <array>
 #include <filesystem>
 #include <optional>
@@ -11,6 +12,9 @@
 #include <vector>
 
 namespace forge::meshpreview {
+
+// Existing decoder resource guard; imports must fit the mandatory readback.
+inline constexpr size_t maxPrimitiveIndices = 30000000;
 
 struct Vertex {
     float x = 0, y = 0, z = 0;
@@ -23,16 +27,25 @@ struct Vertex {
 struct Triangle { uint32_t a = 0, b = 0, c = 0; int32_t material = -1; };
 struct Material {
     int32_t id = -1;
-    int32_t diffuseTexture = 0;
-    int32_t bumpTexture = 0;
-    int32_t reflectionTexture = 0;
-    int32_t alphaMapTexture = 0;
+    std::string name;
+    int32_t decalId = 0;
+    std::array<uint8_t,5> nativeFlags{};
+    std::array<std::string,4> filenames{};
+    uint32_t diffuseTexture = 0; // native ULONG bank IDs; 0 = none
+    uint32_t bumpTexture = 0;
+    uint32_t reflectionTexture = 0;
+    uint32_t alphaMapTexture = 0;
     uint32_t textureFlags = 0;
     uint32_t glowStrength = 0;
     uint8_t unknown40 = 0;
     bool alphaEnabled = false;
     uint8_t unknown42 = 0;
     uint16_t unknown43 = 0;
+    // Read-only locations of diffuse/bump/reflection/alpha u32 words in the
+    // input payload. decodeLods returns offsets into its whole input, whereas
+    // decodeLod0 returns offsets into its single input block. Authored preview
+    // materials have no source locations. Padding/map flags are not included.
+    std::optional<std::array<size_t,4>> textureWordOffsets;
 };
 struct Helper {
     uint32_t nameCrc = 0;
@@ -74,6 +87,8 @@ struct Geometry {
     std::vector<PrimitiveInfo> primitives;
     uint32_t boneCount = 0;
     uint32_t primitiveCount = 0;
+    bool hasCloth = false;
+    uint16_t animatedBlockCount = 0;
     bool empty() const { return vertices.empty() || triangles.empty(); }
     // Authored mesh-space sphere, preferred over vertex-derived bounds by the
     // particle renderer. Invalid optional metadata does not reject geometry.

@@ -33,6 +33,13 @@ struct Animation {
 // keeps key pools and frame palettes; it does not modify the archive.
 Animation decode(std::span<const uint8_t> payload);
 
+// Validate the complete supported storage layout, including masks, allocation
+// hints and timing events that preview decoding can skip. Rejects unknown chunks,
+// short parent tails, bad root framing and unrecognized trailing bytes. Accepts
+// the observed optional four-byte zero image footer. No archive data is changed.
+// This validates the payload only, not its BIG subheader or cross-asset links.
+void validateStorage(std::span<const uint8_t> payload);
+
 struct Transform {
     std::array<float,4> rotation={0,0,0,1};
     std::array<float,3> position={0,0,0};

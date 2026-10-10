@@ -2,7 +2,12 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
 #include <cstring>
+#include <filesystem>
+#include <memory>
+#include <limits>
+#include <stdexcept>
 
 #include "forge/lzo.hpp"
 
@@ -115,7 +120,16 @@ void blockPixels(const Image& img, int bx, int by, int px[16][3], int alpha[16])
 Image loadImage(const std::string& path, std::string& error) {
     Image out;
     int w = 0, h = 0, n = 0;
-    unsigned char* data = stbi_load(path.c_str(), &w, &h, &n, 4);
+    // stb's UTF-8 filename support is MSVC-only. Open a native Windows path
+    // ourselves so the MinGW build reads the same image as the folder picker.
+#ifdef _WIN32
+    FILE* opened = _wfopen(std::filesystem::path(path).c_str(), L"rb");
+#else
+    FILE* opened = std::fopen(path.c_str(), "rb");
+#endif
+    if (!opened) { error = "cannot read image " + path + ": cannot open file"; return out; }
+    const std::unique_ptr<FILE, decltype(&std::fclose)> input(opened, &std::fclose);
+    unsigned char* data = stbi_load_from_file(input.get(), &w, &h, &n, 4);
     if (!data) { error = std::string("cannot read image ") + path + ": " + (stbi_failure_reason() ? stbi_failure_reason() : "unknown"); return out; }
     out.width = w; out.height = h;
     out.rgba.assign(data, data + size_t(w) * size_t(h) * 4);
@@ -127,16 +141,19 @@ Image downsample(const Image& img) {
     Image out;
     out.width = std::max(1, img.width >> 1); out.height = std::max(1, img.height >> 1);
     out.rgba.resize(size_t(out.width) * size_t(out.height) * 4);
-    const bool even = img.width >= 2 && img.height >= 2 && img.width % 2 == 0 && img.height % 2 == 0;
+    const bool even = (img.width == 1 || img.width % 2 == 0) &&
+                      (img.height == 1 || img.height % 2 == 0);
+    const int sampleWidth = std::min(2, img.width), sampleHeight = std::min(2, img.height);
+    const int sampleCount = sampleWidth * sampleHeight;
     for (int y = 0; y < out.height; ++y)
         for (int x = 0; x < out.width; ++x) {
             uint8_t* q = &out.rgba[(size_t(y) * size_t(out.width) + size_t(x)) * 4];
             if (even) {
                 for (int k = 0; k < 4; ++k) {
                     int s = 0;
-                    for (int dy = 0; dy < 2; ++dy)
-                        for (int dx = 0; dx < 2; ++dx) s += img.rgba[((size_t(2 * y + dy) * size_t(img.width)) + size_t(2 * x + dx)) * 4 + size_t(k)];
-                    q[k] = uint8_t((s + 2) >> 2);
+                    for (int dy = 0; dy < sampleHeight; ++dy)
+                        for (int dx = 0; dx < sampleWidth; ++dx) s += img.rgba[((size_t(2 * y + dy) * size_t(img.width)) + size_t(2 * x + dx)) * 4 + size_t(k)];
+                    q[k] = uint8_t((s + sampleCount / 2) / sampleCount);
                 }
             } else {
                 const int sx = std::min(2 * x, img.width - 1), sy = std::min(2 * y, img.height - 1);
@@ -180,7 +197,10 @@ uint32_t formatByName(const std::string& name) {
 int fullMipCount(int w, int h, uint32_t format) {
     const int minDim = format == kFormatARGB ? 1 : 4;
     int mips = 1;
-    while (w > minDim || h > minDim) { ++mips; w = std::max(1, w >> 1); h = std::max(1, h >> 1); }
+    // Native CalcDefaultMipMapCount (030DA750) stops at the shorter side.
+    // Keeping a one-pixel side while shrinking the other also breaks the
+    // loader's quarter-size/shifted-dimension progression for raw formats.
+    while (w > minDim && h > minDim) { ++mips; w >>= 1; h >>= 1; }
     return mips;
 }
 
@@ -190,7 +210,7 @@ size_t mipRawLength(uint32_t format, int w, int h) {
     return blocks * (format == kFormatDXT1 ? 8 : 16);
 }
 
-std::vector<uint8_t> encodeDxt1(const Image& img) {
+std::vector<uint8_t> encodeDxt1(const Image& img, bool cutoutAlpha) {
     std::vector<uint8_t> out;
     out.reserve(mipRawLength(kFormatDXT1, img.width, img.height));
     for (int by = 0; by < std::max(4, img.height); by += 4)
@@ -198,7 +218,36 @@ std::vector<uint8_t> encodeDxt1(const Image& img) {
             int px[16][3], alpha[16];
             blockPixels(img, bx, by, px, alpha);
             uint16_t c0, c1; uint32_t bits;
-            encodeColorBlock(px, c0, c1, bits);
+            const bool transparent = cutoutAlpha && std::any_of(alpha, alpha+16, [](int a) { return a < 128; });
+            if (!transparent) {
+                encodeColorBlock(px, c0, c1, bits);
+            } else {
+                const auto opaque = std::find_if(alpha, alpha+16, [](int a) { return a >= 128; });
+                if (opaque == alpha+16) {
+                    c0 = c1 = 0; bits = 0xffffffff;
+                } else {
+                    // Transparent texels' RGB must not pull the fitted endpoints
+                    // towards an arbitrary background colour.
+                    for (int i=0;i<16;++i)
+                        if (alpha[i]<128) std::copy_n(px[opaque-alpha],3,px[i]);
+                    encodeColorBlock(px,c0,c1,bits);
+                    std::swap(c0,c1); // c0 <= c1 selects three colours plus transparent.
+                    int palette[3][3];
+                    unpack565(c0,palette[0][0],palette[0][1],palette[0][2]);
+                    unpack565(c1,palette[1][0],palette[1][1],palette[1][2]);
+                    for (int k=0;k<3;++k) palette[2][k]=(palette[0][k]+palette[1][k])/2;
+                    bits=0;
+                    for (int i=0;i<16;++i) {
+                        int best=3, distance=std::numeric_limits<int>::max();
+                        if (alpha[i]>=128) for (int colour=0;colour<3;++colour) {
+                            int d=0;
+                            for (int k=0;k<3;++k) { const int delta=px[i][k]-palette[colour][k]; d+=delta*delta; }
+                            if (d<distance) { distance=d; best=colour; }
+                        }
+                        bits|=uint32_t(best)<<(2*i);
+                    }
+                }
+            }
             put16(out, c0); put16(out, c1); put32(out, bits);
         }
     return out;
@@ -212,7 +261,8 @@ std::vector<uint8_t> encodeDxt3(const Image& img) {
             int px[16][3], alpha[16];
             blockPixels(img, bx, by, px, alpha);
             uint64_t aword = 0;
-            for (int i = 0; i < 16; ++i) aword |= uint64_t(std::min(15, (alpha[i] + 8) >> 4)) << (4 * i);
+            // BC2 decoding expands each nibble by 17, so round to that grid.
+            for (int i = 0; i < 16; ++i) aword |= uint64_t((alpha[i] + 8) / 17) << (4 * i);
             for (int i = 0; i < 8; ++i) out.push_back(uint8_t(aword >> (8 * i)));
             uint16_t c0, c1; uint32_t bits;
             encodeColorBlock(px, c0, c1, bits);
@@ -249,15 +299,20 @@ std::vector<uint8_t> compressFableBlock(const std::vector<uint8_t>& raw) {
     return out;
 }
 
-Entry buildEntry(const Image& img, uint32_t format, int realW, int realH, bool compressMip0, int mips) {
+Entry buildEntry(const Image& img, uint32_t format, int realW, int realH, bool compressMip0, int mips, bool cutoutAlpha) {
+    if (cutoutAlpha && format != kFormatDXT1) throw std::invalid_argument("cutout encoding requires DXT1");
+    if ((format == kFormatDXT1 || format == kFormatDXT3) && (img.width < 4 || img.height < 4))
+        throw std::invalid_argument("compressed texture allocation must be at least 4x4");
     Entry e;
-    if (mips <= 0) mips = fullMipCount(img.width, img.height, format);
+    const int maximumMips = fullMipCount(img.width, img.height, format);
+    if (mips <= 0) mips = maximumMips;
+    if (mips > maximumMips) throw std::invalid_argument("mip count exceeds the supported texture dimensions");
     e.mips = mips;
     std::vector<Image> chain; chain.push_back(img);
     for (int i = 1; i < mips; ++i) chain.push_back(downsample(chain.back()));
     uint32_t frameDataSize = 0, mipSize0 = 0;
     for (int i = 0; i < mips; ++i) {
-        const auto raw = encodeMip(format, chain[size_t(i)]);
+        const auto raw = cutoutAlpha ? encodeDxt1(chain[size_t(i)],true) : encodeMip(format, chain[size_t(i)]);
         if (i == 0) {
             frameDataSize = uint32_t(raw.size());
             if (compressMip0 && raw.size() > 3) {
@@ -271,7 +326,7 @@ Entry buildEntry(const Image& img, uint32_t format, int realW, int realH, bool c
         } else e.payload.insert(e.payload.end(), raw.begin(), raw.end());
     }
     const uint8_t* tail = format == kFormatDXT1 ? kTailDXT1 : format == kFormatDXT3 ? kTailDXT3 : kTailARGB;
-    const uint8_t transparency = format == kFormatDXT1 ? 0 : 1;
+    const uint8_t transparency = cutoutAlpha ? 2 : format == kFormatDXT1 ? 0 : 1;
     auto& info = e.info;
     put16(info, uint16_t(img.width)); put16(info, uint16_t(img.height)); put16(info, 0);
     put16(info, uint16_t(realW > 0 ? realW : img.width)); put16(info, uint16_t(realH > 0 ? realH : img.height)); put16(info, 1);

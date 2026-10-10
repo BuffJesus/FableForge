@@ -1,5 +1,401 @@
 # GUI automation (`--auto <script>`)
 
+`tools/test_mod_file_content.py --install <root>` independently verifies raw-file
+baseline/contributor sizes and SHA256, identical edits, absent baselines and
+composition under existing label choices. Normal/compact cards show the complete
+name/hash inside their actual clipping rectangle. A same-size source update
+leaves the cached snapshot alone until Check conflicts refreshes it; refreshing
+  does not rewrite choices. Reviewed file choices reject changed content until
+  reselection or clearing; the fixture verifies refusal and renewed review at
+  both sizes. `mods_stale_file_choices` counts changed reviews in reported file
+  conflicts. `--gui <exe> --cwd <directory>` supports packages.
+`dump_widget` records `widget_clip_rect` for ordinary registered items as well
+  as their bounds; `reveal` scrolls through nested child and parent windows,
+  adjusting the eventual item position at each level.
+
+`tools/test_dialogue_workspace.py --install <root>` checks the Dialogue picker,
+head preview, playback, scrubbing, staged edits and independently read exports
+at normal/compact sizes. A stopped seek to the slider's right edge must set
+`dialogue_at_end`; explicit Play must restart. The slider displays two decimals
+without rounding its stored position. `--gui <exe> --cwd <directory>` exercises
+an extracted package from an unrelated directory. Exports stay in owned scratch.
+
+`tools/test_texture_replace_failure_ui.py --install <root>` clicks the actual
+replacement form with a sharing-locked PNG; `--invalid` uses undecodable input.
+Both sizes verify a persistent `texture_replace_error` after toast dismissal and
+closing/reopening the form, complete copied-install preservation, unlocked/fixed
+same-process retry, independently decoded blue export pixels and exact Restore.
+Selecting a different texture clears state `texture_replace_failed`. Input images
+and source banks stay unchanged; `--gui <exe>` selects extracted-package binaries.
+
+`--add` and `--add --invalid` exercise the actual Add form with a small valid
+bank containing one retail record and two native seed textures. They check
+`texture_add_failed`, `texture_add_name` and `texture_add_error`: a failed draft
+survives asset-tab/browser-selection changes, edits clear its error, an accepted
+destination change clears it, retry selects the added texture and clears its
+name, decoded pixels are correct, and Restore returns the complete inventory.
+`--small-bank` selects that fixture for replacement checks too; replacement
+defaults still use the full copied retail bank. Compact input steps reveal the
+field twice and assert the entered name before attempting Add.
+
+`tools/test_mod_action_error_ui.py --install <root> --mode redeploy|report|missing`
+checks actual Mods buttons at normal/compact sizes. A bad patch after a successful
+deploy restores the baseline before failing; malformed or incomplete exit-zero
+reports and missing tools retain a wrapped error after dismissing toasts,
+reopening Mods and rescanning the same Data folder. State `mod_action_failed`
+and widget `mods_action_error` expose the error. Changing the save folder clears
+it; fixing the input/helper and retrying succeeds in the same process. Complete
+copied-install inventories, source pack/bank hashes and unrelated files remain
+preserved. `--gui <exe>` supports extracted-package checks.
+`--mode fmp --fmp <package>` uses unsupported named-link metadata to exercise
+the same refusal, persistent feedback, unchanged inputs and retry lifecycle.
+
+`tools/test_egocore_unicode_paths.py --install <root>` compiles an owned failure
+helper and checks its actual argv through Unicode application, compiler-env,
+text-env and temporary paths. Its nonzero exit refuses even with both partial
+bank files present. Missing/locked compiler startup and unlocked retry preserve
+the complete install/output and unowned workspace inventories. `--exe <tool>`
+supports extracted-package checks; the helper is built with this checkout's GCC.
+`tools/test_egocore_workspace.py --unicode --mod <ControllerSupport-folder>`
+checks concurrent real compiles at Unicode/metacharacter compiler, install,
+output and temporary paths. It also checks failed build/deploy/conflicts,
+malformed inputs and DLL-only compatibility. The legacy batch failure helper
+uses a separate ASCII temporary tree in this mode.
+
+`tools/test_texture_unicode_ui.py --install <root>` checks Unicode PNG inputs
+with CLI add/export and GUI replacement/export at both sizes. Invalid and
+sharing-locked inputs preserve the bank inventory; valid red/blue images are
+decoded independently, and Restore returns the complete copied install exactly.
+Image inputs and source bank hashes stay unchanged. `--gui <exe>` selects
+extracted-package binaries; all working files remain under the owned build tree.
+
+`tools/test_unicode_paths.py --install <root>` checks Windows CLI arguments and
+packaged GUI helper/schema lookup with accented, Greek and CJK characters,
+literal percent/ampersand characters and an unrelated working directory.
+It copies only required definition banks into owned loose-level installs.
+Actual Mods buttons deploy and undeploy an owned Unicode-path file pack at
+normal/compact sizes, with complete inventory recovery and unchanged source
+pack/bank hashes. `--gui <exe>` selects extracted-package binaries.
+
+`tools/test_texture_export_failure_ui.py --install <root>` clicks Export PNG
+while its existing output is held with a Windows sharing lock. Both sizes check
+the wrapped `texture_export_error` after toast dismissal, unchanged output and
+unrelated files, staging cleanup, and same-process retry with decoded green pixels.
+Compact also verifies a different texture selection clears the error. State:
+`texture_export_failed`. `--gui`/`--cwd` support extracted-package checks.
+
+`tools/test_texture_destination_ui.py --install <root>` opens Textures before
+changing the save folder. Both sizes check row/preview refresh for a different
+bank, selection retention for the same bank and fallback to the selected install.
+The fixture prepares copied banks first; GUI navigation changes no target files.
+`--gui`/`--cwd` support extracted-package checks.
+It gives the same texture name red pixels in the selected bank and blue pixels
+in the other bank. Actual Export PNG buttons and screenshot pixels verify the
+preview and export follow the selected, alternate and fallback bank.
+
+`tools/test_mod_asset_refresh_ui.py --install <root>` loads asset views, then
+clicks Mods deploy/undeploy for a cube recipe. Both sizes check retired selections,
+one added/removed model and texture, definition users and exact bank recovery.
+`--separate-root` writes to a copied save folder while preserving the selected
+install's whole inventory. `--gui`/`--cwd` support extracted-package checks.
+`--failed-redeploy` adds an invalid bank patch after deploying the cube. The
+previous stage reverts, the new build fails, and asset views return to the restored
+baseline while the failure stays in the log. Both destination variants are checked.
+
+The Setup recovery fixtures below accept `--gui <exe>` and `--cwd <directory>`
+for extracted-package checks; their scratch files and app-data remain owned
+under this checkout's build directory. The stage fixture uses `forge-tools.exe` beside
+the selected GUI executable. The package check exercises all recovery variants.
+
+`tools/test_setup_confirmation_ui.py` checks Enter leaves Restore pending,
+Escape cancels without closing Setup, and Continue or an accepted folder change
+cancels the pending Restore. Rescanning the same root through Data preserves the
+confirmation. Both sizes verify both installs' entire inventories are unchanged.
+
+`tools/test_setup_stage_restore_ui.py` stages an owned LEV and takes an editor
+original after staging, then checks Setup rebases and restores the older baseline.
+`--orphan` preserves the manifest outside the install: Restore leaves all files
+unchanged and shows a persistent warning. The fixture returns that exact manifest
+and retries in the same process. Both variants cover normal and compact panels.
+
+`tools/test_setup_restore_ambiguity_ui.py` clicks Setup Restore with either
+different legacy/current originals or a creation marker plus an original.
+Both sizes verify a visible refusal and unchanged whole-install inventory,
+including an unrelated edited map. The fixture moves the conflicting record
+outside the install, preserving its bytes, then retries in the same process.
+
+`tools/test_setup_missing_bank_ui.py` restores an absent game.bin from its
+tracked original. `--missing-levels` instead restores the only loose LEV;
+`--wad <source.wad>` copies a stock WAD as the tracked original and verifies its
+unchanged source hash. Both sizes click actual Setup buttons; compact selects
+Data directly. Each case first checks refusal while an owned sleeping process
+named Fable.exe runs at the install root, then recovery after it exits.
+
+`tools/test_setup_restore_failure_ui.py` locks an owned LEV, clicks Setup Restore,
+checks the persistent wrapped `setup_restore_error` message with toasts cleared,
+then releases the lock and retries in the same hidden process. Both sizes check
+unchanged failed-write bytes, temp cleanup and exact recovery; the compact case
+also checks error clearing on a folder switch. State: `setup_restore_failed`.
+`--partial` adds a second selected map that restores and reloads while the locked
+target remains unchanged. The inline error survives that reload and retry
+finishes the remaining target; every original is retained.
+
+`tools/test_setup_asset_restore.py --install <root>` imports a cube into copied
+graphics/textures/game/names banks, then uses Setup's Restore buttons at both
+panel sizes. It checks retired model/texture selections and counts, refreshed
+definition users, exact bank hashes, retained original backups and unchanged
+source/loose-level bytes. `--gui`/`--cwd` support extracted-package checks; app-data
+is owned by the fixture. `dump_state` writes state lines into the automation log.
+
+`tools/test_mod_unreported_choices.py --install <root>` checks saved choices
+absent from the latest report, including missing targets and uncontested edits.
+Both panel sizes cover search and read-only preservation; real Clear buttons
+cover individual removal, locked-save failure and a zero-conflict report. It
+also removes every mod and verifies an empty-order report and search beyond
+400 saved choices without changing source files. States:
+`mods_unreported_choices`, `mods_unreported_matching`. Widgets:
+`mods_unreported_help`, `mod_unreported_choice_<index>`,
+`mod_clear_unreported_<index>`. It accepts `--gui`/`--cwd` and owns its app-data
+directory for hidden-process isolation.
+
+`tools/test_mod_long_values.py --install <root>` checks long Vector_J/CCharString
+and signed CDefString reference baseline, current and contributor values at both sizes, exact byte escapes,
+independent merged payload bytes and source hashes. Value targets:
+`mod_field_value_<row>_<field>`, `mod_field_base_<row>_<field>` and
+`mod_field_source_<row>_<field>_<source>`.
+The field-details, long-value, conflict-search and unavailable-choice fixtures
+accept `--gui <exe> --cwd <directory>` for extracted-package checks; scratch
+evidence still belongs to the script's checkout.
+
+`tools/test_mod_field_choice_contributors.py` checks direct definition merge,
+direct mod merge and registered build refusal for unavailable contested scalar
+choices, read-only review flags, exact selected/baseline values, inactive layouts
+and preserved input/output inventories. `--complete-data` adds synthetic complete
+definition banks; these checks do not launch the game.
+
+`tools/test_mod_record_choice_contributors.py` checks unavailable active record
+choices, single/no-contributor cases, baseline aliases and exact output/input
+preservation in mod merge/build and both standalone definitions merge modes.
+Its optional `--complete-data` fixture uses synthetic definition banks.
+
+`tools/test_mod_fse_choice_contributors.py` checks quest-entry contributors,
+baseline presence/absence, inactive choices and preserved input/output bytes.
+`--complete-data` adds synthetic complete definition banks. Optional
+`--gui <exe> --install <root>` also checks both-size warning clipping, actual
+winner-menu clearing and independently read rebuilt quest-registry values.
+
+`tools/test_mod_unavailable_choice.py --install <root>` proves the displayed
+winner matches independently built output for an absent saved contributor.
+It checks preservation, choice-name search, real dropdown clearing, an ordinary
+contributor named base and an absent none choice. Definition baseline aliases
+are checked in the field-details fixture. `mods_unavailable_choices` counts reported choices absent from
+their contributors; `mod_unavailable_choice_<row>` reveals the explanation.
+
+`mods_wins_<mod index>` / `mods_losses_<mod index>` report current contested
+part counts. Visible badge widgets use `mod_wins_<mod index>` /
+`mod_losses_<mod index>`; a zero count has no badge. The field-details and
+401-file search fixtures check partial field wins and unchanged whole-file counts.
+
+`tools/test_mod_conflict_search.py --install <root>` builds 401 synthetic file
+conflicts and checks real typing, case-insensitive search, last-row choice/reset
+and saved-choice filtering at both sizes, with source-byte preservation.
+Widgets: `input_mod_conflict_search`, `mods_choices_only`, `mods_show_all_conflicts`.
+States: `mods_conflicts_matching`, `mods_first_matching_conflict`, `mods_choices_only`.
+
+`tools/test_mod_field_details.py --install <root>` uses a four-mod synthetic
+definition stack to check field details, contributor fallback, vanilla scope,
+clearing choices and independently decoded merged banks at both window sizes.
+The fourth mod contributes only a matching independent edit; it has no contested
+field wins/losses and choosing it retains actual-changer fallback for every conflict.
+`mod_fields_<row>` expands details; `mod_field_<row>_<field>` reveals one field.
+`mods_field_conflicts` counts retained field rows. `mods_first_field_<index>` and
+`mods_first_field_winner_<index>` expose the first record's current field winners.
+`mods_first_field_base_<index>` and `mods_first_field_value_<index>` expose its
+baseline and current winning values when the report contains value comparisons.
+
+`tools/test_ground_smear.py --install <root>` checks Ground Paint/Smear controls,
+strict vertex cursors, frozen neighbour blends, Repeat, undo and draft reopen
+on owned stock/loose copies at normal/compact sizes. `chip_ground_paint` /
+`chip_ground_smear` switch modes; `ground_smear` reports the selection.
+`assert_theme_blend x y t0 t1 t2 w0 w1 w2` checks exact palette slots and all
+three effective strengths (the third strength is implicit in saved LEV data).
+
+`tools/test_brush_pin.py --install <root>` checks Space-held brush pinning against
+moving rays/cameras, release, Shift inversion, Escape and Ctrl cancellation,
+clipboard exclusions, tool/map reset and exact stroke undo at both sizes.
+States `brush_pinned`, `brush_pin_x` / `brush_pin_y` expose the latch;
+`brush_pin_point_valid`, `brush_pin_held` and `viewport_hovered` report input context.
+`key_down Space` / `key_up Space` exercise the real binding. `assert_shore x y
+0|1` checks a vertex's authored shore flag, alongside snapshot/change checks.
+
+
+`menu_view` / `menu_map_camera` expose the FOV submenu; `slider_camera_fov`
+and `button_camera_fov_reset` exercise its real controls. `camera_fov_degrees`
+reports the vertical angle. Session checks cover limits, typed input, reset,
+clean document state and process restoration. They also check per-map camera /
+render-mode retention across revisits and restart, malformed-view isolation and
+install scoping.
+
+`tools/test_session.py --install <root>` checks exact camera and map/tab/tool
+restoration across processes, malformed camera fallback, missing maps,
+install mismatch and default automation isolation at both sizes. An explicit
+absolute `FABLEFORGE_TEST_SETTINGS` path enables startup/exit settings only in
+that owned file. Without it, automated runs ignore and do not write ordinary
+settings. State `terrain_mode` exposes the active terrain tool.
+
+
+`tools/test_snapshots.py --install <root>` checks dated captures via Ctrl+B and
+the File menu, process reopen, restore/undo/redo, retention after Save draft,
+cancel without removing recovery, Escape cancellation and confirmed deletion
+at normal and compact sizes. It uses an owned recovery root and sibling
+snapshots directory. States `snapshots_open` / `snapshot_count` expose the
+library. Both snapshot menu items and the library require an owned recovery
+root in scripted runs; the harness also checks that unconfigured scripts cannot
+open the library or capture via either shortcut/menu path. Menu widgets are `menu_snapshot_create` / `menu_snapshots`; library
+widgets are `btn_snapshot_create`, `btn_snapshots_refresh`,
+`btn_snapshot_restore_<index>`, `btn_snapshot_delete_<index>` and
+`btn_snapshot_delete_confirm_<index>`. Historical restore shares the recovery
+modal widget IDs; its discard widget is labeled Cancel.
+
+
+`tools/test_recovery.py --install <root>` checks process reopen, captured worker
+state, in-session menu capture/restore, recovery undo/redo, real modal controls,
+capture-time visibility, timer enable/disable, successful
+save cleanup and failed-save retention at both sizes. It reads the install and
+writes archives/drafts only below its owned build directory.
+`set recovery_root <owned path>` isolates archives; `set recovery_prompt 1` and
+`set recovery_timer 1` opt scripted runs into the modal and timer independently.
+`set autosave 0|1` and `set autosave_minutes <1..30>` configure the scheduler.
+`autosave_now` starts a background capture, `wait_autosave` waits for completion,
+`autosave_due` advances the scheduler deadline, and `assert_autosave_exists 0|1`
+checks the current map's archive. States `recovery_pending`, `recovery_busy` and
+`autosave_enabled` expose the state. Widgets `btn_recovery_recover` /
+`btn_recovery_discard` expose modal actions; `menu_file`, `menu_recovery`,
+`menu_autosave_now` and `menu_recovery_restore` expose the real menus.
+`text_recovery_time` exposes the capture-time readout. Scripts need an owned
+recovery root;
+they do not use user-data archives or the automatic timer by default.
+
+`tools/test_budget_areas.py --install <root>` checks captured Budget object UIDs,
+half-open/reversed/degenerate boxes, real mouse drag/Shift/click/Clear/Escape,
+visible overlays, map reset and unchanged document/terrain/camera at both sizes.
+`set budget_scope 3` selects Areas; `budget_area <x0> <y0> <x1> <y1>` adds a box,
+`budget_clear_areas` clears boxes and captured objects, and
+`assert_budget_thing <script name> <0|1>` checks captured membership.
+`mouse_move ground <x> <y>` projects a map-local ground point into the viewport.
+States `budget_scope`, `budget_picking`, `budget_areas`, `budget_area_drag` and
+`budget_things` expose survey state/counts. Widgets `btn_budget_pick`,
+`btn_budget_pick_done`, `btn_budget_pick_clear`, `btn_budget_clear_areas` and
+`seg_budget_scope` exercise the real controls.
+
+`tools/test_terrain_drafts.py --root <install>` copies stock banks under build,
+then tests stock/loose layouts at both sizes. It exercises the Save button,
+Ctrl+S, F6/F7, map-switch prompt, process reopen, untouched active terrain banks,
+draft/direct bake equivalence, game-write cleanup and Restore.
+`save_draft` / `save_draft_refused` exercise the joint object/terrain transaction;
+legacy `save_level` remains object-only. `terrain_draft_dirty` measures edits
+since the authoring save; `terrain_dirty` measures terrain pending for game/pack.
+`key_down` / `key_up` support F6 and F7.
+
+`tools/test_passability_cursor.py --install <root>` checks modes 4/5/12/13:
+rounded 1/9/21-vertex pens, zero Strength/time, real strokes, Walkable/Blocked
+Shift inversion, preservation of other channels and exact undo at both sizes.
+`snapshot_passability` stores walkability and camera flag arrays;
+`assert_passability_changes <walk count> <camera count>` checks both against
+that snapshot. `brush_cursor_vertices` reports small survey pen vertices.
+
+`tools/test_shore_points.py --install <root>` checks mode 17's 1/9/21-cell
+shore pen, real On/Off controls, Shift inversion, unchanged other channels,
+visible overlays in four view modes and exact undo at normal/compact sizes.
+`set shore_set 0|1` selects Off/On; `set shore_overlay 0|1` hides/shows red flags.
+States `shore_set` and `shore_overlay`, widgets `chip_shore_on`, `chip_shore_off`
+and `check_shore_overlay` expose them. `snapshot_shore` / `assert_shore_changes
+<count>` check changed flag cells. `survey_overlay_kind` 3 means shore points.
+
+`tools/test_environment_smear.py --install <root>` checks Paint/Smear controls,
+empty/fractional sparse cursors, real mouse strokes, Ctrl sampling, preservation
+of other channels and exact undo at normal/compact sizes.
+`set environment_smear 0|1` and state `environment_smear` expose the option;
+widgets `chip_environment_paint` / `chip_environment_smear` select it. Existing
+`terrain_stroke`, environment snapshots and cell-change assertions also cover
+Smear; cursor counts are unique cells although the pen may revisit them.
+
+`tools/test_ground_stamp.py --install <root>` checks the Ground Full stamp
+toggle, strict vertex cursor, full assignments with zero Strength, real clicks,
+soft-brush compatibility and exact undo at normal/compact sizes.
+`set paint_stamp 0|1`, state `paint_stamp` and widget `check_paint_stamp` expose
+the option. `assert_theme_stamp <x> <y> <theme>` checks the live vertex's exact
+{theme,0,0}/{255,0,0} blend, including during a stroke.
+
+`tools/test_survey_overlay.py --install <root>` checks visible survey colours,
+selected-sound filtering, controls, painting and exact undo at normal/compact
+sizes. `set sound_overlay 0|1|2` chooses off/all/selected;
+`set environment_overlay 0|1` sets the atmosphere overlay.
+State `survey_overlay_kind` is 0/off, 1/atmosphere,
+2/sound; `survey_overlay_filter` is -1/all or the selected sound index (0/None).
+Widgets `combo_sound_overlay` and `check_environment_overlay` expose the controls.
+Open theme pickers expose `colour_sound_<index>` and `colour_environment_<slot>`.
+
+`tools/test_placement_grid.py --install <root>` checks the real placement-grid
+toggle at 1440x900 and 800x600 / 1.5 scale, ground and fixed heights, pointer
+placement, paste, special things, carry and exact undo without game writes.
+`set place_snap_grid on|off` sets the option; state `place_snap_grid` and widget
+`toggle_place_snap_grid` expose it. `assert_selected_xy <x> <y>` checks map-local
+XY within 0.001; `assert_selected_cell_centre` checks grid alignment.
+`assert_selected_ground [offset]` checks terrain-relative Z within 0.01.
+
+`tools/test_wholemap_cameras.py --install <root>` saves baseline, raised and
+lowered StartOakValeWest documents into separate owned scratch folders. It
+independently verifies camera base and spline-key Z changes, unchanged directions,
+timings and other rows, and exact document/terrain undo. The live install is read-only.
+
+`tools/test_height_pick.py --install <root>` checks real Ctrl-drag sampling in
+all six sculpt tools, Ctrl+Shift, Flatten's sampled target and active-stroke undo
+at normal and compact sizes without saving. State keys `pen_target` and
+`pen_target_from_stroke` expose the target; `text_paint_height` names its readout.
+
+`tools/test_height_keys.py --install <root>` checks fixed-point Minus/Equal
+strokes, all six sculpt tools, all other terrain modes, tool switches and exact
+undo at both sizes. `height_key_active`, `height_key_x` and `height_key_y` expose
+the active stroke and latched ground point.
+The same check exercises the real Speed slider's endpoints in every sculpt
+tool, zero-speed refusal to alter ground, nonzero strokes and undo. State keys
+`pen_speed` and `height_key_step` expose the slider and its derived metre step.
+
+`tools/test_height_cursor.py --install <root>` checks exact-step Raise/Lower
+and Flatten/Smooth cursors at normal/compact sizes. `brush_cursor_vertices` counts
+the projected affected-vertex dots (shown at radii <=4 cells); the check verifies
+single/9-vertex discs and unchanged terrain/object snapshots.
+It also captures the Noise square at single-vertex and three-by-three sizes
+for visual inspection, without changing the document.
+Height-key cursor cases cover radii 0.25/0.5/1/1.5/2, with 0/0/5/4/13 distinct
+vertices, unchanged snapshots for empty footprints and exact undo for strokes.
+The empty-footprint hint and fractional-radius dots are captured at both sizes.
+
+`tools/test_sound_cursor.py --install <root>` checks actual Sound mouse strokes,
+1/2/4-cell cursor outlines, Ctrl sampling and exact undo at normal/compact sizes.
+`brush_cursor_sound_cells` counts queried cells outlined by small Sound cursors;
+`sound_index` exposes the selected palette index. `set sound_index <n>` selects
+a listed index (0 is none). `snapshot_sounds` captures the sound grid and
+`assert_sound_changes <count>` checks the exact number of changed cells.
+
+`tools/test_replace_cursor.py --install <root>` checks Replace's truncated
+centre and strict 1/9-vertex pen through actual mouse clicks at both sizes,
+preserving heights/sounds/objects and undoing exact theme blends.
+`snapshot_themes` captures all ground indices and strengths;
+`assert_theme_changes <count>` checks changed vertex blends. For Replace,
+`brush_cursor_vertices` counts considered dots; theme matching can leave some
+of those vertices unchanged.
+
+`tools/test_environment_cursor.py --install <root>` checks Environment's strict
+1/2/4-cell pen through real mouse strokes, sampling, clearing and exact undo at
+both sizes. `brush_cursor_environment_cells` counts queried outlined cells;
+`environment_index` exposes the selected slot. `set environment_index <n>` sets
+it, and `add_environment <ENVIRONMENT_THEME_DAY name>` adds/selects a valid
+definition in the map's atmosphere palette. `snapshot_environments` captures
+all atmosphere indices/strengths; `assert_environment_changes <count>` checks
+the exact number of changed cell blends.
+
 `input_text <text>` sends UTF-8 text through ImGui to the focused input. Use
 `key_down Ctrl`, `key_down F`, then release both keys to test search shortcuts.
 `tools/test_asset_search.py --install <root>` checks the active asset browser's
@@ -151,6 +547,18 @@ Settings persistence is disabled under `--auto` so runs are deterministic.
 | `setup 0\|1`, `restore_all` | show Setup or run its restore action. Restore uses the `--install` root, not `set saveroot`; tests must pass an isolated `--install` root. `tests/ui/setup_restore.txt` clicks the confirmation in a synthetic loose-level install. |
 | `scan_install <root>` | exercise a folder change without a native picker; use only scratch roots in automation. `tools/test_install_switch_ui.py` checks the unsaved-edit guard, invalid path and stale-preview cleanup. |
 | `mesh_import <model> <NAME> [png]`, `wait_mesh_import` | the Assets tab's Models page (`assets_tab 1`): a .glb/.gltf/.obj into graphics.big + textures.big + game.bin (off the UI thread; states `mesh_import_busy`, `mesh_import_failed`; widgets `input_mesh_model`, `input_mesh_name`, `input_mesh_texture`, `btn_mesh_import`, `mesh_import_error` when present); the context reloads after (`wait_ready`), then `place OBJECT_<NAME>` |
+| `wait_mesh_replace` | Wait for the selected Models entry's geometry replacement and preview refresh. Controls: `btn_model_replace`, `input_mesh_replace_model`, `btn_mesh_replace`; result widgets: `mesh_replace_error`, `mesh_replace_success`. States: `mesh_replace_busy`, `mesh_replace_failed`, `mesh_replace_succeeded`. The base definition/texture context stays loaded when writing to a separate save root. Changing that root clears result feedback. |
+| `assets_tab 5`, `wait_texts`, `text_select <name|id>`, `text_select_refused <name|id>` | Read-only Text browser. Exact names take precedence over numeric IDs; ambiguous shortcuts refuse without losing selection. Widgets: `combo_text_language`, `input_textsearch`, `btn_text_refresh`, `text_content`, `text_member_<n>`, `text_entry_error`, `text_unsupported_entry`. |
+| `assert_text_narrator <index> <name>` | Compare an indexed name in the selected narrator list. Widget `text_narrators`; state `text_narrators` counts names. Property links use `property_text_CTCActionUseReadable_GameTextDefName`, `property_text_CTCInfoDisplay_TextTag`, and `property_text_CTCInfoDisplay_TextTagBack`. |
+| `text_export_path <new.tsv>`, `text_export <new.tsv>`, `text_export_refused <path>`, `wait_text_export` | Set the TSV path or start/check export of the entire loaded bank. Widgets `input_text_export`, `input_text_export_browse`, `btn_text_export`; states `text_export_busy`, `text_export_failed`, `text_export_succeeded`. Existing files and non-TSV destinations refuse. |
+| `text_edit`, `text_edit_refused`, `text_edit_content <content>`, `text_save`, `text_save_refused`, `assert_text_edit <name\|->` | Start/check an existing string draft, set its UTF-8 content, and save/check refusal; assert its entry or that it is closed. Real controls: `btn_text_edit`, `input_text_edit_content`, `btn_text_save`, `btn_text_save_confirm`, `btn_text_edit_cancel`; failures register `text_edit_error`. Content edits preserve metadata and refuse stale/noncanonical banks. |
+| `text_add`, `text_add_refused`, `text_add_name <new name>` | Start/check a draft from the selected donor and set its new name; use the shared content/save commands. Controls: `btn_text_add`, `input_text_add_name`. Donors remain intact; new strings receive a free ID and an identifier matching their new name. |
+| `text_edit_speaker <name\|->`, `text_edit_speaker_refused <name>` | Choose/check a unique existing narrator for a string draft; `-` selects the empty speaker. Controls: `combo_text_edit_speaker`, `text_speaker_option_<index>`. Saving updates the speaker payload and header index together and refuses stale headers. |
+| `text_edit_speechbank <value\|->`, `text_edit_speechbank_refused <value>` | Set/check a draft speech-bank reference. ASCII values shorter than 4096 bytes; `-` clears it. Control: `input_text_edit_speechbank`. Unsupported original bytes stay read-only. |
+| `text_edit_identifier <value\|->`, `text_edit_identifier_refused <value>` | Set/check an existing string identifier under the same byte limits. Donor additions use their new name automatically. Control: `input_text_edit_identifier`. |
+| `text_tag_set <index> <position> <name\|->`, `text_tag_set_refused ...` | Edit one ordered draft tag with a signed 32-bit stored position and bounded ASCII name; `-` clears its name. Controls: `combo_text_edit_tags`, `text_tag_option_<index>`, `input_text_edit_tag_position`, `input_text_edit_tag_name`. |
+| `text_tag_add`, `text_tag_add_refused`; `text_tag_remove <index>`, `text_tag_remove_refused <index>` | Append an empty tag at position zero or remove the selected index. Controls: `btn_text_tag_add`, `btn_text_tag_remove`. Untouched legacy names remain preserved. |
+| `text_search <query|->`, `text_language <language>`, `text_language_refused <language>`, `assert_text_content <full text>` | Search names/IDs/content, choose an available language, and compare the complete selected content including spaces and Unicode. States: `texts_count`, `texts_filtered`, `texts_busy`, `texts_decode_errors`, `text_language`, `text_selected`, `text_type`, `text_ready`, `text_tags`, `text_members`, `text_failed`. |
 | `custom_theme <png> <NAME> [donor] [cliffPng]` | a ground theme from a PNG (textures.big + game.bin append), added to the palette and selected; the texture/def context reloads (`wait_ready`) |
 | `custom_theme_refused <png> <NAME> [donor] [cliffPng]` | requires theme creation to fail; pair with `assert_log` to check the reason, e.g. a full map palette |
 | `drag_gizmo <dx> <dy>` | press on the selected pivot and drag by (dx, dy) window pixels through the real gizmo |
@@ -668,3 +1076,25 @@ events exercise the current line's history. `dialogue_can_undo` /
 route to lip sync when its inline editor is open. `tools/test_dialogue_undo.py`
 checks gesture grouping, shortcuts, line switches, reset and pack-save boundaries
 against independently read archive/recipe data.
+
+Definitions inspection uses `assets_tab 6`, `wait_definitions`, `definition_bank game.bin|frontend.bin|script.bin`, `definition_search <query|->`, `definition_select <exact-name|entry-index>`, and `assert_definition_field <field-name> <formatted-value>`. The corresponding `_refused` bank and selection commands check rejected inputs. Exact names take priority over numeric indices; duplicate names require selecting a row.
+
+Definition scalar drafts use `definition_edit <field-index>`, `definition_value <value>`, `definition_save`, and `definition_cancel`. The edit/value/save `_refused` variants check refusals. `definition_editing` and `definition_edit_failed` report draft state. Saving reselects the explicit native index, even when another record has a numeric name.
+
+`definition_group` reports the validated game-bank group entry index, or `-`. `btn_definition_group` follows it by index after the current frame, protecting numeric names and the current decoded view.
+
+Definition vector drafts expose `input_definition_vector_0`, `_1` and (for C3DVector) `_2` for real coordinate input. `definition_value` accepts the existing comma-separated writer syntax for these drafts. The dedicated `definition_vectors` package workflow independently verifies every other payload byte, exact no-ops and malformed input/layout refusals at both sizes.
+
+Definition colour drafts expose `input_definition_colour_picker` (swatch), `definition_colour_popup` while its picker is open, and `input_definition_colour_0` through `_3` (R/G/B/A). Actual channel input is clamped to 0-255; `definition_value` uses the writer RGBA syntax and Save refuses out-of-range values. The definition_colour_edit workflow checks both sizes, actual picker saving, exact no-ops and native BGRA byte deltas.
+
+Definition tree widgets: `definition_type_node_<type-index>`, `definition_group_node_<type-index>_<native-group-index|none>`, and `definition_row_<native-index>`. `definitions_grouped` counts confirmed group targets.
+
+`definition_model_<field-index>` identifies an object model link. `definition_model` state reports the confirmed native model ID, or `-` for unsupported fields/banks.
+
+`definition_texture_<field-index>` identifies a terrain-theme texture link. `definition_texture_links` counts eligible positive native texture references in the selected game-bank record.
+
+
+`definition_name_reference_<field-index>` identifies a resolved CDefString name label. `definition_name_ref_<field-index>` reports the name or `-`; `definition_name_refs` counts resolved fields. Labels use owning-bank byte offsets, including unused or duplicate names, and refresh after bank reload.
+
+
+`combo_definition_edit_name` opens the existing-name chooser for four-byte CDefString drafts. `input_definition_name_search` filters pool names or offsets; `definition_name_option_<byte-offset>` and `definition_name_option_none` select an existing name or -1. Duplicate pool names have separate offset choices. Saving refuses changed references that are not exact string starts in the captured owning pool.

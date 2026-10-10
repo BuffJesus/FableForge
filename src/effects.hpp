@@ -142,7 +142,7 @@ struct Effect {
     std::vector<SpriteSystem> sprites;
     std::vector<MeshSystem> meshes;
     std::vector<LightSystem> lights;
-    bool parsedFully = false;   // false when an unknown component class stopped the walk
+    bool parsedFully = false;   // supported version and component walk consumed the whole payload
     std::vector<std::string> previewUnsupported; // active components outside supported isolated preview
     bool emitter2D=false,preWater=false,water=false,zWrite=false,continuous=false,screenDisplacement=false,readZ=false;
     float maxSpawnDistance=0,maxDrawDistance=0,fadeOutStart=0,fadeInEnd=0,fadeInStart=0;
@@ -157,11 +157,12 @@ bool openBank(const std::filesystem::path& gameRoot, std::string& err, bool relo
 Effect decode(const std::vector<uint8_t>& payload);
 bool bankOpen();
 bool bankOpen(const std::filesystem::path& gameRoot);
-// Case-insensitive lookup by entry name; nullptr when unknown. Parsed lazily and cached.
+// Exact entry name first, then a unique case-insensitive convenience match.
+// nullptr when unknown or ambiguous. Parsed lazily and cached by exact name.
 std::shared_ptr<const Effect> byName(const std::string& name);
 std::shared_ptr<const Effect> byName(const std::filesystem::path& gameRoot, const std::string& name);
 size_t entryCount();
-// Every effect name in the bank (upper case, sorted); empty until openBank.
+// Every distinct effect name with original casing, sorted; empty until openBank.
 std::vector<std::string> entryNames();
 std::vector<std::string> entryNames(const std::filesystem::path& gameRoot);
 

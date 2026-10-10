@@ -47,12 +47,14 @@ namespace forge::terraintex {
 
 // ---------------------------------------------------------------- pixel format
 constexpr uint32_t kFormatARGB = 0x01;  // A8R8G8B8
+constexpr uint32_t kFormatV8U8 = 0x18;  // signed two-channel bump map; validation only
 constexpr uint32_t kFormatDXT1 = 0x1F;
 constexpr uint32_t kFormatDXT3 = 0x20;
+constexpr uint32_t kFormatDXT5 = 0x23;  // validation only; preview/encoder remain unsupported
 
 // CPixelFormatInit tail bytes {Type,ColourDepth,R,G,B,A} per format.
 const uint8_t* pixelFormatTail(uint32_t format);   // nullptr if unknown
-const char* pixelFormatName(uint32_t format);      // "DXT1" / "DXT3" / "A8R8G8B8"
+const char* pixelFormatName(uint32_t format);      // "DXT1" / "DXT3" / "DXT5" / "V8U8" / "A8R8G8B8"
 // Uncompressed byte length of one linear mip surface.
 size_t mipRawLength(uint32_t format, uint32_t w, uint32_t h);
 
@@ -94,7 +96,10 @@ struct DecodedMip0 {
 DecodedMip0 decodeMip0(const std::vector<uint8_t>& info,
                        const std::vector<uint8_t>& payload);
 
-// Verify one texture entry against the on-disk writer contract. `info` is the
+// Verify one texture entry against the on-disk storage contract. DXT5 uses the
+// native width*height*8/8 byte length even for its final 2x2 and 1x1 mips;
+// those stored lengths are distinct from GPU block allocation sizes.
+// `info` is the
 // entry 34-byte Info blob (the BIG entry subHeader), `payload` the entry data.
 TextureValidation validateTextureEntry(const std::vector<uint8_t>& info,
                                        const std::vector<uint8_t>& payload);
@@ -196,7 +201,8 @@ struct ImportResult {
 
 ImportResult importPng(const ImportRequest& request);
 
-// Validate an entry that already lives in a BIG.
+// Validate an entry in a BIG: unique exact name first, then unique case-insensitive
+// fallback. Ambiguous/missing queries leave bankOut/idOut unchanged.
 TextureValidation validateBigEntry(const std::filesystem::path& bigPath,
                                    std::string_view entryName,
                                    std::string* bankOut = nullptr,

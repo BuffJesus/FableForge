@@ -63,6 +63,7 @@ bool invert(const float m[16], float out[16]);
 struct TerrainState {
     std::vector<float> heights;
     std::vector<uint8_t> walkable;
+    std::vector<uint8_t> shorePoint;                    // independent LEV cell byte +19
     std::vector<uint8_t> cameraPassable;                // per cell (+16); walkable cells are always passable
     std::vector<std::array<uint8_t, 3>> themeIndex;     // per cell: the 3 palette slots
     std::vector<std::array<uint8_t, 3>> themeStrength;  // ... and their weights (sum 255)
@@ -83,7 +84,7 @@ struct TerrainBrush {
     // Flatten / Smooth / Noise and Raise / Lower with exactStep are the vanilla Height Toolbox
     // pens (forge/heightpen: Paint Height, Smear, Noise, Change Height): one application per
     // call, no dt, no falloff. Raise / Lower without exactStep are FableForge's smooth brush.
-    enum class Mode { Raise, Lower, Flatten, Smooth, Walkable, Blocked, Theme, ReplaceTheme, Environment, Sound, CameraPass, CameraBlock, Noise, HeightKey };   // HeightKey: the -/= keys, `step` signed
+    enum class Mode { Raise, Lower, Flatten, Smooth, Walkable, Blocked, Theme, ReplaceTheme, Environment, Sound, CameraPass, CameraBlock, Noise, HeightKey, EnvironmentSmear, ShoreSet, ShoreClear, ThemeSmear };   // HeightKey: the -/= keys, `step` signed
     Mode mode = Mode::Raise;
     float x = 0, y = 0;        // map-local centre
     float radius = 6.0f;
@@ -91,6 +92,7 @@ struct TerrainBrush {
     uint8_t themeIndex = 0;    // Theme / ReplaceTheme: LEV palette slot to paint
     uint8_t replaceFrom = 0;   // ReplaceTheme: the slot being replaced
     bool exactStep = false;    // Raise / Lower: vanilla Change Height, +-step once per block per stroke
+    bool themeStamp = false;   // Theme: native full assignment, strict truncated vertex disc
     float step = 1.0f;         // world units
     bool targetFromStroke = true;   // Flatten: the ground where the stroke starts, else `target`
     float target = 0.0f;       // Flatten: vanilla Paint Height's "m" box
@@ -182,6 +184,7 @@ public:
     // a missing flag is inserted, but unrelated component schemas are not created.
     bool isLocked(size_t index) const;
     bool setLocked(size_t index, bool locked);
+    // Non-finite frame components refuse without mutation or undo/history changes.
     void setFrame(size_t index, const Frame& frame);
     // The native owner move ignores the child's own editor lock. Call only for
     // descendants returned by ownedFramesAfter for an unlocked edited parent.
@@ -248,6 +251,7 @@ public:
     std::vector<std::string> ctcBlocksOf(size_t index) const;
     // Sets one field (value as the .tng spells it: TRUE, 3, 1.5, "text"); one undo
     // step. False when the value does not fit the field's kind or the field is absent.
+    // Values cannot contain CR, LF or NUL. Refusals do not create undo entries.
     bool setPropertyValue(size_t index, const std::string& ctc, const std::string& key, const std::string& value);
     static PropertyRow::Kind kindOf(const std::string& value);
     // Indexed list fields (CTCCreatureGenerator CreatureFamilies[n]; no count field,
@@ -454,7 +458,19 @@ public:
     // the same; followGround = false leaves every placed thing where it is
     bool setVertexHeights(const std::vector<VertexHeight>& edits, bool followGround);
     uint64_t terrainRevision() const { return terrainRev_; }
-    bool terrainDirty() const;
+    bool terrainDirty() const;       // differs from the terrain last written into the game/pack
+    bool terrainDraftDirty() const;  // differs from the most recently saved authoring draft
+    std::filesystem::path terrainDraftPath(const std::filesystem::path& gameRoot) const;
+    bool saveDraftLoose(const std::filesystem::path& gameRoot, std::string& error,
+                        std::vector<std::string>* notes = nullptr);
+    bool saveTerrainDraft(const std::filesystem::path& gameRoot, std::string& error,
+                          std::vector<std::string>* notes = nullptr);
+    bool loadTerrainDraft(const std::filesystem::path& gameRoot, std::string& error);
+    // Standalone editor recovery archive: never marks authoring/game baselines saved.
+    bool saveRecovery(const std::filesystem::path& path, std::string& error) const;
+    bool editActive() const { return stroke_ || batchDepth_ > 0; }
+    bool recover(const std::filesystem::path& path, std::string& error);
+    Document recoveryWriteSnapshot() const;
     bool themesDirty() const;          // ground-theme paint pending (needs the layer-mesh rebuild on deploy)
     uint64_t themeRevision() const { return themeRev_; }   // bumps when a theme stroke ends / undoes
     std::optional<float> terrainHeight(float x, float y) const;   // bilinear on the working copy
@@ -476,6 +492,9 @@ public:
     // theme library. All zeros = exact-index matching.
     void setThemeFamilies(const std::array<uint32_t, 256>& families) { themeFamily_ = families; }
     std::array<bool, 256> replaceMatchSet(uint8_t from) const;
+    // Theme Paint/Replace vertices: the caller truncates the pointer, then
+    // tests strict squared distance < radius^2 (0x029799d0 / 0x0297a6c0).
+    std::vector<std::pair<int, int>> themeBrushVertices(float x, float y, float radius) const;
     // Height Toolbox "Draw Paths" (EditDrawPathPenUndoable): every vertex within
     // `radius` of the segment takes the height interpolated between the ground
     // at its two ends. One undo step; returns the vertices changed.
@@ -504,7 +523,8 @@ public:
     // EditResizeZPercent 0x029a8ac0, EditResetAllZ 0x029a8c30), every vertex clamped to
     // [0, 2048 - 1e-4] like vanilla. One undo step each; return the vertices changed.
     // raise: h + d; with moveThings every placed thing rises by d too (CEditRaiseZOnThing
-    // 0x0298e5a0 moves the physics position of every thing), otherwise nothing moves.
+    // 0x0298e5a0 moves physics, camera coordinate bases and spline key positions),
+    // otherwise nothing moves. Relative camera bases account for the parent's move.
     // scale: h * pct / 100 (100 = no change). set: h = v. These two keep Forge's rule that
     // grounded objects follow the ground (vanilla leaves things where they are).
     size_t raiseHeights(float d, bool moveThings = true);
@@ -542,6 +562,19 @@ public:
     // game-map cell of this map gets the sound index, 0 = none. Returns the cells changed;
     // one undo step (vanilla has none). 0 when nothing changes or the index is not listed.
     size_t fillSound(uint8_t index);
+    // Game-map cells touched by vanilla EditSetSounds' rounded height-vertex
+    // disc (0x02971010). One entry per sound cell, clipped to this map's grid.
+    std::vector<std::pair<int, int>> soundBrushCells(float x, float y, float radius) const;
+    // Environment maps the strict theme vertex pen to unique game cells.
+    std::vector<std::pair<int, int>> environmentBrushCells(float x, float y, float radius) const;
+    // Native walkability/camera/shore pen, clipped to regular cells (extra boundary vertices excluded).
+    std::vector<std::pair<int, int>> surveyBrushVertices(float x, float y, float radius) const;
+    std::vector<std::pair<int, int>> environmentSmearBrushCells(float x, float y, float radius) const;
+    using OverlayColour = std::array<uint8_t, 4>;
+    std::vector<OverlayColour> shoreOverlay() const;
+    using OverlayLookup = std::function<std::optional<OverlayColour>(const std::string&, const std::string&)>;
+    // One RGBA value per game cell. Sound filter -1 means all; 0 means none.
+    std::vector<OverlayColour> surveyOverlay(bool environment, int soundFilter, const OverlayLookup& lookup) const;
     // What the grid holds under a map-local point: the strongest atmos slot and the sound.
     std::optional<std::pair<uint8_t, uint8_t>> environmentAndSoundAt(float x, float y) const;
     int paletteSlotOf(const std::string& name) const;
@@ -586,7 +619,16 @@ private:
     bool deployTerrainSteps(const std::filesystem::path& gameRoot, std::vector<std::string>& notes, std::string& error,
                             const forge::terraintex::ThemeLibrary* library,
                             const std::function<void(const std::string&)>& progress);
-    struct Snapshot { std::string tng; std::shared_ptr<const TerrainState> terrain; };
+    struct Snapshot {
+        std::string tng;
+        std::shared_ptr<const TerrainState> terrain;
+        // Recovery can replace sound names and navigation as well as editable cells.
+        // Ordinary edit snapshots retain the existing compact representation.
+        std::shared_ptr<const forge::lev::File> recoveryLevel;
+        std::vector<uint8_t> recoveryNav;
+        bool recoverySoundListGrew = false;
+    };
+    Snapshot recoverySnapshot() const;
     void pushUndo();
     void restore(const Snapshot& s);
     Snapshot snapshot() const;
@@ -604,6 +646,11 @@ private:
     bool batchPushed_ = false;
     std::shared_ptr<const TerrainState> terrain_;        // committed state (immutable, shared with snapshots)
     std::array<uint32_t, 256> themeFamily_{};             // NoWaterThemeDef per palette slot (setThemeFamilies)
+    bool saveDraftFiles(const std::filesystem::path& gameRoot, std::string& error,
+                        std::vector<std::string>* notes, bool includeObjects);
+    bool terrainDiffersFrom(const std::shared_ptr<const TerrainState>& baseline) const;
+    std::shared_ptr<const TerrainState> draftTerrain_;
+    std::vector<std::string> draftSoundThemes_;
     std::shared_ptr<const TerrainState> savedTerrain_;   // baseline for terrainDirty()
     std::unique_ptr<TerrainState> working_;              // during a stroke
     std::unique_ptr<forge::terrain::Heightfield> hf_;    // during a stroke

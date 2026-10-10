@@ -1783,8 +1783,8 @@ EmptyLocalDetailSection buildType0LocalDetailSection(
         appendU32(tail, static_cast<uint32_t>(palette.size()));
         for (const auto& type : palette) {
             appendU32(tail, type.meshIdx);
-            appendU32(tail, type.zspriteMeshIdx);
             appendU32(tail, type.shadowMeshIdx);
+            appendU32(tail, type.zspriteMeshIdx);
             bool exact = false;
             for (uint32_t v : type.runtimeSettings) exact = exact || v != 0;
             if (exact) {
@@ -3747,23 +3747,49 @@ FrameEdit patchBodyToFrameEdit(size_t frameIndex, const PatchBody& pb,
     return fe;
 }
 
+namespace {
+QuadEntry readQuadEntry(const std::vector<uint8_t>& bytes, size_t offset) {
+    QuadEntry entry;
+    entry.dirOffset = offset;
+    entry.frameOffset = getU32(bytes.data() + offset);
+    entry.frameSpan = getU32(bytes.data() + offset + 4);
+    for (size_t k = 0; k < 6; ++k)
+        entry.aabb[k] = getF32(bytes.data() + offset + 8 + k * 4);
+    entry.flags = getU32(bytes.data() + offset + 32);
+    return entry;
+}
+
+size_t quadDirectoryLimit(const Chunk& chunk, size_t base) {
+    size_t limit = chunk.raw.size();
+    for (size_t index : chunk.frameIndices) {
+        const auto& frame = chunk.segments.at(index);
+        if (frame.start <= base && base < frame.end) return base;
+        if (frame.start >= base) limit = std::min(limit, frame.start);
+    }
+    return limit;
+}
+} // namespace
+
+std::vector<QuadEntry> parseQuadDir(const Chunk& chunk, QuadDirectoryLayout layout) {
+    const size_t limit = quadDirectoryLimit(chunk, layout.offset);
+    if (layout.offset > limit || layout.entryCount > (limit - layout.offset) / 36)
+        throw std::runtime_error("parseQuadDir: fixed-count directory exceeds raw header span");
+    std::vector<QuadEntry> entries;
+    entries.reserve(layout.entryCount);
+    for (size_t i = 0; i < layout.entryCount; ++i)
+        entries.push_back(readQuadEntry(chunk.raw, layout.offset + i * 36));
+    return entries;
+}
+
 std::vector<QuadEntry> parseQuadDir(const Chunk& chunk, size_t dirBase) {
-    // The 0x24-byte entry array runs until the first all-zero terminator record.
-    // A record whose frameOffset==0 && frameSpan==0 is the sentinel (the donor's
-    // 5th slot is a zero record). Guard against a wrong base by bailing the moment
-    // a record fails a coarse sanity gate on the very first entry.
     std::vector<QuadEntry> out;
     const std::vector<uint8_t>& d = chunk.raw;
     const size_t stride = 0x24;
+    const size_t limit = quadDirectoryLimit(chunk, dirBase);
+    if (dirBase > limit) return out;
     for (size_t i = 0;; ++i) {
+        if (i >= (limit - dirBase) / stride) break;
         size_t o = dirBase + i * stride;
-        if (o + stride > d.size()) break;
-        QuadEntry e;
-        e.dirOffset = o;
-        e.frameOffset = getU32(&d[o + 0]);
-        e.frameSpan = getU32(&d[o + 4]);
-        for (int k = 0; k < 6; ++k) e.aabb[k] = getF32(&d[o + 8 + k * 4]);
-        e.flags = getU32(&d[o + 32]);
         // terminator: an all-zero record ends the array. A record with a zero
         // frame pointer but live AABB/flags is a 16x16 cell WITHOUT a foreground
         // mesh (many fillers have them); it stays in the list with
@@ -3771,7 +3797,7 @@ std::vector<QuadEntry> parseQuadDir(const Chunk& chunk, size_t dirBase) {
         bool allZero = true;
         for (size_t k = 0; k < stride && allZero; ++k) allZero = d[o + k] == 0;
         if (allZero) break;
-        out.push_back(e);
+        out.push_back(readQuadEntry(d, o));
         if (out.size() > 4096) break; // never runs away
     }
     return out;
@@ -3795,11 +3821,12 @@ std::vector<uint8_t> generateQuadDir(const std::vector<QuadEntry>& entries) {
     return out;
 }
 
-size_t translateQuadDirXY(std::vector<uint8_t>& chunkBytes, float dx, float dy) {
+size_t translateQuadDirXY(std::vector<uint8_t>& chunkBytes, float dx, float dy,
+                         std::optional<QuadDirectoryLayout> directory) {
     if (!std::isfinite(dx) || !std::isfinite(dy))
         throw std::invalid_argument("translateQuadDirXY: offsets must be finite");
     const Chunk parsed = parseChunk(chunkBytes);
-    const std::vector<QuadEntry> entries = parseQuadDir(parsed);
+    const auto entries = directory ? parseQuadDir(parsed, *directory) : parseQuadDir(parsed);
     // aabb layout at dirOffset+8 is (minX, minY, minZ, maxX, maxY, maxZ);
     // indices 0/3 are X and 1/4 are Y.
     for (const auto& entry : entries) {
@@ -3819,9 +3846,10 @@ size_t translateQuadDirXY(std::vector<uint8_t>& chunkBytes, float dx, float dy) 
 
 size_t updateQuadDirZBounds(
     std::vector<uint8_t>& chunkBytes,
-    const std::vector<std::pair<float, float>>& zBounds) {
+    const std::vector<std::pair<float, float>>& zBounds,
+    std::optional<QuadDirectoryLayout> directory) {
     const Chunk parsed = parseChunk(chunkBytes);
-    const std::vector<QuadEntry> entries = parseQuadDir(parsed);
+    const auto entries = directory ? parseQuadDir(parsed, *directory) : parseQuadDir(parsed);
     if (entries.size() != zBounds.size())
         throw std::invalid_argument(
             "updateQuadDirZBounds: one Z range is required per live entry");
@@ -4039,7 +4067,8 @@ EmitResult emitChunk(const Chunk& chunk, const EmitOptions& opt) {
         return -1;
     };
 
-    std::vector<QuadEntry> dir = parseQuadDir(chunk);
+    const auto dir = opt.foregroundDirectory ? parseQuadDir(chunk, *opt.foregroundDirectory)
+                                             : parseQuadDir(chunk);
     for (const QuadEntry& e : dir) {
         if (e.frameOffset == 0 && e.frameSpan == 0) continue;   // a cell without a foreground mesh
         const FrameMove* m = lookupMove(e.frameOffset);

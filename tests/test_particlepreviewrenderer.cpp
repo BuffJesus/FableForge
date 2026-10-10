@@ -145,6 +145,15 @@ int main(){
  // Material is a vector index, independent of its serialized material ID.
  forge::meshpreview::Material mat;mat.id=123;mat.diffuseTexture=8;mesh.materials={mat};mesh.triangles[0].material=0;CHECK(r.setMesh(21,mesh));dm.mesh=21;dm.blendMode=3;dm.colour[3]=.5f;
  centre=sample(render(128,128,camera,{}, {dm}),70,70);CHECK(centre[0]>=13&&centre[0]<=15); // sampled alpha contributes once
+ // Mesh bank IDs use all 32 bits, independently of signed sprite sentinels.
+ terrainexport::Image highTexture;highTexture.width=highTexture.height=1;highTexture.rgba={0,255,0,255};
+ auto highMesh=mesh;auto highDraw=dm;highDraw.blendMode=0;highDraw.colour[3]=1;
+ highDraw.colour[0]=highDraw.colour[1]=highDraw.colour[2]=.5f;
+ for(uint32_t id:{0x80000000u,0xffffffffu}) {
+     CHECK(r.setTexture(id,highTexture));highMesh.materials[0].diffuseTexture=id;CHECK(r.setMesh(21,highMesh));
+     centre=sample(render(128,128,camera,{}, {highDraw}),70,70);
+     CHECK(centre[1]>250&&centre[0]<3&&r.missingTextures()==0&&r.drawnMeshes()==1);
+ }
  // Mesh diffuse sharing an animated sprite atlas must never leak frame 1.
  mesh.materials[0].diffuseTexture=7;dm.blendMode=0;dm.colour[3]=1;
  for(float uv:{.00001f,.99999f}){for(auto& vertex:mesh.vertices)vertex.v=uv;CHECK(r.setMesh(21,mesh));

@@ -105,6 +105,10 @@ Vec3 forwardFromVanillaTurns(float turns);
 // is higher (GFLimitLower(z, GetGroundSizeZAt)).
 float constantPlacementHeight(float height, float groundZ);
 
+// FableWin FindNearestSnappedPos (0x02049280): truncate XY, then add 0.5.
+// Z is supplied by the caller's terrain sample at the returned cell centre.
+Vec3 snapToCellCentre(float x, float y);
+
 // Bilinear terrain height at a MAP-LOCAL XY, i.e. the value a ground-resting
 // thing stores in PositionZ. Throws when the XY is outside the cell grid.
 float terrainHeightAt(const lev::File& level, float localX, float localY);

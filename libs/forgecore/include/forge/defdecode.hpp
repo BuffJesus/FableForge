@@ -25,6 +25,8 @@
 // interpretation is provided for the known scalar/string types.
 
 #include <cstdint>
+#include <map>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -86,14 +88,18 @@ struct FieldMerge {
     std::vector<uint8_t> payload;        // merged payload (valid iff ok)
     std::vector<std::string> autoMerged; // parts exactly one mod changed (or
                                          // several changed identically)
+    // Prefix, then each field: the selected version index; null means base.
+    // Symbols carried by a source must follow the part actually selected.
+    std::vector<std::optional<size_t>> sourceVersions;
     struct Conflict {
         std::string part;                // field name, or "<prefix>"
         std::vector<std::string> mods;   // mods that set differing values
         std::string winner;              // mod whose value was applied,
                                          // or "vanilla"
+        size_t partIndex = 0;             // 0 = prefix, otherwise field index + 1
     };
-    std::vector<Conflict> conflicts;     // parts >1 mod changed to differing
-                                         // values (load-order/pick decided)
+    std::vector<Conflict> conflicts;     // differing values or explicit part
+                                         // choices requiring contributor review
 };
 
 // `versions` = (modName, decoded) for each mod that changed this record, in load
@@ -102,13 +108,22 @@ struct FieldMerge {
 // load order unless `pick` names a mod ("vanilla"/"base" keeps the base value).
 // Returns ok=false if base or any version is not clean() or the field layouts
 // do not align (different def types) -- the caller must then merge whole-record.
+// Optional partPicks use this decode's indices (0 prefix, fields index+1).
+// They override `pick` for an eligible changing source or baseline alias, even
+// after contributors disappear or agree. An unavailable source falls back to
+// the record choice and stays in conflicts so callers can refuse or review it.
+// Unselected independent/identical edits keep auto-merging. Indices beyond this decode
+// throw; callers must establish persistent identity separately from these indices.
 FieldMerge mergeFields(const Decoded& base,
                        const std::vector<std::pair<std::string, Decoded>>& versions,
-                       const std::string& pick = {});
+                       const std::string& pick = {},
+                       const std::map<size_t, std::string>& partPicks = {});
 
 // Human-readable rendering of a field value using its type
 // (e.g. "391" for int32, "\"GATEWAY_IDLE_01\"" for CCharString,
 // "[2820]" for Vector_VCDefIndex__). Falls back to hex for unknown types.
+// Strings stop at NUL and escape quotes, backslashes, controls and non-ASCII
+// bytes (\xNN); no text encoding is inferred from the underlying game bytes.
 std::string formatValue(const DecodedField& field);
 
 } // namespace forge::defdecode

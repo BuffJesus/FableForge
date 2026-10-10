@@ -1,5 +1,6 @@
 #include "forge/bin.hpp"
 
+#include <algorithm>
 #include <cstring>
 #include <fstream>
 #include <iterator>
@@ -25,7 +26,7 @@ std::vector<uint8_t> readFile(const fs::path& path, const char* what) {
 }
 
 uint32_t u32At(const std::vector<uint8_t>& bytes, size_t pos, const char* what) {
-    if (pos + 4 > bytes.size()) {
+    if (pos > bytes.size() || bytes.size() - pos < 4) {
         throw std::runtime_error(std::string("bin: truncated reading ") + what);
     }
     uint32_t value;
@@ -60,14 +61,18 @@ NamesTable loadNames(const fs::path& path) {
         pos += 4;
         const size_t start = pos;
         while (pos < bytes.size() && bytes[pos] != 0) ++pos;
+        if (pos == bytes.size()) throw std::runtime_error("names.bin: unterminated name");
         std::string name(bytes.begin() + static_cast<ptrdiff_t>(start),
                          bytes.begin() + static_cast<ptrdiff_t>(pos));
         table.byOffset.emplace(nameOffset, name);
         table.ordered.emplace_back(crc, std::move(name));
         ++pos; // null terminator
     }
+    if (pos != bytes.size()) throw std::runtime_error("names.bin: trailing bytes after declared names");
     return table;
 }
+
+} // namespace
 
 // Fable's name CRC = the engine's crc0 (CCRC::Calc(0,...) / CCharString::ComputeCRC32
 // @0x00404310): reflected CRC-32, poly 0xEDB88320, seed 0, NO final inversion.
@@ -76,7 +81,7 @@ NamesTable loadNames(const fs::path& path) {
 // The old SilverChest formula (0xFFFFFFFF - mz_crc32) matched 0/13593 real names, so
 // every NEWLY appended name got an un-resolvable CRC and the engine could not find
 // the def by name (docs/DEF_LOAD_CONTRACT.md, def-load-contract RE 2026-07-24).
-uint32_t nameCrc(const std::string& name) {
+uint32_t nameCrc(std::string_view name) {
     if (name.empty()) return 0;
     uint32_t crc = 0; // seed 0 (NOT 0xFFFFFFFF)
     for (const unsigned char c : name) {
@@ -87,6 +92,7 @@ uint32_t nameCrc(const std::string& name) {
     return crc; // NO ^0xFFFFFFFF at the end
 }
 
+namespace {
 void putU32(std::vector<uint8_t>& out, uint32_t value) {
     const size_t at = out.size();
     out.resize(at + 4);
@@ -94,9 +100,13 @@ void putU32(std::vector<uint8_t>& out, uint32_t value) {
 }
 
 std::string nameFor(const std::map<uint32_t, std::string>& names, int32_t ref) {
-    if (ref < 0) return {};
-    const auto it = names.find(static_cast<uint32_t>(ref));
-    return it != names.end() ? it->second : std::string();
+    // Native GetStringAsCharArray/GetStringCRC special-case only -1.
+    // Other negative values must not become anonymous definition identities.
+    if (ref == -1) return {};
+    const auto it = ref < 0 ? names.end() : names.find(static_cast<uint32_t>(ref));
+    if (it == names.end())
+        throw std::runtime_error("bin: invalid names.bin reference " + std::to_string(ref));
+    return it->second;
 }
 
 } // namespace
@@ -115,10 +125,23 @@ File File::open(const fs::path& namesPath, const fs::path& binPath) {
 
     const uint32_t entryCount = u32At(bytes, 9, "entry count");
     const size_t mainTable = 13;
+    if (entryCount > (bytes.size() - mainTable) / 12)
+        throw std::runtime_error("bin: main table truncated");
     const size_t chunkCountPos = mainTable + static_cast<size_t>(entryCount) * 12;
     const uint32_t chunkCount = u32At(bytes, chunkCountPos, "chunk count");
     const size_t chunkTable = chunkCountPos + 4;
+    if (!chunkCount) throw std::runtime_error("bin: missing chunk end sentinel");
+    if (bytes.size() - chunkTable < 4 || chunkCount > (bytes.size() - chunkTable - 4) / 8)
+        throw std::runtime_error("bin: chunk table truncated");
     const size_t dataOffset = chunkTable + static_cast<size_t>(chunkCount) * 8 + 4;
+    const auto pairAt = [&](uint32_t index, size_t field) {
+        return u32At(bytes, chunkTable + static_cast<size_t>(index) * 8 + field, "chunk table");
+    };
+    const uint32_t totalCompressed = u32At(bytes, dataOffset - 4, "compressed total");
+    if (pairAt(0, 0) != 0 || pairAt(0, 4) != 0 ||
+        pairAt(chunkCount - 1, 0) != entryCount || pairAt(chunkCount - 1, 4) != totalCompressed ||
+        totalCompressed != bytes.size() - dataOffset)
+        throw std::runtime_error("bin: inconsistent chunk table extent");
 
     File file;
     file.binHeader_.assign(bytes.begin(), bytes.begin() + 9);
@@ -127,19 +150,15 @@ File File::open(const fs::path& namesPath, const fs::path& binPath) {
     file.entries_.reserve(entryCount);
 
     for (uint32_t chunk = 1; chunk < chunkCount; ++chunk) {
-        const auto pairAt = [&](uint32_t index, size_t field) {
-            return static_cast<int32_t>(
-                u32At(bytes, chunkTable + static_cast<size_t>(index) * 8 + field,
-                      "chunk table"));
-        };
-        const int32_t firstEntry = pairAt(chunk - 1, 0);
-        const int32_t compressedStart = pairAt(chunk - 1, 4);
-        const int32_t entriesEnd = pairAt(chunk, 0);
-        const int32_t compressedEnd = pairAt(chunk, 4);
-
-        const int32_t compressedLength = compressedEnd - compressedStart;
-        const int32_t entriesInChunk = entriesEnd - firstEntry;
-        if (compressedLength <= 0 || entriesInChunk <= 0) continue;
+        const uint32_t firstEntry = pairAt(chunk - 1, 0);
+        const uint32_t compressedStart = pairAt(chunk - 1, 4);
+        const uint32_t entriesEnd = pairAt(chunk, 0);
+        const uint32_t compressedEnd = pairAt(chunk, 4);
+        if (entriesEnd <= firstEntry || entriesEnd > entryCount ||
+            compressedEnd <= compressedStart || compressedEnd > totalCompressed)
+            throw std::runtime_error("bin: invalid chunk record or compressed range");
+        const uint32_t compressedLength = compressedEnd - compressedStart;
+        const uint32_t entriesInChunk = entriesEnd - firstEntry;
 
         const size_t src = dataOffset + static_cast<size_t>(compressedStart);
         if (src + static_cast<size_t>(compressedLength) > bytes.size()) {
@@ -147,21 +166,29 @@ File File::open(const fs::path& namesPath, const fs::path& binPath) {
         }
 
         std::vector<uint8_t> inflated(65536);
-        mz_ulong inflatedLen = static_cast<mz_ulong>(inflated.size());
-        const int rc = mz_uncompress(inflated.data(), &inflatedLen,
-                                     bytes.data() + src,
-                                     static_cast<mz_ulong>(compressedLength));
-        if (rc != MZ_OK) {
+        mz_stream stream{};
+        stream.next_in = bytes.data() + src;
+        stream.avail_in = compressedLength;
+        stream.next_out = inflated.data();
+        stream.avail_out = static_cast<unsigned>(inflated.size());
+        if (mz_inflateInit(&stream) != MZ_OK) throw std::runtime_error("bin: zlib initialization failed");
+        const int rc = mz_inflate(&stream, MZ_FINISH);
+        const auto inflatedLen = stream.total_out;
+        const auto consumed = stream.total_in;
+        mz_inflateEnd(&stream);
+        if (rc != MZ_STREAM_END || consumed != compressedLength) {
             throw std::runtime_error("bin: zlib inflate failed on chunk " +
                                      std::to_string(chunk) + " (rc " +
                                      std::to_string(rc) + ")");
         }
         inflated.resize(inflatedLen);
+        const size_t offsetTableSize = size_t(entriesInChunk) * 2;
+        if (entriesInChunk > inflated.size() / 2)
+            throw std::runtime_error("bin: chunk offset table truncated");
 
-        for (int32_t local = 0; local < entriesInChunk; ++local) {
+        for (uint32_t local = 0; local < entriesInChunk; ++local) {
             const uint32_t tableIndex =
                 static_cast<uint32_t>(firstEntry) + static_cast<uint32_t>(local);
-            if (tableIndex >= entryCount) break;
             const size_t row = mainTable + static_cast<size_t>(tableIndex) * 12;
 
             Entry entry;
@@ -172,9 +199,6 @@ File File::open(const fs::path& namesPath, const fs::path& binPath) {
             entry.indexInDefinition =
                 static_cast<int32_t>(u32At(bytes, row + 8, "def index"));
 
-            if (static_cast<size_t>(local) * 2 + 2 > inflated.size()) {
-                throw std::runtime_error("bin: chunk offset table truncated");
-            }
             uint16_t start;
             std::memcpy(&start, inflated.data() + static_cast<size_t>(local) * 2, 2);
             size_t end = inflated.size();
@@ -185,10 +209,11 @@ File File::open(const fs::path& namesPath, const fs::path& binPath) {
                             2);
                 end = next;
             }
-            if (start <= end && end <= inflated.size()) {
-                entry.data.assign(inflated.begin() + start,
-                                  inflated.begin() + static_cast<ptrdiff_t>(end));
-            }
+            if (start < offsetTableSize || (local == 0 && start != offsetTableSize) ||
+                start > end || end > inflated.size())
+                throw std::runtime_error("bin: invalid chunk payload offsets");
+            entry.data.assign(inflated.begin() + start,
+                              inflated.begin() + static_cast<ptrdiff_t>(end));
             file.entries_.push_back(std::move(entry));
         }
     }
@@ -208,11 +233,68 @@ std::optional<uint32_t> File::originalNameOffset(std::string_view name) const {
     return std::nullopt;
 }
 
+std::optional<uint32_t> File::savedNameOffset(std::string_view name) const {
+    if (const auto loaded = originalNameOffset(name)) return loaded;
+    uint64_t offset = 4;
+    std::map<std::string, uint32_t> seen;
+    auto visit = [&](const std::string& value) -> std::optional<uint32_t> {
+        if (seen.contains(value)) return std::nullopt;
+        if (offset > UINT32_MAX) throw std::runtime_error("names.bin: offset overflow");
+        const auto assigned = static_cast<uint32_t>(offset);
+        seen.emplace(value, assigned);
+        offset += value.size() + 5;
+        return value == name ? std::optional<uint32_t>(assigned) : std::nullopt;
+    };
+    // save() writes all loaded names, including duplicates, before appending
+    // missing definition and entry names. The first duplicate owns lookups.
+    for (const auto& [crc, value] : names_) {
+        if (const auto found = seen.find(value); found != seen.end()) {
+            offset += value.size() + 5;
+            continue;
+        }
+        if (const auto result = visit(value)) return result;
+    }
+    for (const auto& entry : entries_) {
+        if (const auto result = visit(entry.definition)) return result;
+        if (!entry.name.empty())
+            if (const auto result = visit(entry.name)) return result;
+    }
+    return std::nullopt;
+}
+
 const Entry* File::find(std::string_view name) const {
     for (const Entry& entry : entries_) {
         if (entry.name == name) return &entry;
     }
     return nullptr;
+}
+
+void File::extendStableLayout(const File& source) {
+    std::map<std::string, int32_t> ordinals;
+    for (size_t i = 0; i < source.entries_.size(); ++i) {
+        const auto& entry = source.entries_[i];
+        if (entry.indexInDefinition != ordinals[entry.definition]++)
+            throw std::runtime_error("whole-bank noncanonical definition ordinal at slot " + std::to_string(i));
+    }
+    for (size_t i = 0; i < std::min(entries_.size(), source.entries_.size()); ++i) {
+        const auto& a = entries_[i];
+        const auto& b = source.entries_[i];
+        if (a.name != b.name || a.definition != b.definition || a.indexInDefinition != b.indexInDefinition)
+            throw std::runtime_error("whole-bank numeric slot " + std::to_string(i) +
+                " has incompatible identities (" + a.definition + "/" + a.name +
+                " versus " + b.definition + "/" + b.name + ")");
+    }
+    for (size_t i = 0; i < std::min(names_.size(), source.names_.size()); ++i)
+        if (names_[i] != source.names_[i])
+            throw std::runtime_error("whole-bank name pools diverge at entry " + std::to_string(i) +
+                                     "; numeric name references require relocation");
+    if (binHeader_.size() != source.binHeader_.size() ||
+        (binHeader_.size() > 1 && binHeader_[1] != source.binHeader_[1]))
+        throw std::runtime_error("whole-bank platform headers disagree");
+    if (source.entries_.size() > entries_.size())
+        entries_.insert(entries_.end(), source.entries_.begin() + entries_.size(), source.entries_.end());
+    if (source.names_.size() > names_.size())
+        names_.insert(names_.end(), source.names_.begin() + names_.size(), source.names_.end());
 }
 
 void File::setEntryData(size_t index, std::vector<uint8_t> data) {
@@ -232,7 +314,47 @@ size_t File::addEntry(std::string definition, std::string name,
     return entries_.size() - 1;
 }
 
+size_t File::cloneEntry(size_t donorIndex, std::string newName) {
+    if(donorIndex>=entries_.size()) throw std::runtime_error("bin clone: donor index is out of range");
+    if(newName.empty() || newName.size()>127 ||
+       std::any_of(newName.begin(),newName.end(),[](unsigned char c){return c<32 || c>126;}))
+        throw std::runtime_error("bin clone: choose a nonempty name of up to 127 printable ASCII bytes");
+    std::map<std::string,uint64_t> counts;
+    for(const auto& entry:entries_) {
+        if(entry.name==newName) throw std::runtime_error("bin clone: new name already identifies a record");
+        auto& count=counts[entry.definition];
+        if(count>0x7fffffffu || entry.indexInDefinition!=int32_t(count))
+            throw std::runtime_error("bin clone: existing definition ordinals are not canonical");
+        ++count;
+    }
+    const auto& donor=entries_[donorIndex];
+    if(donor.data.size()>65534) throw std::runtime_error("bin clone: donor payload exceeds chunk capacity");
+    const auto ordinal=counts[donor.definition];
+    if(ordinal>0x7fffffffu) throw std::runtime_error("bin clone: definition ordinal overflow");
+    Entry copy=donor;copy.name=std::move(newName);copy.indexInDefinition=int32_t(ordinal);
+    entries_.push_back(std::move(copy));return entries_.size()-1;
+}
+
 void File::save(const fs::path& namesPath, const fs::path& binPath) const {
+    if (binHeader_.size() != 9 || namesHeader_.size() != 20)
+        throw std::runtime_error("bin: cannot save without loaded file headers");
+    std::error_code identityError;
+    if (fs::weakly_canonical(namesPath) == fs::weakly_canonical(binPath) ||
+        fs::equivalent(namesPath, binPath, identityError))
+        throw std::runtime_error("bin: names and game banks require distinct output files");
+    // A single record needs its u16 offset in the reader's 64-KiB chunk buffer.
+    // Refuse before opening either output, including when replacing old files.
+    const auto validateName = [](const std::string& name) {
+        if (name.find('\0') != std::string::npos)
+            throw std::runtime_error("names.bin: embedded NUL in name");
+    };
+    for (const auto& [crc, name] : names_) validateName(name);
+    for (const auto& entry : entries_) {
+        if (entry.data.size() > 65534)
+            throw std::runtime_error("bin: record payload exceeds 64-KiB chunk capacity");
+        validateName(entry.definition);
+        validateName(entry.name);
+    }
     // Name table: keep the loaded order (offsets recompute deterministically,
     // so an unchanged name set writes byte-identical entries), append any new
     // names referenced by entries.
@@ -340,7 +462,9 @@ void File::save(const fs::path& namesPath, const fs::path& binPath) const {
     std::vector<uint8_t> namesOut(namesHeader_.begin(), namesHeader_.end());
     const uint32_t nameCount = static_cast<uint32_t>(names.size());
     std::memcpy(namesOut.data() + 8, &nameCount, 4);
-    const uint32_t tableSize = nextOffset - 4;
+    // ReadTable (FableWin 02FCDEA0) copies this many bytes starting at +16,
+    // including the four-byte prefix before the CRC/name records at +20.
+    const uint32_t tableSize = nextOffset;
     std::memcpy(namesOut.data() + 12, &tableSize, 4);
     for (const auto& [crc, name] : names) {
         putU32(namesOut, crc);

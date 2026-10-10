@@ -818,7 +818,8 @@ void App::drawDialogueViewport(const ImVec2& viewportOrigin, const ImVec2& size)
             ImGui::PopStyleVar();
         }
     ImGui::SetNextItemWidth(contentWidth);
-    if(ImGui::SliderFloat("##dialogue_time",&dialogueTime_,0,duration,"%.2f s")) {
+    if(ImGui::SliderFloat("##dialogue_time",&dialogueTime_,0,duration,"%.2f s",
+                          ImGuiSliderFlags_NoRoundToFormat)) {
         dialogueMotionPlaying_=false;
         if(dialogueAudio_) dialogueAudio_->seek(dialogueTime_,dialogueError_);
     }

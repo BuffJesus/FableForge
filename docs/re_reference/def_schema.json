@@ -15498,7 +15498,7 @@
       },
       {
         "name": "SheatheObject",
-        "type": "?"
+        "type": "int32"
       },
       {
         "name": "SheatheObjectAlwaysVisible",
@@ -15538,7 +15538,7 @@
       },
       {
         "name": "MissileLoadCarrySlot",
-        "type": "?"
+        "type": "int32"
       },
       {
         "name": "ProjectileWeaponHelperNameTip",
@@ -15547,6 +15547,14 @@
       {
         "name": "ProjectileWeaponHelperNameBase",
         "type": "?"
+      },
+      {
+        "name": "Shot",
+        "type": "int32"
+      },
+      {
+        "name": "Ammo",
+        "type": "int32"
       },
       {
         "name": "TargetingRange",
@@ -15578,7 +15586,7 @@
       },
       {
         "name": "NextWeaponForBoss",
-        "type": "?"
+        "type": "int32"
       },
       {
         "name": "MeleeTargetingArc",

@@ -1,6 +1,7 @@
 // forge — command-line front end for the FableForge modding core.
 #include <algorithm>
 #include <cctype>
+#include <cwctype>
 #include <charconv>
 #include <cstdint>
 #include <cmath>
@@ -22,7 +23,21 @@
 #include <string_view>
 #include <vector>
 
+#ifdef _WIN32
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#endif
+
 #include "modpack.hpp"
+#include "worldreview.hpp"
+#include "namespacereview.hpp"
+#include "pendingbanks.hpp"
+#include "textwrite.hpp"
+#include "definitionwrite.hpp"
+#include "definitionclone.hpp"
+#include "textdisplay.hpp"
 #include "temporarydirectory.hpp"
 #include "forge/bin.hpp"
 #include "forge/themepalette.hpp"
@@ -43,6 +58,7 @@
 #include "forge/gamedata.hpp"
 #include "forge/questproject.hpp"
 #include "forge/defdecode.hpp"
+#include "forge/fmplinks.hpp"
 #include "forge/defedit.hpp"
 #include "forge/defschema.hpp"
 #include "forge/fse.hpp"
@@ -62,6 +78,8 @@
 #include "forge/rangecodec.hpp"
 #include "forge/stage.hpp"
 #include "forge/modorder.hpp"
+#include "forge/modchoices.hpp"
+#include "miniz/miniz.h"
 #include "forge/egocore.hpp"
 #include "forge/stb.hpp"
 #include "forge/stbbake.hpp"
@@ -83,6 +101,7 @@
 #include <windows.h>
 #include <tlhelp32.h>
 #endif
+#include "windowsprocess.hpp"
 
 using nlohmann::json;
 
@@ -93,6 +112,8 @@ int usage() {
         "forge-tools (the legacy FableForge CLI) -- quests, mods, saves, defs, scripts, UI, STB tooling; folded into forge over time\n"
         "\n"
         "usage:\n"
+        "  forge-tools world review-storage <file> [--json]\n"
+        "  forge-tools defs review-namespace <baseline-root> <source-root>... [--json]\n"
         "  forge wad list <file.wad>\n"
         "  forge wad extract <file.wad> <outdir> [filter]\n"
         "  forge wad metadata <file.wad> <filter>\n"
@@ -237,6 +258,7 @@ int usage() {
         "       [--schema <schema.json>] [--out <out-root>|--in-place]\n"
         "  forge ui clone-object-model <game-root> <donorObject> <newObject> <meshId>\n"
         "       [--schema <schema.json>] --out <out-root>\n"
+        "  forge defs clone <bin> <donor-name-or-index> <new-name> --out <bin> [--names <names.bin>] [--json]\n"
         "  forge defs set-field <bin> [--names <names.bin>] <entryName> <field> <value>\n"
         "  forge title add <game-root> <OBJECT_HERO_TITLE_NEW> --donor <OBJECT_HERO_TITLE_X>\n"
         "       --gui <textId> --desc <textId> --greet <groupId> --comment <groupId> --self <groupId>\n"
@@ -251,23 +273,25 @@ int usage() {
         "       [--id N] [--donor TEXT_*] [--speaker NAME] [--speech-bank FILE] [--json]\n"
         "  forge text import <text.big> <manifest.json> --out <text.big>|--in-place\n"
         "       [--donor TEXT_*] [--json]\n"
-        "  forge big list <file.big> [bank-filter] [--json]\n"
+        "  forge big list <file.big> [name-filter] [--json]\n"
         "  forge big extract <file.big> <out-dir> [bank-filter]\n"
         "  forge save read <FableSave-file> [--json]\n"
         "  forge mesh-info <graphics.big> <MESH_NAME|id|--last|--max-id> [--json]   (one MBANK_ALLMESHES entry decoded: counts, bounds, the Info blob)\n"
         "  forge assets missing-mesh <game-root> <def-schema.json> [--graphics <graphics.big>] [--json]\n"
         "  forge fmp list <file.fmp> [--json]\n"
+        "  forge fmp links <file.fmp> [--graphics] [--groups] [--json]   (named game or graphics link metadata; --groups keeps multi-target lists)\n"
+        "  forge fmp decode <file.fmp> <record> [--json]   (decode a raw GameBINEntries record)\n"
         "  forge fmp apply <base-root> <file.fmp> <out-root>\n"
         "  forge fmp extract <file.fmp> <out-dir> [bank-filter]\n"
         "  forge fmp export <base-root> <modded-root> <out.fmp>\n"
-        "  forge mods merge <base-root> <out-dir> --with <src>... [--fields schema.json] [--stage] [--json]\n"
+        "  forge mods merge <base-root> <out-dir> --with <src>... [--install-data] [--fields schema.json] [--picks file] [--stage] [--json]\n"
         "  forge mods list <game-root> [--json]                       the load order in <game-root>/forge_mods.json\n"
-        "  forge mods add <game-root> <source> [--name N] [--at i] [--note text]   (.fmp / .patch / .qst / a Data/ tree / an EgoCore Mods/<Name>/ folder)\n"
+        "  forge mods add <game-root> <source> [--name N] [--at i] [--note text] [--install-data]   (.fmp / .patch / .qst / a Data/ tree / an EgoCore Mods/<Name>/ folder)\n"
         "  forge mods remove <game-root> <name|index>   |   mods move <game-root> <name|index> <to>   |   mods enable|disable <game-root> <name|index>\n"
         "  forge mods build <game-root> <out-dir> [--fields schema.json] [--picks f] [--stage] [--json]   (= mods merge over the enabled order)\n"
         "  forge mods conflicts <game-root> [--picks f] [--json]      a dry-run build: ONE report over every stage (records, things, quests, strings, files), nothing written\n"
         "  forge mods deploy <game-root> [--picks f]   |   forge mods undeploy <game-root>   (deploy = revert the previous stage, rebuild from the order, stage; uninstall a mod = remove + deploy)\n"
-        "      picks: <game-root>/forge_mods_picks.txt by default, `key<TAB>winner` per line; keys <Record>, tng:<level>|<thing>, qst:<file>|<quest>, text:<lang>|<name>, file:<path>, fse:<quest key>; winner = a mod name or vanilla\n"
+        "      picks: <game-root>/forge_mods_picks.txt by default, `key<TAB>winner` per line; keys <Record>, tng:<level>|<thing>, qst:<file>|<quest>, text:<lang>|<name>, file:<path>, texture:<entry>, mesh:<entry>, fse:<quest key>; winner = a mod name or vanilla\n"
         "  forge patch info <file.patch>\n"
         "  forge patch apply <old-file> <file.patch> <out-file>\n"
         "  forge mods analyze <base-root> <mod-root>... [--json]\n"
@@ -1080,8 +1104,9 @@ int tngConflicts(const std::string& basePath,
 // (later mod wins) with a reported conflict count. Additions from all mods are
 // kept. Removals are NOT applied (conservative — keeps content). The level analog
 // of `defs merge`; turns whole-file-conflicting TNGs into a merged level.
-struct TngConflictRow { std::string thing; std::vector<std::string> mods; std::string winner; bool overridden = false; };
-struct TngMergeResult { size_t things = 0, applied = 0, added = 0, conflicts = 0; std::vector<TngConflictRow> rows; std::map<std::string, std::string> origin; };   // origin: thing key -> the mod whose version landed
+struct TngConflictRow { std::string thing; std::vector<std::string> mods; std::string winner; bool overridden = false, choiceUnavailable = false;
+                        std::vector<std::string> removalMods; };
+struct TngMergeResult { size_t things = 0, applied = 0, added = 0, conflicts = 0, deleted = 0; std::vector<TngConflictRow> rows; std::map<std::string, std::string> origin; };   // origin: thing key -> the mod whose version landed
 
 // Thing-level merge: base TNG + mod TNGs (load order) -> outPath. A thing is keyed
 // by UID; a thing only one mod changes auto-merges, same-thing changes take the
@@ -1090,17 +1115,24 @@ struct TngMergeResult { size_t things = 0, applied = 0, added = 0, conflicts = 0
 TngMergeResult mergeTngLabeled(const std::string& basePath,
                                const std::vector<std::pair<std::string, std::string>>& mods,   // (label, path) in load order
                                const std::string& outPath,
-                               const std::map<std::string, std::string>& picks) {
+                               const std::map<std::string, std::string>& picks,
+                               bool reviewChoices = false, bool wholeFile = false,
+                               const std::vector<std::vector<std::string>>* contributorGroups = nullptr,
+                               const std::map<std::string, std::vector<std::string>>* removals = nullptr) {
     namespace fs = std::filesystem;
-    auto out = forge::tng::File::parse(basePath);
+    const auto base = wholeFile && !fs::exists(basePath) ? forge::tng::File::parseText("") : forge::tng::File::parse(basePath);
+    auto out = wholeFile ? forge::tng::File::parse(mods.back().second) : base;
 
     std::map<std::string, std::string> baseSig;  // key -> signature
-    for (const auto& t : out.things()) baseSig[thingKey(t)] = thingSignature(t);
+    for (const auto& t : base.things()) baseSig[thingKey(t)] = thingSignature(t);
 
-    struct Version { std::string mod; forge::tng::Thing thing; bool isAdd; };
+    struct Version { std::string mod; forge::tng::Thing thing; bool isAdd;
+                     const std::vector<std::string>* contributors; };
     std::map<std::string, std::vector<Version>> versions;   // key -> every mod's version, in load order
     std::vector<std::string> order;                          // first-seen order for stable output
-    for (const auto& [label, path] : mods) {
+    for (size_t mi = 0; mi < mods.size(); ++mi) {
+        const auto& [label, path] = mods[mi];
+        const auto* contributors = contributorGroups ? &contributorGroups->at(mi) : nullptr;
         const auto mod = forge::tng::File::parse(path);
         for (const auto& mt : mod.things()) {
             const std::string key = thingKey(mt);
@@ -1108,44 +1140,124 @@ TngMergeResult mergeTngLabeled(const std::string& basePath,
             const bool isAdd = bit == baseSig.end();
             if (!isAdd && thingSignature(mt) == bit->second) continue;  // identical to base
             if (!versions.count(key)) order.push_back(key);
-            versions[key].push_back({label, mt, isAdd});
+            versions[key].push_back({label, mt, isAdd, contributors});
         }
     }
 
     TngMergeResult r;
     for (const auto& key : order) {
+        if (wholeFile && !picks.contains(key)) continue; // preserve this editor's full-file removals
         const auto& vs = versions[key];
         const Version* win = &vs.back();
-        bool overridden = false, keepBase = false;
+        std::string selectedContributor;
+        bool overridden = false, keepBase = false, unavailable = false;
         if (auto pk = picks.find(key); pk != picks.end()) {
             overridden = true;
             if (pk->second == "vanilla") keepBase = true;
-            else for (const auto& v : vs) if (v.mod == pk->second) win = &v;
+            else {
+                const auto selected = std::find_if(vs.begin(), vs.end(),
+                    [&](const auto& v) {
+                        return v.contributors ? std::find(v.contributors->begin(), v.contributors->end(),
+                            pk->second) != v.contributors->end() : v.mod == pk->second;
+                    });
+                if (selected == vs.end()) {
+                    if (!reviewChoices)
+                        throw std::runtime_error("mods TNG choice: " + key +
+                            " selects unavailable contributor " + pk->second +
+                            "; review or clear this saved choice");
+                    unavailable = true;
+                    overridden = false;
+                } else { win = &*selected; selectedContributor = pk->second; }
+            }
         }
         bool agree = true;   // the same edit from several mods is not a conflict
         for (const auto& v : vs) if (thingSignature(v.thing) != thingSignature(vs.front().thing)) { agree = false; break; }
-        if (vs.size() > 1 && !agree) {   // >1 mod wants a different version of this thing
+        if ((vs.size() > 1 && !agree) || picks.contains(key)) {
             TngConflictRow row;
-            row.thing = key; row.winner = keepBase ? "vanilla" : win->mod; row.overridden = overridden;
-            for (const auto& v : vs) row.mods.push_back(v.mod);
+            row.thing = key;
+            row.winner = keepBase ? "vanilla" : wholeFile && unavailable ? mods.back().first :
+                selectedContributor.empty() ? win->mod : selectedContributor;
+            row.overridden = overridden;
+            row.choiceUnavailable = unavailable;
+            for (const auto& v : vs) {
+                if (v.contributors) row.mods.insert(row.mods.end(), v.contributors->begin(), v.contributors->end());
+                else row.mods.push_back(v.mod);
+            }
             r.rows.push_back(row);
             ++r.conflicts;
         }
-        if (keepBase) continue;
-        r.origin[key] = agree ? vs.front().mod : win->mod;   // the same edit from several mods: the first that made it
-        if (win->isAdd) {
+        if (keepBase) {
+            if (wholeFile) {
+                const forge::tng::Thing* original = nullptr;
+                for (const auto& thing : base.things())
+                    if (thingKey(thing) == key) { original = &thing; break; }
+                size_t index = 0;
+                while (index < out.things().size() && thingKey(out.things()[index]) != key) ++index;
+                if (original) {
+                    if (index < out.things().size()) out.replaceThing(index, *original);
+                    else out.addThing(*original);
+                } else if (index < out.things().size()) out.removeThing(index);
+            }
+            continue;
+        }
+        if (wholeFile && unavailable) continue; // review keeps the effective whole-file result
+        r.origin[key] = agree && !overridden ? vs.front().mod :
+            selectedContributor.empty() ? win->mod : selectedContributor;
+        size_t index = 0;
+        while (index < out.things().size() && thingKey(out.things()[index]) != key) ++index;
+        if (index == out.things().size()) {
             out.addThing(win->thing);
             ++r.added;
         } else {
-            // Locate the (possibly moved) thing in out by key and replace.
-            for (size_t i = 0; i < out.things().size(); ++i)
-                if (thingKey(out.things()[i]) == key) { out.replaceThing(i, win->thing); break; }
+            out.replaceThing(index, win->thing);
         }
         ++r.applied;
     }
 
+    if (removals) {
+        // Preserve the composer's existing delete-after-merge policy. A saved
+        // thing winner cannot restore a thing removed by an active DeleteUIDs.
+        for (const auto& [key, labels] : *removals) {
+            size_t index = 0;
+            while (index < out.things().size() && thingKey(out.things()[index]) != key) ++index;
+            if (index == out.things().size()) continue; // vanilla for a new thing already means absence
+            if (picks.contains(key) && !reviewChoices) {
+                std::string sources;
+                for (const auto& label : labels) sources += (sources.empty() ? "" : ", ") + label;
+                throw std::runtime_error("mods TNG choice: " + key + " is removed by DeleteUIDs from " +
+                    sources + "; clear this saved choice or disable the removal before building");
+            }
+            out.removeThing(index);
+            ++r.deleted;
+            if (r.origin.erase(key)) {
+                --r.applied;
+                if (!baseSig.contains(key)) --r.added;
+            }
+            auto row = std::find_if(r.rows.begin(), r.rows.end(),
+                [&](const TngConflictRow& candidate) { return candidate.thing == key; });
+            if (row == r.rows.end() && (versions.contains(key) || picks.contains(key))) {
+                TngConflictRow removed;
+                removed.thing = key;
+                if (const auto changed = versions.find(key); changed != versions.end())
+                    for (const auto& version : changed->second) {
+                        if (version.contributors)
+                            removed.mods.insert(removed.mods.end(), version.contributors->begin(), version.contributors->end());
+                        else removed.mods.push_back(version.mod);
+                    }
+                r.rows.push_back(std::move(removed));
+                row = std::prev(r.rows.end());
+                ++r.conflicts;
+            }
+            if (row != r.rows.end()) {
+                row->winner = "removed";
+                row->overridden = false;
+                row->choiceUnavailable = picks.contains(key);
+                row->removalMods = labels;
+            }
+        }
+    }
     fs::create_directories(fs::path(outPath).parent_path());
-    std::ofstream ofs(outPath, std::ios::binary);
+    std::ofstream ofs(fs::path(outPath), std::ios::binary);
     const std::string serialized = out.serialize();
     ofs.write(serialized.data(), static_cast<std::streamsize>(serialized.size()));
     ofs.close();
@@ -1179,24 +1291,6 @@ TngModSettings readTngModSettings(const std::string& path) {
         }
     }
     return st;
-}
-
-// drop the things EgoCore's DeleteUIDs names from a merged TNG (by UID), in place on disk
-size_t dropThingsByUid(const std::string& tngPath, const std::vector<std::string>& uids) {
-    if (uids.empty()) return 0;
-    auto f = forge::tng::File::parse(tngPath);
-    size_t dropped = 0;
-    for (const auto& uid : uids) {
-        for (size_t i = 0; i < f.things().size(); ++i) {
-            if (auto u = f.things()[i].find("UID"); u && *u == uid) { f.removeThing(i); ++dropped; break; }
-        }
-    }
-    if (dropped) {
-        std::ofstream ofs(tngPath, std::ios::binary | std::ios::trunc);
-        const std::string out = f.serialize();
-        ofs.write(out.data(), std::streamsize(out.size()));
-    }
-    return dropped;
 }
 
 // `tng merge` form: the mod label is the TNG's folder name (or the file's)
@@ -1239,27 +1333,8 @@ int tngMerge(const std::string& basePath,
 // '#' comments. Winner = a mod's label or "vanilla" to keep base. Shared by
 // `defs merge --picks` and `qst merge --picks` (same GUI winner-picker output).
 std::map<std::string, std::string> loadPicks(const std::string& picksPath) {
-    std::map<std::string, std::string> picks;
-    if (picksPath.empty()) return picks;
-    if (!std::filesystem::is_regular_file(picksPath))
-        throw std::runtime_error("conflict choices are not a regular file: " + picksPath);
-    std::ifstream pf(picksPath);
-    if (!pf) throw std::runtime_error("cannot open conflict choices: " + picksPath);
-    std::string line;
-    while (std::getline(pf, line)) {
-        if (line.empty() || line[0] == '#') continue;
-        size_t sep = line.find('\t');
-        if (sep == std::string::npos) sep = line.find('=');
-        if (sep == std::string::npos) continue;
-        std::string rec = line.substr(0, sep);
-        std::string win = line.substr(sep + 1);
-        while (!rec.empty() && std::isspace((unsigned char)rec.back())) rec.pop_back();
-        while (!win.empty() && std::isspace((unsigned char)win.front())) win.erase(win.begin());
-        while (!win.empty() && std::isspace((unsigned char)win.back())) win.pop_back();
-        if (!rec.empty()) picks[rec] = win;
-    }
-    if (pf.bad() || !pf.eof()) throw std::runtime_error("cannot read conflict choices: " + picksPath);
-    return picks;
+    if (picksPath.empty()) return {};
+    return forge::modchoices::read(picksPath).picks;
 }
 
 // Decoded dump of a .qst quest registry (AddQuest flags + AddTestQuest entries).
@@ -1322,9 +1397,10 @@ int qstRoundtrip(const std::string& path) {
 forge::qst::MergeResult mergeQstLabeled(
     const std::string& basePath, const std::vector<std::pair<std::string, std::string>>& mods,   // (label, path)
     const std::string& outPath,
-    const std::map<std::string, std::string>& picks) {
+    const std::map<std::string, std::string>& picks,
+    bool reviewChoices = false, bool wholeFile = false) {
     namespace fs = std::filesystem;
-    const auto base = forge::qst::File::parse(basePath);
+    const auto base = wholeFile && !fs::exists(basePath) ? forge::qst::File::parseText("") : forge::qst::File::parse(basePath);
     std::vector<forge::qst::File> files;
     files.reserve(mods.size());
     std::vector<forge::qst::MergeInput> inputs;
@@ -1333,10 +1409,38 @@ forge::qst::MergeResult mergeQstLabeled(
         inputs.push_back({label, &files.back()});
     }
     auto result = forge::qst::merge(base, inputs, picks);
+    for (const auto& conflict : result.conflicts)
+        if (conflict.choiceUnavailable && !reviewChoices)
+            throw std::runtime_error("mods QST choice: " + fs::path(basePath).filename().string() +
+                "/" + conflict.name + " selects unavailable contributor " + picks.at(conflict.name) +
+                "; review or clear this saved choice");
+    if (wholeFile) {
+        // Apply explicit choices to the last complete registry, retaining its
+        // other removals and AddTestQuest statements instead of taking a union.
+        auto output = files.back();
+        result.applied = result.addedQuests = result.addedTests = 0;
+        for (auto& conflict : result.conflicts) {
+            if (!picks.contains(conflict.name)) continue;
+            if (conflict.choiceUnavailable) { conflict.winner = mods.back().first; continue; }
+            const auto* wanted = conflict.winner == "vanilla" ? base.findQuest(conflict.name) :
+                                                               result.merged.findQuest(conflict.name);
+            if (!wanted) {
+                result.applied += output.removeQuest(conflict.name);
+            } else {
+                if (!output.setQuestActive(conflict.name, wanted->active())) {
+                    output.appendStatement(wanted->raw);
+                    ++result.addedQuests;
+                }
+                ++result.applied;
+            }
+        }
+        result.merged = std::move(output);
+        std::erase_if(result.conflicts, [&](const auto& conflict) { return !picks.contains(conflict.name); });
+    }
 
     if (fs::path(outPath).has_parent_path())
         fs::create_directories(fs::path(outPath).parent_path());
-    std::ofstream ofs(outPath, std::ios::binary);
+    std::ofstream ofs(fs::path(outPath), std::ios::binary);
     const std::string serialized = result.merged.serialize();
     ofs.write(serialized.data(), static_cast<std::streamsize>(serialized.size()));
     return result;
@@ -4213,6 +4317,13 @@ int defsDecode(const std::string& gameRoot, const std::string& schemaPath,
 
     if (jsonOutput) {
         json fields = json::array();
+        const auto rawHex = [](const std::vector<uint8_t>& bytes) {
+            std::string hex;
+            hex.reserve(bytes.size()*2);
+            constexpr char digits[] = "0123456789abcdef";
+            for (uint8_t byte : bytes) { hex += digits[byte>>4]; hex += digits[byte&15]; }
+            return hex;
+        };
         for (const auto& f : decoded.fields) {
             char tag[16];
             std::snprintf(tag, sizeof(tag), "%08x", f.tag);
@@ -4220,12 +4331,14 @@ int defsDecode(const std::string& gameRoot, const std::string& schemaPath,
                               {"type", f.type},
                               {"tag", tag},
                               {"tag_ok", f.tagOk},
+                              {"raw_hex", rawHex(f.value)},
                               {"value", forge::defdecode::formatValue(f)}});
         }
         std::puts(json{{"index", index},
                        {"definition", entry->definition},
                        {"name", entry->name},
                        {"prefix_len", decoded.prefixLen},
+                       {"prefix_hex", rawHex(decoded.prefix)},
                        {"leftover", decoded.leftover},
                        {"all_tags_ok", decoded.allTagsOk},
                        {"fields", fields}}
@@ -4263,10 +4376,8 @@ std::string defaultDefSchemaPath() {
     std::vector<fs::path> cands = {"docs/re_reference/def_schema.json", "../docs/re_reference/def_schema.json"};
 #ifdef _WIN32
     {   // the release zip: docs/re_reference next to the exe (the GUI runs forge-tools from its own folder)
-        char buf[MAX_PATH];
-        const DWORD n = GetModuleFileNameA(nullptr, buf, MAX_PATH);
-        if (n > 0 && n < MAX_PATH) {
-            const fs::path exeDir = fs::path(std::string(buf, n)).parent_path();
+        const fs::path exeDir = albion::process::executableDirectory();
+        if (!exeDir.empty()) {
             cands.push_back(exeDir / "docs" / "re_reference" / "def_schema.json");
             cands.push_back(exeDir / ".." / "docs" / "re_reference" / "def_schema.json");
         }
@@ -4311,7 +4422,8 @@ int textureImport(const std::string& srcBig, const std::string& outBig,
     req.entryName = entry;
     req.add = add;
     if (!bank.empty()) req.subBank = bank;
-    if (!format.empty()) req.format = format;
+    // Omitted format preserves a replacement slot; only additions default to DXT1.
+    if (!format.empty() || !add) req.format = format;
     req.dims = dims;
     req.toolsDir = toolsDir;
     req.python = python;
@@ -4320,6 +4432,8 @@ int textureImport(const std::string& srcBig, const std::string& outBig,
     std::printf("$ %s\n", result.command.c_str());
     if (!result.output.empty()) std::printf("%s", result.output.c_str());
     if (result.exitCode != 0) {
+        for (const auto& error : result.validation.errors)
+            std::fprintf(stderr, "texture import: %s\n", error.c_str());
         std::fprintf(stderr, "texture import: writer exited %d\n", result.exitCode);
         return 1;
     }
@@ -4715,19 +4829,143 @@ int modsAnalyze(const std::string& baseRoot,
 // A picks file (record<TAB>winner, one per line; winner = a mod's folder name or
 // "vanilla") OVERRIDES load order PER CONFLICT — this is what the GUI's per-row
 // winner picker produces, letting users resolve each conflict however they want.
-// Proven on Aeon x Lost Content: ~98% of changes merge, ~2% are true conflicts.
+// Whole-bank unnamed components compose only within a verified shared numeric
+// namespace. Divergent namespaces require reference relocation first.
 // Writes <outDir>/names.bin + <outDir>/<bin>. mods are in load order.
+// Only unique named fixed-size scalars get persisted field choices initially.
+// Layout identity excludes values/relocated IDs and includes the whole ordered
+// name/type/tag shape plus prefix length. A schema/layout change cannot reuse a key.
+std::string defsLayoutIdentity(const forge::defdecode::Decoded& decoded) {
+    json fields = json::array();
+    for (const auto& field : decoded.fields) fields.push_back({field.name, field.type, field.tag});
+    return forge::modorder::sha256OfBytes(json({decoded.prefix.size(), fields}).dump());
+}
+
+size_t defsPickScalarSize(const forge::defdecode::DecodedField& field) {
+    if (field.type == "bool" || field.type == "uint8") return 1;
+    if (field.type == "int32" || field.type == "uint32" || field.type == "float" ||
+        field.type == "CDefIndex" || field.type == "CDefString") return 4;
+    return 0;
+}
+
+std::string defsFieldPickKey(const std::string& bin, const std::string& record,
+                            const std::string& definition, const std::string& layout,
+                            size_t part, const std::string& field) {
+    return "field:" + json::array({bin, record, definition, layout, part, field}).dump(-1, ' ', true);
+}
+
+void requireUnchangedUnnamedEntries(const forge::bin::File& base, const forge::bin::File& mod,
+                                   const std::string& bin, const std::string& label) {
+    size_t count = 0, first = 0;
+    for (size_t i = 0; i < mod.entries().size(); ++i) {
+        const auto& entry = mod.entries()[i];
+        if (!entry.name.empty()) continue;
+        const bool unchanged = i < base.entries().size() && base.entries()[i].name.empty() &&
+            base.entries()[i].definition == entry.definition &&
+            base.entries()[i].indexInDefinition == entry.indexInDefinition &&
+            base.entries()[i].data == entry.data;
+        if (!unchanged) { if (!count) first = i; ++count; }
+    }
+    if (count) throw std::runtime_error("Cannot compose " + bin + " from '" + label + "': " +
+        std::to_string(count) + " changed or new unnamed definition entries (first index " +
+        std::to_string(first) + "). Unnamed components have no safe cross-bank identity. " +
+        "Install this overhaul first and use its intact files as the baseline, then add supported named mods.");
+}
+
+bool hasChangedUnnamedEntries(const forge::bin::File& base, const forge::bin::File& mod) {
+    for (size_t i = 0; i < mod.entries().size(); ++i) {
+        const auto& e = mod.entries()[i];
+        if (e.name.empty() && (i >= base.entries().size() || !base.entries()[i].name.empty() ||
+            e.definition != base.entries()[i].definition ||
+            e.indexInDefinition != base.entries()[i].indexInDefinition ||
+            e.data != base.entries()[i].data)) return true;
+    }
+    return false;
+}
+
+// Whole banks carry numeric references without FMP relocation metadata. Reserve
+// their shared namespace and appended slots before allocating FMP additions.
+void reserveWholeBankLayout(forge::bin::File& planned, const forge::bin::File& source,
+                           const std::string& label) {
+    try {
+        planned.extendStableLayout(source);
+    } catch (const std::exception& error) {
+        throw std::runtime_error("Cannot compose changed or new unnamed definition entries from '" +
+            label + "': " + error.what() +
+            ". This bank needs reference relocation before its identities can be combined.");
+    }
+}
+
+// Mods composition currently writes game.bin only. Sibling banks can be carried
+// unchanged, including compression-only re-saves with stable existing name offsets.
+// Reject actual edits before any output rather than skipping the entire defs tree.
+void requireUnchangedSiblingBanks(const std::string& baseRoot, const std::string& sourceRoot,
+                                 const std::string& label) {
+    namespace fs = std::filesystem;
+    const fs::path baseDefs = fs::path(baseRoot) / "data" / "CompiledDefs";
+    const fs::path sourceDefs = fs::path(sourceRoot) / "data" / "CompiledDefs";
+    auto readNative = [](const fs::path& path) {
+        std::ifstream in(path, std::ios::binary);
+        if (!in) throw std::runtime_error("cannot read definition bank: " + path.string());
+        return std::vector<uint8_t>((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+    };
+    for (const char* bank : {"script.bin", "frontend.bin"}) {
+        if (!fs::exists(sourceDefs / bank)) continue;
+        bool unchanged = false;
+        if (fs::exists(baseDefs / bank)) {
+            const auto baseNames = readNative(baseDefs / "names.bin");
+            bool namesStable = !fs::exists(sourceDefs / "names.bin");
+            if (!namesStable) {
+                const auto sourceNames = readNative(sourceDefs / "names.bin");
+                auto count = [](const auto& bytes) {
+                    uint32_t result = 0;
+                    for (size_t i = 0; i < 4; ++i) result |= uint32_t(bytes[8 + i]) << (8 * i);
+                    return result;
+                };
+                namesStable = baseNames.size() >= 20 && sourceNames.size() >= baseNames.size() &&
+                    count(sourceNames) >= count(baseNames) &&
+                    std::equal(baseNames.begin() + 4, baseNames.begin() + 8, sourceNames.begin() + 4) &&
+                    std::equal(baseNames.begin() + 20, baseNames.end(), sourceNames.begin() + 20);
+            }
+            if (namesStable) {
+                unchanged = readNative(baseDefs / bank) == readNative(sourceDefs / bank);
+                if (!unchanged && fs::exists(sourceDefs / "names.bin")) {
+                    const auto base = openDefs(baseRoot, bank), source = openDefs(sourceRoot, bank);
+                    unchanged = base.entries().size() == source.entries().size() &&
+                        std::equal(base.entries().begin(), base.entries().end(), source.entries().begin(),
+                            [](const auto& a, const auto& b) {
+                                return a.name == b.name && a.definition == b.definition &&
+                                    a.indexInDefinition == b.indexInDefinition && a.data == b.data;
+                            });
+                }
+            }
+        }
+        if (!unchanged) throw std::runtime_error("Cannot compose " + std::string(bank) + " from '" + label +
+            "': changed sibling definition banks are not supported. Use the intact installation " +
+            "as the baseline; this source was not applied.");
+    }
+}
+
 int mergeDefs(const std::string& baseRoot, const std::string& outDir,
               const std::string& bin, const std::vector<std::string>& modRoots,
               const std::string& picksPath, const std::string& fieldSchemaPath,
               bool jsonOutput,
               json* reportOut = nullptr,                                     // `mods merge --json`: the report goes here, nothing is printed
               const std::map<std::string, std::string>* picksMap = nullptr,  // picks already parsed (the mods family), else picksPath
-              const std::vector<std::string>* rootLabels = nullptr) {        // mod labels parallel to modRoots, else the folder names
+              const std::vector<std::string>* rootLabels = nullptr,         // mod labels parallel to modRoots, else the folder names
+              const std::vector<forge::fmplinks::RecordLinks>* rootLinks = nullptr,
+              const std::map<std::string, uint32_t>* meshIds = nullptr,
+              const std::map<std::string, uint32_t>* textureIds = nullptr,
+              const std::map<std::string, uint32_t>* effectIds = nullptr,
+              const std::map<std::string, uint32_t>* textIds = nullptr,
+              const std::vector<bool>* numericFmpRoots = nullptr,
+              const std::vector<std::pair<std::string, std::map<std::string, uint32_t>>>*
+                  languageTextIds = nullptr,
+              bool reviewChoices = false, bool preserveWholeLayout = false) {
     namespace fs = std::filesystem;
 
     // Per-conflict overrides: record -> winning mod ("vanilla" = keep base).
-    const std::map<std::string, std::string> picks = picksMap ? *picksMap : loadPicks(picksPath);
+    std::map<std::string, std::string> picks = picksMap ? *picksMap : loadPicks(picksPath);
 
     // Optional field-level schema. When present, records that >1 mod changes are
     // composed PER FIELD (different fields auto-merge; only same-field/differing
@@ -4736,38 +4974,128 @@ int mergeDefs(const std::string& baseRoot, const std::string& outDir,
     if (!fieldSchemaPath.empty())
         schema = forge::defschema::Schema::load(fieldSchemaPath);
 
-    auto merged = openDefs(baseRoot, bin);
+    const auto baseline = openDefs(baseRoot, bin);
+    auto merged = baseline;
+    std::vector<bool> fixedBankRoots(modRoots.size(), false);
+    for (size_t mi = 0; mi < modRoots.size(); ++mi) {
+        if (numericFmpRoots && numericFmpRoots->at(mi)) continue;
+        const auto source = openDefs(modRoots[mi], bin);
+        if (!preserveWholeLayout && !hasChangedUnnamedEntries(baseline, source)) continue;
+        const auto label = rootLabels ? rootLabels->at(mi) : fs::path(modRoots[mi]).filename().string();
+        reserveWholeBankLayout(merged, source, label);
+        fixedBankRoots[mi] = true;
+    }
 
-    // Snapshot base payloads by name BEFORE mutating, for change detection.
+    // Snapshot baseline payloads separately from the reserved layout so appended
+    // whole-bank rows remain additions and existing rows retain three-way diffs.
     std::map<std::string, std::vector<uint8_t>> baseData;
     std::map<std::string, std::string> baseDef;  // name -> definition type
     std::map<std::string, size_t> nameToIndex;
+    std::map<std::string, size_t> nameCounts;
+    for (const auto& entry : merged.entries()) if (!entry.name.empty()) ++nameCounts[entry.name];
     for (size_t i = 0; i < merged.entries().size(); ++i) {
         const auto& e = merged.entries()[i];
-        if (e.name.empty()) continue;
-        baseData[e.name] = e.data;
-        baseDef[e.name] = e.definition;
-        nameToIndex[e.name] = i;
+        const auto key = e.name.empty() || nameCounts[e.name] > 1 ? forge::fmplinks::anonymousKey(i) : e.name;
+        if (!e.name.empty() && e.name.starts_with("@unnamed:"))
+            throw std::runtime_error("game.bin name collides with internal numeric identity: " + e.name);
+        if (i < baseline.entries().size()) {
+            baseData[key] = baseline.entries()[i].data;
+            baseDef[key] = e.definition;
+        }
+        nameToIndex[key] = i;
     }
 
     // Gather every mod version that changes/adds each record, in load order.
-    struct Version { std::string mod, definition; std::vector<uint8_t> data; };
+    struct Version {
+        std::string mod, definition;
+        std::vector<uint8_t> data;
+        std::vector<forge::fmplinks::Link> links;
+    };
     std::map<std::string, std::vector<Version>> changes;
     std::vector<std::string> order;  // first-seen order for stable output
     for (size_t mi = 0; mi < modRoots.size(); ++mi) {
         const auto& modRoot = modRoots[mi];
         const std::string modName = rootLabels && mi < rootLabels->size() ? (*rootLabels)[mi] : fs::path(modRoot).filename().string();
         const auto mod = openDefs(modRoot, bin);
-        for (const auto& me : mod.entries()) {
-            if (me.name.empty()) continue;
-            auto bit = baseData.find(me.name);
+        const bool numeric = numericFmpRoots && mi < numericFmpRoots->size() && numericFmpRoots->at(mi);
+        if (!numeric && !fixedBankRoots[mi]) requireUnchangedUnnamedEntries(baseline, mod, bin, modName);
+        for (size_t entryIndex = 0; entryIndex < mod.entries().size(); ++entryIndex) {
+            const auto& me = mod.entries()[entryIndex];
+            if (me.name.empty() && !numeric && !fixedBankRoots[mi]) continue;
+            if (me.name.empty() && (entryIndex >= merged.entries().size() ||
+                !merged.entries()[entryIndex].name.empty() ||
+                me.definition != merged.entries()[entryIndex].definition ||
+                me.indexInDefinition != merged.entries()[entryIndex].indexInDefinition))
+                throw std::runtime_error("FMP numeric identity changed at game.bin index " +
+                                         std::to_string(entryIndex));
+            const bool duplicateName = !me.name.empty() && nameCounts[me.name] > 1;
+            if (duplicateName && (entryIndex >= merged.entries().size() ||
+                me.name != merged.entries()[entryIndex].name ||
+                me.definition != merged.entries()[entryIndex].definition))
+                throw std::runtime_error("whole-bank duplicate name has ambiguous numeric identity: " + me.name);
+            const auto key = me.name.empty() || duplicateName ? forge::fmplinks::anonymousKey(entryIndex) : me.name;
+            auto bit = baseData.find(key);
             const bool isAdd = bit == baseData.end();
             const bool isChange = !isAdd && me.data != bit->second;
             if (!isAdd && !isChange) continue;  // identical to vanilla
-            if (changes.find(me.name) == changes.end()) order.push_back(me.name);
-            changes[me.name].push_back({modName, me.definition, me.data});
+            if (changes.find(key) == changes.end()) order.push_back(key);
+            std::vector<forge::fmplinks::Link> links;
+            if (rootLinks) {
+                if (rootLinks->size() != modRoots.size()) throw std::runtime_error("FMP links: source count mismatch");
+                const auto found = rootLinks->at(mi).find(duplicateName ? me.name : key);
+                if (found != rootLinks->at(mi).end()) links = found->second;
+            }
+            changes[key].push_back({modName, me.definition, me.data, std::move(links)});
         }
     }
+
+    std::set<std::string> unavailableRecordChoices;
+    for (const auto& [name, versions] : changes) {
+        const auto selected = picks.find(name);
+        if (selected == picks.end()) continue;
+        const auto& winner = selected->second;
+        if (winner.empty() || winner == "vanilla" || winner == "base" || winner == "none" || winner == "-" ||
+            std::any_of(versions.begin(), versions.end(), [&](const auto& v) { return v.mod == winner; })) continue;
+        if (!reviewChoices)
+            throw std::runtime_error("mods record choice: " + name +
+                " selects unavailable contributor " + winner + "; review or clear this saved choice");
+        unavailableRecordChoices.insert(name);
+        picks.erase(selected); // review the current fallback without allowing publication
+    }
+    auto chooseWhole = [&](const std::vector<Version>& versions, const std::string& pick) -> const Version* {
+        bool agree = true;
+        for (const auto& v : versions)
+            if (v.data != versions.front().data || v.definition != versions.front().definition) agree = false;
+        if (versions.size() == 1 || (agree && pick.empty())) return &versions.front();
+        if (pick == "vanilla" || pick == "base" || pick == "none" || pick == "-") return nullptr;
+        const Version* winner = nullptr;
+        for (const auto& v : versions) if (v.mod == pick) winner = &v;
+        return winner ? winner : &versions.back();
+    };
+    bool hasLinks = false;
+    for (const auto& [name, versions] : changes)
+        for (const auto& version : versions) if (!version.links.empty()) hasLinks = true;
+    if (hasLinks) {
+        if (!schema) schema = forge::defschema::Schema::load(defaultDefSchemaPath());
+        // Plan added identities in the same first-seen order and with the same
+        // whole-record selection as the writer. Existing identities stay fixed.
+        auto identities = merged;
+        for (const auto& name : order) {
+            if (nameToIndex.contains(name)) continue;
+            const auto pk = picks.find(name);
+            const auto* winner = chooseWhole(changes.at(name), pk == picks.end() ? "" : pk->second);
+            if (winner) identities.addEntry(winner->definition, name, winner->data);
+        }
+        // Compare final identities, rather than an FMP's temporary added IDs.
+        // Only selected missing targets will refuse in the final pass below.
+        for (auto& [name, versions] : changes) for (auto& version : versions) {
+            if (version.links.empty()) continue;
+            forge::bin::Entry entry{version.definition, name, 0, version.data};
+            version.data = forge::fmplinks::relink(entry, identities, *schema, version.links,
+                                                  true, meshIds, textureIds, effectIds, textIds);
+        }
+    }
+    forge::fmplinks::RecordLinks selectedLinks;
 
     // A residual conflict = a record (or a field within one) decided by load
     // order / a pick because >1 mod changed the same thing incompatibly.
@@ -4777,10 +5105,19 @@ int mergeDefs(const std::string& baseRoot, const std::string& outDir,
         std::string winner;               // whole-record winner, or "field-merged"
         bool fieldMerged = false;
         std::vector<forge::defdecode::FieldMerge::Conflict> fieldConflicts;
+        json fieldDetails = json::array();
     };
     std::vector<Conflict> conflicts;
     size_t applied = 0, addedTotal = 0, overridden = 0;
     size_t fieldMergedRecords = 0, autoFields = 0, fieldConflictParts = 0;
+
+    std::set<std::string> recordsWithFieldPicks;
+    for (const auto& [key, winner] : picks) {
+        if (!key.starts_with("field:")) continue;
+        const auto identity = json::parse(key.substr(6), nullptr, false);
+        if (identity.is_array() && identity.size() == 6 && identity[0] == bin && identity[1].is_string())
+            recordsWithFieldPicks.insert(identity[1].get<std::string>());
+    }
 
     for (const auto& name : order) {
         const auto& vers = changes[name];
@@ -4789,26 +5126,34 @@ int mergeDefs(const std::string& baseRoot, const std::string& outDir,
         auto pk = picks.find(name);
         const std::string pick = pk != picks.end() ? pk->second : std::string();
 
+        if (inBase && !baseData.contains(name)) {
+            if (pick == "vanilla" || pick == "base" || pick == "none" || pick == "-")
+                throw std::runtime_error("Cannot remove reserved whole-bank record " + name +
+                    ": other records may reference its numeric slot; choose a contributing source");
+            ++addedTotal;
+        }
+
         // Single mod touches it, and it exists (or is a lone add): apply as-is.
         // every mod that carries the same bytes agrees: no conflict, the shared version applies
         bool agree = true;
         for (const auto& v : vers) if (v.data != vers.front().data || v.definition != vers.front().definition) { agree = false; break; }
-        if (vers.size() == 1 || (agree && pick.empty())) {
+        if ((vers.size() == 1 || (agree && pick.empty())) && !recordsWithFieldPicks.contains(name)) {
             const auto& v = vers.front();
             if (inBase) merged.setEntryData(idx->second, v.data);
             else { nameToIndex[name] = merged.addEntry(v.definition, name, v.data);
                    ++addedTotal; }
             ++applied;
+            if (!v.links.empty()) selectedLinks[name] = v.links;
             continue;
         }
 
-        // >1 mod touches it -> conflict candidate. Try field-level merge first.
+        // Multiple versions or a saved field choice require field-level review.
         Conflict c;
         c.record = name;
         for (const auto& v : vers) c.mods.push_back(v.mod);
 
         bool didFieldMerge = false;
-        if (schema && inBase) {
+        if (schema && inBase && baseData.contains(name)) {
             const auto* def = forge::defdecode::resolveType(
                 *schema, baseDef[name], baseData[name]);
             bool aligned = def != nullptr;
@@ -4819,15 +5164,78 @@ int mergeDefs(const std::string& baseRoot, const std::string& outDir,
                 std::vector<std::pair<std::string, forge::defdecode::Decoded>> dvs;
                 for (const auto& v : vers)
                     dvs.emplace_back(v.mod, forge::defdecode::decode(v.data, *def));
-                const auto fm = forge::defdecode::mergeFields(baseDec, dvs, pick);
+                std::map<size_t, std::string> fieldKeys, partPicks;
+                if (baseDec.clean()) {
+                    const auto layout = defsLayoutIdentity(baseDec);
+                    for (size_t fi = 0; fi < baseDec.fields.size(); ++fi) {
+                        const auto& field = baseDec.fields[fi];
+                        const auto bytes = defsPickScalarSize(field);
+                        if (field.name.empty() || !field.tagOk || !bytes || field.value.size() != bytes ||
+                            std::count_if(baseDec.fields.begin(), baseDec.fields.end(),
+                                [&](const auto& other) { return other.name == field.name; }) != 1) continue;
+                        bool eligible = true;
+                        for (const auto& [label, decoded] : dvs)
+                            if (!decoded.clean() || decoded.fields.size() != baseDec.fields.size() ||
+                                decoded.fields[fi].value.size() != bytes) eligible = false;
+                        if (!eligible) continue;
+                        const auto key = defsFieldPickKey(bin, name, baseDef[name], layout, fi+1, field.name);
+                        fieldKeys[fi+1] = key;
+                        if (const auto selected = picks.find(key); selected != picks.end()) partPicks[fi+1] = selected->second;
+                    }
+                }
+                const auto fm = forge::defdecode::mergeFields(baseDec, dvs, pick, partPicks);
                 if (fm.ok) {
+                    std::set<size_t> unavailableFieldChoices;
+                    for (const auto& field : fm.conflicts) {
+                        const auto selected = partPicks.find(field.partIndex);
+                        if (selected == partPicks.end()) continue;
+                        const auto& winner = selected->second;
+                        if (winner == "vanilla" || winner == "base" || winner == "none" || winner == "-" ||
+                            std::find(field.mods.begin(), field.mods.end(), winner) != field.mods.end()) continue;
+                        if (!reviewChoices)
+                            throw std::runtime_error("mods field choice: " + name + " / " + field.part +
+                                " selects unavailable contributor " + winner +
+                                "; review or clear this saved choice");
+                        unavailableFieldChoices.insert(field.partIndex);
+                    }
                     merged.setEntryData(idx->second, fm.payload);
+                    for (size_t vi = 0; vi < vers.size(); ++vi) {
+                        if (vers[vi].links.empty()) continue;
+                        const forge::bin::Entry entry{vers[vi].definition, name, 0, vers[vi].data};
+                        for (const auto& link : vers[vi].links) {
+                            const auto part = forge::fmplinks::locate(entry, *schema, link).part;
+                            if (fm.sourceVersions.at(part) == vi) selectedLinks[name].push_back(link);
+                        }
+                    }
                     ++applied;
                     ++fieldMergedRecords;
                     autoFields += fm.autoMerged.size();
                     fieldConflictParts += fm.conflicts.size();
                     c.fieldMerged = true;
                     c.fieldConflicts = fm.conflicts;
+                    if (jsonOutput || reportOut) {
+                        for (const auto& field : fm.conflicts) {
+                            auto valueOf = [&](const forge::defdecode::Decoded& decoded) {
+                                if (field.partIndex) return decoded.fields.at(field.partIndex - 1);
+                                forge::defdecode::DecodedField prefix;
+                                prefix.type = "bytes";
+                                prefix.value = decoded.prefix;
+                                return prefix;
+                            };
+                            const auto baseline = valueOf(baseDec);
+                            json values = json::array();
+                            for (const auto& [mod, decoded] : dvs) {
+                                if (std::find(field.mods.begin(), field.mods.end(), mod) != field.mods.end())
+                                    values.push_back({{"mod", mod}, {"value", forge::defdecode::formatValue(valueOf(decoded))}});
+                            }
+                            c.fieldDetails.push_back({{"field", field.part}, {"mods", field.mods},
+                                {"winner", field.winner}, {"part_index", field.partIndex},
+                                {"choice_key", fieldKeys.contains(field.partIndex) ? fieldKeys.at(field.partIndex) : ""},
+                                {"choice_unavailable", unavailableFieldChoices.contains(field.partIndex)},
+                                {"type", baseline.type}, {"base_value", forge::defdecode::formatValue(baseline)},
+                                {"values", values}});
+                        }
+                    }
                     c.winner = fm.conflicts.empty() ? "field-merged (clean)"
                                                     : "field-merged";
                     didFieldMerge = true;
@@ -4837,13 +5245,7 @@ int mergeDefs(const std::string& baseRoot, const std::string& outDir,
 
         if (!didFieldMerge) {
             // Whole-record resolution by pick override, else load order.
-            const bool keepBase = pick == "vanilla" || pick == "base" ||
-                                  pick == "none" || pick == "-";
-            const Version* win = nullptr;
-            if (!pick.empty() && !keepBase) {
-                for (const auto& v : vers) if (v.mod == pick) win = &v;
-            }
-            if (win == nullptr && !keepBase) win = &vers.back();  // load order
+            const Version* win = chooseWhole(vers, pick);
             if (win != nullptr) {
                 if (inBase) merged.setEntryData(idx->second, win->data);
                 else { nameToIndex[name] = merged.addEntry(win->definition, name,
@@ -4851,6 +5253,7 @@ int mergeDefs(const std::string& baseRoot, const std::string& outDir,
                        ++addedTotal; }
                 ++applied;
                 c.winner = win->mod;
+                if (!win->links.empty()) selectedLinks[name] = win->links;
             } else {
                 c.winner = "vanilla";  // keepBase: leave base untouched
             }
@@ -4862,6 +5265,29 @@ int mergeDefs(const std::string& baseRoot, const std::string& outDir,
         if (!c.fieldMerged || !c.fieldConflicts.empty()) conflicts.push_back(c);
     }
 
+    for (const auto& [name, links] : selectedLinks) {
+        const auto found = nameToIndex.find(name);
+        if (found == nameToIndex.end()) throw std::runtime_error("FMP links: selected owner is absent: " + name);
+        const auto* entry = &merged.entries().at(found->second);
+        auto owner = *entry;
+        if (owner.name.empty()) owner.name = name;
+        auto data = forge::fmplinks::relink(owner, merged, *schema, links,
+                                            false, meshIds, textureIds, effectIds, textIds);
+        if (languageTextIds)
+            for (const auto& link : links)
+                if (forge::fmplinks::locate(owner, *schema, link).destination ==
+                    forge::fmplinks::Destination::TextEntry) {
+                    const auto canonical = textIds->at(link.target);
+                    for (const auto& [language, ids] : *languageTextIds) {
+                        const auto foundText = ids.find(link.target);
+                        if (foundText == ids.end() || foundText->second != canonical)
+                            throw std::runtime_error("FMP text links: " + language +
+                                " has no matching TextID for " + link.target);
+                    }
+                }
+        merged.setEntryData(found->second, std::move(data));
+    }
+
     // Write a game-root layout (<outDir>/data/CompiledDefs/) so the result is a
     // drop-in overlay: directly diffable, stageable, and installable.
     const fs::path defsOut = fs::path(outDir) / "data" / "CompiledDefs";
@@ -4871,14 +5297,13 @@ int mergeDefs(const std::string& baseRoot, const std::string& outDir,
     if (jsonOutput || reportOut) {
         json conflictRows = json::array();
         for (const auto& c : conflicts) {
-            json fc = json::array();
-            for (const auto& f : c.fieldConflicts)
-                fc.push_back({{"field", f.part}, {"mods", f.mods},
-                              {"winner", f.winner}});
             conflictRows.push_back({{"record", c.record}, {"mods", c.mods},
+                                    {"definition", baseDef.contains(c.record) ? baseDef.at(c.record) : changes.at(c.record).front().definition},
+                                    {"index", nameToIndex.contains(c.record) ? json(nameToIndex.at(c.record)) : json(nullptr)},
                                     {"winner", c.winner},
                                     {"field_merged", c.fieldMerged},
-                                    {"field_conflicts", fc},
+                                    {"field_conflicts", c.fieldDetails},
+                                    {"choice_unavailable", unavailableRecordChoices.contains(c.record)},
                                     {"overridden", picks.count(c.record) > 0}});
         }
         json labels = json::array();
@@ -7178,6 +7603,31 @@ int questCard(const std::string& gameRoot, const std::string& schemaPath,
 // parses <value> into the field's typed bytes, rewrites only that value, and
 // writes the modified bin (+ names.bin) to --out or a "<bin>.set-field.bin"
 // sibling. Untouched entries stay byte-identical (semantic re-serialize).
+int defsClone(const std::string& binPath,const std::string& namesPath,const std::string& donor,
+              const std::string& newName,const std::string& outPath,bool asJson) {
+    namespace fs=std::filesystem;
+    const fs::path input=fs::u8path(binPath),names=namesPath.empty()?input.parent_path()/"names.bin":fs::u8path(namesPath);
+    auto file=forge::bin::File::open(names,input);std::optional<size_t> exact;
+    if(!donor.empty()) for(size_t i=0;i<file.entries().size();++i) if(file.entries()[i].name==donor) {
+        if(exact) throw std::runtime_error("defs clone: donor name is ambiguous; use its record index");exact=i;
+    }
+    size_t index=0;
+    if(exact) index=*exact;
+    else {
+        const auto parsed=std::from_chars(donor.data(),donor.data()+donor.size(),index);
+        if(parsed.ec!=std::errc{} || parsed.ptr!=donor.data()+donor.size())
+            throw std::runtime_error("defs clone: choose an exact donor name or complete unsigned index");
+    }
+    const auto added=forge::defedit::cloneEntry(file,index,newName);const auto output=fs::u8path(outPath);
+    albion::definitionwrite::publishClone(file,names,input,output,true);
+    const auto& entry=file.entries()[added];
+    if(asJson) std::puts(json{{"bin",output.string()},{"names",(output.parent_path()/"names.bin").string()},
+        {"donor_index",index},{"entry_index",added},{"definition",entry.definition},{"entry_name",entry.name},
+        {"index_in_definition",entry.indexInDefinition},{"payload_size",entry.data.size()}}.dump(2).c_str());
+    else std::printf("Cloned record %zu to %zu: %s\n",index,added,entry.name.c_str());
+    return 0;
+}
+
 int defsSetField(const std::string& binPath, const std::string& namesPath,
                  const std::string& schemaPath, const std::string& entry,
                  const std::string& field, const std::string& value,
@@ -7192,21 +7642,21 @@ int defsSetField(const std::string& binPath, const std::string& namesPath,
 
     forge::defedit::SetFieldResult r;
     try {
-        // Prefer an exact name match; fall back to a numeric index for
-        // unnamed sub-defs (e.g. "12345").
-        if (file.find(entry) != nullptr) {
-            r = forge::defedit::setField(file, schema, entry, field, value);
-        } else {
-            size_t idx = 0;
-            try {
-                idx = std::stoul(entry);
-            } catch (const std::exception&) {
-                std::fprintf(stderr, "defs set-field: no entry named %s\n",
-                             entry.c_str());
-                return 1;
-            }
-            r = forge::defedit::setField(file, schema, idx, field, value);
+        // Exact names take priority; ambiguous names must never select a first row.
+        std::optional<size_t> exact;
+        if (!entry.empty()) for (size_t i=0;i<file.entries().size();++i) {
+            if(file.entries()[i].name!=entry) continue;
+            if(exact) throw std::runtime_error("entry name is ambiguous; use its numeric record index");
+            exact=i;
         }
+        size_t index=0;
+        if(exact) index=*exact;
+        else {
+            const auto parsed=std::from_chars(entry.data(),entry.data()+entry.size(),index);
+            if(parsed.ec!=std::errc{} || parsed.ptr!=entry.data()+entry.size())
+                throw std::runtime_error("entry must be an exact name or complete unsigned record index");
+        }
+        r=forge::defedit::setField(file,schema,index,field,value);
     } catch (const std::exception& e) {
         std::fprintf(stderr, "defs set-field: %s\n", e.what());
         return 1;
@@ -7221,9 +7671,11 @@ int defsSetField(const std::string& binPath, const std::string& namesPath,
         binOut = binIn.parent_path() /
                  (binIn.stem().string() + ".set-field" + binIn.extension().string());
     }
-    if (binOut.has_parent_path()) fs::create_directories(binOut.parent_path());
     const fs::path namesOut = binOut.parent_path() / "names.bin";
-    file.save(namesOut, binOut);
+    auto outputName=binOut.filename().string();
+    std::transform(outputName.begin(),outputName.end(),outputName.begin(),[](unsigned char c){return char(std::tolower(c));});
+    const bool trackRecovery=outputName=="game.bin" || outputName=="frontend.bin" || outputName=="script.bin";
+    albion::definitionwrite::publish(file,namesIn,binOut,trackRecovery);
 
     if (jsonOutput) {
         std::puts(json{{"bin", binOut.string()},
@@ -7496,9 +7948,22 @@ int questMaster(const std::string& qstPath,
 // two files byte-identical? Streamed (the GB packs ship 900 MB STBs), size first.
 bool filesIdentical(const std::filesystem::path& a, const std::filesystem::path& b) {
     std::error_code ec;
-    if (!std::filesystem::exists(a, ec) || !std::filesystem::exists(b, ec)) return false;
-    if (std::filesystem::file_size(a, ec) != std::filesystem::file_size(b, ec)) return false;
+    if (!std::filesystem::exists(a, ec)) {
+        if (ec) throw std::runtime_error("cannot inspect " + a.string() + ": " + ec.message());
+        return false;
+    }
+    if (!std::filesystem::exists(b, ec)) {
+        if (ec) throw std::runtime_error("cannot inspect " + b.string() + ": " + ec.message());
+        return false;
+    }
+    const auto aSize = std::filesystem::file_size(a, ec);
+    if (ec) throw std::runtime_error("cannot inspect " + a.string() + ": " + ec.message());
+    const auto bSize = std::filesystem::file_size(b, ec);
+    if (ec) throw std::runtime_error("cannot inspect " + b.string() + ": " + ec.message());
+    if (aSize != bSize) return false;
     std::ifstream fa(a, std::ios::binary), fb(b, std::ios::binary);
+    if (!fa) throw std::runtime_error("cannot read " + a.string());
+    if (!fb) throw std::runtime_error("cannot read " + b.string());
     std::vector<char> ba(1 << 20), bb(1 << 20);
     while (fa && fb) {
         fa.read(ba.data(), std::streamsize(ba.size()));
@@ -7506,18 +7971,19 @@ bool filesIdentical(const std::filesystem::path& a, const std::filesystem::path&
         if (fa.gcount() != fb.gcount() || !std::equal(ba.begin(), ba.begin() + fa.gcount(), bb.begin())) return false;
         if (fa.gcount() == 0) break;
     }
+    if (fa.bad() || fb.bad()) throw std::runtime_error("cannot finish reading " + a.string() + " or " + b.string());
     return true;
 }
 
 std::vector<uint8_t> readAllBytes(const std::string& path) {
-    std::ifstream f(path, std::ios::binary);
+    std::ifstream f(std::filesystem::path(path), std::ios::binary);
     if (!f) throw std::runtime_error("cannot open " + path);
     return std::vector<uint8_t>((std::istreambuf_iterator<char>(f)),
                                 std::istreambuf_iterator<char>());
 }
 
 void writeAllBytes(const std::string& path, const std::vector<uint8_t>& data) {
-    std::ofstream f(path, std::ios::binary);
+    std::ofstream f(std::filesystem::path(path), std::ios::binary);
     if (!f) throw std::runtime_error("cannot write " + path);
     f.write(reinterpret_cast<const char*>(data.data()), (std::streamsize)data.size());
 }
@@ -7545,10 +8011,59 @@ int patchApply(const std::string& oldPath, const std::string& patchPath,
     return 0;
 }
 
+// Some historic FMPs put a u32 12345 and one zlib stream around the BIG file.
+// Inflate only that exact framing, with a hard cap and no trailing bytes. The
+// original stays untouched; openFully retains normalized bytes after scratch
+// cleanup so lazy entry reads never refer to the removed temporary file.
+forge::big::File openFmpPackage(const std::string& path) {
+    std::ifstream header(path, std::ios::binary);
+    if (!header) throw std::runtime_error("fmp: cannot open " + path);
+    uint8_t prefix[4]{};
+    header.read(reinterpret_cast<char*>(prefix), 4);
+    if (header.gcount() != 4 ||
+        !(prefix[0] == 0x39 && prefix[1] == 0x30 && prefix[2] == 0 && prefix[3] == 0))
+        return forge::big::File::open(path);
+
+    const auto packed = readAllBytes(path);
+    if (packed.size() <= 4 || packed.size() - 4 > std::numeric_limits<unsigned>::max())
+        throw std::runtime_error("fmp: invalid compressed wrapper length");
+    constexpr size_t maxBytes = 256u * 1024u * 1024u;
+    mz_stream stream{};
+    if (mz_inflateInit(&stream) != MZ_OK)
+        throw std::runtime_error("fmp: cannot initialize compressed wrapper reader");
+    stream.next_in = packed.data() + 4;
+    stream.avail_in = static_cast<unsigned>(packed.size() - 4);
+    std::vector<uint8_t> plain;
+    std::vector<uint8_t> chunk(32768);
+    int rc = MZ_OK;
+    do {
+        stream.next_out = chunk.data();
+        stream.avail_out = static_cast<unsigned>(chunk.size());
+        rc = mz_inflate(&stream, MZ_NO_FLUSH);
+        const size_t produced = chunk.size() - stream.avail_out;
+        if (produced > maxBytes - plain.size()) {
+            mz_inflateEnd(&stream);
+            throw std::runtime_error("fmp: compressed wrapper exceeds 256 MiB");
+        }
+        plain.insert(plain.end(), chunk.begin(), chunk.begin() + produced);
+    } while (rc == MZ_OK);
+    const bool complete = rc == MZ_STREAM_END && stream.avail_in == 0;
+    mz_inflateEnd(&stream);
+    if (!complete) throw std::runtime_error("fmp: incomplete or trailing compressed wrapper");
+    if (plain.size() < 4 || plain[0] != 'B' ||
+        !((plain[1] == 'I' && plain[2] == 'G' && plain[3] == 'B') ||
+          (plain[1] == 0 && plain[2] == 0 && plain[3] == 0)))
+        throw std::runtime_error("fmp: compressed wrapper does not contain BIG data");
+    const albion::detail::TemporaryDirectory scratch("fmp-wrapper-");
+    const auto normalized = scratch.path() / "package.fmp";
+    writeAllBytes(normalized.string(), plain);
+    return forge::big::File::openFully(normalized);
+}
+
 // List an .fmp (or any BIG) archive: banks and their changed entries. An .fmp is
 // a record-delta package, so this is a mod's footprint by container.
 int fmpList(const std::string& path, bool jsonOutput) {
-    const auto file = forge::big::File::open(path);
+    const auto file = openFmpPackage(path);
     size_t totalEntries = 0;
     for (const auto& b : file.banks()) totalEntries += b.entries.size();
 
@@ -7559,6 +8074,7 @@ int fmpList(const std::string& path, bool jsonOutput) {
             json ents = json::array();
             for (const auto& e : b.entries)
                 ents.push_back({{"name", e.name}, {"definition", e.definition},
+                                {"id", e.id}, {"type", e.type},
                                 {"length", e.length}});
             banks.push_back({{"bank", b.name}, {"count", b.entries.size()},
                              {"entries", ents}});
@@ -7594,7 +8110,7 @@ int fmpList(const std::string& path, bool jsonOutput) {
 int fmpExtract(const std::string& fmpPath, const std::string& outDir,
                const std::string& bankFilter) {
     namespace fs = std::filesystem;
-    const auto pkg = forge::big::File::open(fmpPath);
+    const auto pkg = openFmpPackage(fmpPath);
     const std::string needle = lowered(bankFilter);
     size_t written = 0;
 
@@ -7626,38 +8142,57 @@ int fmpExtract(const std::string& fmpPath, const std::string& outDir,
 int textShow(const std::string& path, const std::string& which, bool jsonOutput) {
     const auto big = forge::big::File::open(path);
     const forge::big::Entry* found = nullptr;
-    // by-name across banks, else by numeric id
+    // Exact names take precedence over complete decimal IDs. Never choose a
+    // different bank silently when the requested identity is ambiguous.
     for (const auto& b : big.banks())
         for (const auto& e : b.entries)
-            if (e.name == which) { found = &e; break; }
+            if (e.name == which) {
+                if(found) throw std::runtime_error("text show: entry name is ambiguous: " + which);
+                found = &e;
+            }
     if (found == nullptr) {
-        try {
-            uint32_t id = (uint32_t)std::stoul(which);
+        uint32_t id=0;
+        const auto parsed=std::from_chars(which.data(),which.data()+which.size(),id);
+        if(parsed.ec==std::errc{} && parsed.ptr==which.data()+which.size()) {
             for (const auto& b : big.banks())
                 for (const auto& e : b.entries)
-                    if (e.id == id) { found = &e; break; }
-        } catch (const std::exception&) {}
+                    if (e.id == id) {
+                        if(found) throw std::runtime_error("text show: entry ID is ambiguous: " + which);
+                        found = &e;
+                    }
+        }
     }
     if (found == nullptr) {
         std::fprintf(stderr, "text show: no entry '%s'\n", which.c_str());
         return 1;
     }
     const auto e = forge::textbig::decode(big.entryData(*found), (int)found->type);
+    std::vector<std::string> narrators;
+    if(found->type==2) {
+        if(found->length!=0) throw std::runtime_error("text show: narrator list has an unexpected payload");
+        narrators=forge::textbig::decodeNarrators(found->subHeader);
+    }
 
     if (jsonOutput) {
         json tags = json::array();
         for (const auto& t : e.tags)
-            tags.push_back({{"position", t.position}, {"name", t.name}});
+            tags.push_back({{"position", t.position}, {"name", albion::textdisplay::metadataUtf8(t.name)}});
         json members = json::array();
         for (auto m : e.groupMembers) members.push_back(m);
-        std::puts(json{{"name", found->name}, {"id", found->id}, {"type", e.type},
-                       {"content", e.content}, {"speech_bank", e.speechBank},
-                       {"speaker", e.speaker}, {"identifier", e.identifier},
-                       {"tags", tags}, {"group_members", members}}
-                      .dump(2).c_str());
+        json row{{"name", found->name}, {"id", found->id}, {"type", e.type},
+                       {"content", e.content}, {"speech_bank", albion::textdisplay::metadataUtf8(e.speechBank)},
+                       {"speaker", albion::textdisplay::metadataUtf8(e.speaker)}, {"identifier", albion::textdisplay::metadataUtf8(e.identifier)},
+                       {"tags", tags}, {"group_members", members}, {"metadata_byte_encoding", "latin1"}};
+        if(found->type==2) row["narrators"]=narrators;
+        std::puts(row.dump(2).c_str());
         return 0;
     }
     std::printf("%s (id %u, type %d)\n", found->name.c_str(), found->id, e.type);
+    if(e.type==2) {
+        std::printf("  %zu narrator(s):\n",narrators.size());
+        for(size_t i=0;i<narrators.size();++i) std::printf("  %zu: %s\n",i,narrators[i].c_str());
+        return 0;
+    }
     if (e.type == 1) {
         std::printf("  group of %zu:", e.groupMembers.size());
         for (auto m : e.groupMembers) std::printf(" %u", m);
@@ -7665,10 +8200,10 @@ int textShow(const std::string& path, const std::string& which, bool jsonOutput)
         return 0;
     }
     std::printf("  content: %s\n", e.content.c_str());
-    if (!e.speechBank.empty()) std::printf("  speech-bank: %s\n", e.speechBank.c_str());
-    if (!e.speaker.empty()) std::printf("  speaker: %s\n", e.speaker.c_str());
+    if (!e.speechBank.empty()) std::printf("  speech-bank: %s\n", albion::textdisplay::metadataUtf8(e.speechBank).c_str());
+    if (!e.speaker.empty()) std::printf("  speaker: %s\n", albion::textdisplay::metadataUtf8(e.speaker).c_str());
     for (const auto& t : e.tags)
-        std::printf("  tag @%d: %s\n", t.position, t.name.c_str());
+        std::printf("  tag @%d: %s\n", t.position, albion::textdisplay::metadataUtf8(t.name).c_str());
     return 0;
 }
 
@@ -7700,38 +8235,36 @@ int textList(const std::string& path, const std::string& filter, bool jsonOutput
     return 0;
 }
 
+using albion::textwrite::publishTextBank;
+
 int textSet(const std::string& path, const std::string& name,
             const std::string& content, const std::string& outPath,
             bool inPlace, std::optional<uint32_t> requestedId,
             const std::string& donor, const std::string& speaker,
             const std::string& speechBank, bool jsonOutput) {
     namespace fs = std::filesystem;
-    auto file = forge::big::File::open(path);
+    auto file = forge::big::File::open(fs::u8path(path));
     forge::textbig::Entry value;
     value.type = 0;
     value.content = content;
     value.identifier = name;
     value.speaker = speaker;
     value.speechBank = speechBank;
+    const auto expectedPayload=forge::textbig::encode(value);
     const auto result =
         forge::textbig::upsertString(file, name, std::move(value), requestedId, donor);
+    const auto expectedSpeakerHeader=albion::textwrite::synchronizeSpeakerHeader(file,result);
 
-    const fs::path destination = inPlace ? fs::path(path) : fs::path(outPath);
-    if (!destination.parent_path().empty())
-        fs::create_directories(destination.parent_path());
-    writeAllBytes(destination.string(), file.serialize());
-
-    // Reopen the emitted archive before reporting success. This catches
-    // structural BIG writer regressions at the mutation boundary.
-    const auto verified = forge::big::File::open(destination);
-    const forge::big::Entry* found = nullptr;
-    for (const auto& bank : verified.banks())
-        for (const auto& candidate : bank.entries)
-            if (candidate.name == name) found = &candidate;
-    if (found == nullptr || found->id != result.id ||
-        forge::textbig::decode(verified.entryData(*found), (int)found->type).content !=
-            content)
-        throw std::runtime_error("text set: output failed reopen verification");
+    const fs::path destination = fs::u8path(inPlace ? path : outPath);
+    publishTextBank(file,destination,inPlace,[&](const auto& verified) {
+        const forge::big::Entry* found = nullptr;
+        for (const auto& bank : verified.banks())
+            for (const auto& candidate : bank.entries)
+                if (candidate.name == name) found = &candidate;
+        if (found == nullptr || found->id != result.id ||
+            found->subHeader!=expectedSpeakerHeader || verified.entryData(*found)!=expectedPayload)
+            throw std::runtime_error("text set: output failed reopen verification");
+    });
 
     if (jsonOutput) {
         std::puts(json{{"name", result.name},
@@ -7753,7 +8286,7 @@ int textImport(const std::string& path, const std::string& manifestPath,
                const std::string& outPath, bool inPlace,
                const std::string& donorOverride, bool jsonOutput) {
     namespace fs = std::filesystem;
-    std::ifstream manifestStream(manifestPath);
+    std::ifstream manifestStream(fs::u8path(manifestPath));
     if (!manifestStream)
         throw std::runtime_error("text import: cannot open " + manifestPath);
     json manifest;
@@ -7761,14 +8294,14 @@ int textImport(const std::string& path, const std::string& manifestPath,
     if (!manifest.contains("entries") || !manifest["entries"].is_array())
         throw std::runtime_error("text import: manifest requires an entries array");
 
-    auto file = forge::big::File::open(path);
+    auto file = forge::big::File::open(fs::u8path(path));
     const std::string defaultSpeaker = manifest.value("speaker", "");
     const std::string defaultSpeechBank = manifest.value("speech_bank", "");
     const std::string defaultDonor =
         donorOverride.empty() ? manifest.value("donor", "") : donorOverride;
     std::set<std::string> seen;
     std::vector<forge::textbig::UpsertResult> results;
-    std::map<std::string, std::string> expectedContent;
+    std::map<std::string,std::vector<uint8_t>> expectedSpeakerHeaders,expectedPayloads;
     for (const auto& row : manifest["entries"]) {
         if (!row.is_object() || !row.contains("name") || !row.contains("content"))
             throw std::runtime_error(
@@ -7783,34 +8316,36 @@ int textImport(const std::string& path, const std::string& manifestPath,
         value.speaker = row.value("speaker", defaultSpeaker);
         value.speechBank = row.value("speech_bank", defaultSpeechBank);
         std::optional<uint32_t> id;
-        if (row.contains("id")) id = row.at("id").get<uint32_t>();
+        if (row.contains("id")) {
+            const auto& requested = row.at("id");
+            if (!requested.is_number_integer() ||
+                (!requested.is_number_unsigned() && requested.get<int64_t>() < 1) ||
+                requested.get<uint64_t>() == 0 || requested.get<uint64_t>() > UINT32_MAX)
+                throw std::runtime_error("text import: ID must be an integer from 1 to 4294967295");
+            id = requested.get<uint32_t>();
+        }
         const std::string donor = row.value("donor", defaultDonor);
+        expectedPayloads[name]=forge::textbig::encode(value);
         results.push_back(forge::textbig::upsertString(
             file, name, std::move(value), id, donor));
-        expectedContent[name] = row.at("content").get<std::string>();
+        expectedSpeakerHeaders[name]=albion::textwrite::synchronizeSpeakerHeader(file,results.back());
     }
     if (results.empty())
         throw std::runtime_error("text import: manifest has no entries");
 
-    const fs::path destination = inPlace ? fs::path(path) : fs::path(outPath);
-    if (!destination.parent_path().empty())
-        fs::create_directories(destination.parent_path());
-    writeAllBytes(destination.string(), file.serialize());
-
-    const auto verified = forge::big::File::open(destination);
-    std::map<std::string, const forge::big::Entry*> emitted;
-    for (const auto& bank : verified.banks())
-        for (const auto& entry : bank.entries)
-            emitted[entry.name] = &entry;
-    for (const auto& result : results) {
-        const auto it = emitted.find(result.name);
-        if (it == emitted.end() || it->second->id != result.id ||
-            forge::textbig::decode(verified.entryData(*it->second),
-                                   (int)it->second->type).content !=
-                expectedContent.at(result.name))
-            throw std::runtime_error(
-                "text import: output failed reopen verification for " + result.name);
-    }
+    const fs::path destination = fs::u8path(inPlace ? path : outPath);
+    publishTextBank(file,destination,inPlace,[&](const auto& verified) {
+        std::map<std::string, const forge::big::Entry*> emitted;
+        for (const auto& bank : verified.banks())
+            for (const auto& entry : bank.entries) emitted[entry.name] = &entry;
+        for (const auto& result : results) {
+            const auto it = emitted.find(result.name);
+            if (it == emitted.end() || it->second->id != result.id ||
+                it->second->subHeader!=expectedSpeakerHeaders.at(result.name) ||
+                verified.entryData(*it->second)!=expectedPayloads.at(result.name))
+                throw std::runtime_error("text import: output failed reopen verification for " + result.name);
+        }
+    });
 
     if (jsonOutput) {
         json rows = json::array();
@@ -7883,28 +8418,300 @@ int bigList(const std::string& path, const std::string& nameFilter, bool jsonOut
     return 0;
 }
 
+// Apply a ChocolateBox maintextures bank to the matching retail sub-bank.
+// Numeric ids are game references: a replacement must retain its id, and a
+// new entry must not take an existing id. Leave the other texture banks alone.
+size_t patchFmpMainTextures(forge::big::File& textures,
+                            const forge::big::File& package) {
+    const auto* changes = package.findBank("maintextures");
+    if (!changes || changes->entries.empty()) return 0;
+    auto* bank = textures.findBank("GBANK_MAIN_PC");
+    if (!bank) throw std::runtime_error("FMP maintextures: GBANK_MAIN_PC is absent");
+    std::set<std::string> seen;
+    for (const auto& source : changes->entries) {
+        if (source.name.empty() || !seen.insert(source.name).second ||
+            source.subHeader.size() != 34 || source.length == 0)
+            throw std::runtime_error("FMP maintextures: invalid or duplicate entry " + source.name);
+        auto byName = std::find_if(bank->entries.begin(), bank->entries.end(),
+            [&](const forge::big::Entry& e) { return e.name == source.name; });
+        auto byId = std::find_if(bank->entries.begin(), bank->entries.end(),
+            [&](const forge::big::Entry& e) { return e.id == source.id; });
+        if (byName != bank->entries.end()) {
+            if (byName->id != source.id || byName->type != source.type)
+                throw std::runtime_error("FMP maintextures: identity mismatch for " + source.name);
+            byName->data = package.entryData(source);
+            byName->length = uint32_t(byName->data.size());
+            byName->subHeader = source.subHeader;
+        } else {
+            if (byId != bank->entries.end())
+                throw std::runtime_error("FMP maintextures: id " + std::to_string(source.id) +
+                    " already belongs to " + byId->name + "; cannot add " + source.name);
+            forge::big::Entry added = source;
+            added.magic = textures.magic() == "BIGB" || bank->entries.empty() ? 42 : bank->entries.back().magic;
+            added.data = package.entryData(source);
+            added.length = uint32_t(added.data.size());
+            bank->entries.push_back(std::move(added));
+        }
+    }
+    return changes->entries.size();
+}
+
+// Keep mesh ids stable: game.bin Graphic fields and the editor's mesh reader
+// reference MBANK_ALLMESHES by numeric id. Never let an FMP's new symbol
+// overwrite a different retail symbol at the same id.
+size_t patchFmpGraphics(forge::big::File& graphics,
+                        const forge::big::File& package) {
+    const auto* changes = package.findBank("graphics");
+    if (!changes || changes->entries.empty()) return 0;
+    auto* bank = graphics.findBank("MBANK_ALLMESHES");
+    if (!bank) throw std::runtime_error("FMP graphics: MBANK_ALLMESHES is absent");
+    std::set<std::string> seen;
+    for (const auto& source : changes->entries) {
+        if (source.name.empty() || !seen.insert(source.name).second || source.length == 0)
+            throw std::runtime_error("FMP graphics: invalid or duplicate entry " + source.name);
+        auto byName = std::find_if(bank->entries.begin(), bank->entries.end(),
+            [&](const forge::big::Entry& e) { return e.name == source.name; });
+        auto byId = std::find_if(bank->entries.begin(), bank->entries.end(),
+            [&](const forge::big::Entry& e) { return e.id == source.id; });
+        if (byName != bank->entries.end()) {
+            if (byName->id != source.id || byName->type != source.type)
+                throw std::runtime_error("FMP graphics: identity mismatch for " + source.name);
+            byName->data = package.entryData(source);
+            byName->length = uint32_t(byName->data.size());
+            byName->subHeader = source.subHeader;
+        } else {
+            if (byId != bank->entries.end())
+                throw std::runtime_error("FMP graphics: id " + std::to_string(source.id) +
+                    " already belongs to " + byId->name + "; cannot add " + source.name);
+            forge::big::Entry added = source;
+            added.magic = graphics.magic() == "BIGB" || bank->entries.empty() ? 42 : bank->entries.back().magic;
+            added.data = package.entryData(source);
+            added.length = uint32_t(added.data.size());
+            bank->entries.push_back(std::move(added));
+        }
+    }
+    return changes->entries.size();
+}
+
+void validateFmpGraphicLinks(const forge::big::File& package,
+                             const forge::big::File& textures) {
+    const auto* metadata = package.findBank("graphicsLinkMetaData");
+    if (!metadata || metadata->entries.empty()) return;
+    const auto* meshes = package.findBank("graphics");
+    const auto* bank = textures.findBank("GBANK_MAIN_PC");
+    if (!meshes || !bank) throw std::runtime_error("FMP graphics: mesh or texture bank is absent");
+    std::set<std::string> meshNames;
+    for (const auto& mesh : meshes->entries) meshNames.insert(mesh.name);
+    std::set<std::string> metadataNames;
+    for (const auto& entry : metadata->entries) {
+        if (!metadataNames.insert(entry.name).second || !meshNames.contains(entry.name))
+            throw std::runtime_error("FMP graphics: metadata has no unique mesh " + entry.name);
+        const auto mesh = std::find_if(meshes->entries.begin(), meshes->entries.end(),
+            [&](const forge::big::Entry& e) { return e.name == entry.name; });
+        // The Info descriptor stores bounds, LOD sizes, a safe radius,
+        // LODCount-1 switch-distance floats and then a counted
+        // texture-ID list. A matching physics ID or float bit pattern elsewhere
+        // in this header is not evidence that the mesh references the texture.
+        const auto& info = mesh->subHeader;
+        auto word = [&](size_t at) {
+            if (at > info.size() || info.size() - at < 4)
+                throw std::runtime_error("FMP graphics: truncated mesh Info for " + entry.name);
+            uint32_t value = 0;
+            std::memcpy(&value, info.data() + at, 4);
+            return value;
+        };
+        std::optional<std::vector<forge::meshpreview::Geometry>> lods;
+        for (const auto& link : forge::fmplinks::readMetadata(package.entryData(entry))) {
+            if (!link.path.ends_with(".BaseTexture") &&
+                !link.path.ends_with(".BumpMapTexture") &&
+                !link.path.ends_with(".SpecularMapTexture"))
+                throw std::runtime_error("FMP graphics: unsupported link path " + link.path);
+            const auto texture = std::find_if(bank->entries.begin(), bank->entries.end(),
+                [&](const forge::big::Entry& texture) { return texture.name == link.target; });
+            if (texture == bank->entries.end())
+                throw std::runtime_error("FMP graphics: " + entry.name + " needs missing texture " + link.target);
+            const uint32_t lodCount = word(44);
+            if (!lodCount || lodCount > 8)
+                throw std::runtime_error("FMP graphics: invalid mesh Info LOD count for " + entry.name);
+            const size_t textureCountAt = 48 + size_t(lodCount) * 8;
+            const uint32_t textureCount = word(textureCountAt);
+            const size_t textureStart = textureCountAt + 4;
+            if (textureCount > (info.size() - textureStart) / 4)
+                throw std::runtime_error("FMP graphics: truncated mesh Info texture list for " + entry.name);
+            bool referenced = false;
+            for (size_t index = 0; index < textureCount; ++index) {
+                const uint32_t id = word(textureStart + index * 4);
+                if (id == texture->id) { referenced = true; break; }
+            }
+            if (!referenced)
+                throw std::runtime_error("FMP graphics: " + entry.name + " names texture " +
+                    link.target + " but its id is absent from the mesh Info header");
+            // ChocolateBox GfxModel uses ordinal LOD/MAT indices and maps
+            // SpecularMapTexture to Material.ReflectionTextureID. Info membership
+            // alone does not prove that the named material slot uses this ID.
+            const std::string_view path = link.path;
+            const auto first = path.find('.'), second = path.find('.', first + 1);
+            if (first == path.npos || second == path.npos || !path.starts_with("LOD") ||
+                path.substr(first + 1, 3) != "MAT")
+                throw std::runtime_error("FMP graphics: unsupported material link path " + link.path);
+            auto index = [&](std::string_view token) {
+                size_t value = 0;
+                const auto parsed = std::from_chars(token.data(), token.data() + token.size(), value);
+                if (parsed.ec != std::errc{} || parsed.ptr != token.data() + token.size())
+                    throw std::runtime_error("FMP graphics: invalid material index in " + link.path);
+                return value;
+            };
+            const auto lod = index(path.substr(3, first - 3));
+            const auto material = index(path.substr(first + 4, second - first - 4));
+            if (!lods) {
+                try { lods = forge::meshpreview::decodeLods(package.entryData(*mesh), info, mesh->type); }
+                catch (const std::exception& error) {
+                    throw std::runtime_error("FMP graphics: cannot inspect materials for " + entry.name +
+                                             ": " + error.what());
+                }
+            }
+            if (lod >= lods->size() || material >= lods->at(lod).materials.size())
+                throw std::runtime_error("FMP graphics: material link index out of range for " + entry.name);
+            const auto& slot = lods->at(lod).materials.at(material);
+            const auto member = path.substr(second + 1);
+            if (member != "BaseTexture" && member != "BumpMapTexture" && member != "SpecularMapTexture")
+                throw std::runtime_error("FMP graphics: unsupported material member in " + link.path);
+            const uint32_t actual = member == "BaseTexture" ? uint32_t(slot.diffuseTexture) :
+                member == "BumpMapTexture" ? uint32_t(slot.bumpTexture) : uint32_t(slot.reflectionTexture);
+            if (actual != texture->id)
+                throw std::runtime_error("FMP graphics: " + entry.name + " material slot " + link.path +
+                    " does not reference named texture " + link.target);
+        }
+    }
+}
+
+std::map<std::string, uint32_t> assetIdentityMap(const std::filesystem::path& file,
+                                                  const std::string& bankName) {
+    std::map<std::string, uint32_t> result;
+    if (!std::filesystem::exists(file)) return result;
+    const auto asset = forge::big::File::open(file);
+    if (const auto* bank = asset.findBank(bankName))
+        for (const auto& entry : bank->entries) result[entry.name] = entry.id;
+    return result;
+}
+std::map<std::string, uint32_t> meshIdentityMap(const std::filesystem::path& file) {
+    return assetIdentityMap(file, "MBANK_ALLMESHES");
+}
+std::map<std::string, uint32_t> textureIdentityMap(const std::filesystem::path& file) {
+    return assetIdentityMap(file, "GBANK_MAIN_PC");
+}
+std::map<std::string, uint32_t> effectIdentityMap(const std::filesystem::path& file) {
+    return assetIdentityMap(file, "PARTICLE_MAIN_PC");
+}
+std::map<std::string, uint32_t> textIdentityMap(const forge::big::File& file) {
+    std::map<std::string, uint32_t> result;
+    for (const auto& bank : file.banks())
+        for (const auto& entry : bank.entries)
+            if (!entry.name.empty()) result[entry.name] = entry.id;
+    return result;
+}
+std::map<std::string, uint32_t> textIdentityMap(const std::filesystem::path& gameRoot) {
+    const auto path = gameRoot / "data" / "lang" / "English" / "text.big";
+    if (!std::filesystem::exists(path))
+        throw std::runtime_error("FMP text links: baseline English/text.big is missing");
+    return textIdentityMap(forge::big::File::open(path));
+}
+const forge::big::Bank* fmpTextBank(const forge::big::File& package) {
+    const forge::big::Bank* result = nullptr;
+    for (const auto& bank : package.banks()) {
+        if ((bank.name != "Text" && bank.name != "text") || bank.entries.empty()) continue;
+        if (result) throw std::runtime_error("FMP text: multiple nonempty text banks are ambiguous");
+        result = &bank;
+        std::set<std::string> names;
+        for (const auto& entry : bank.entries) {
+            if (entry.type != 0 || entry.name.empty() || !names.insert(entry.name).second)
+                throw std::runtime_error("FMP text: entries require unique names and type-0 string payloads");
+        }
+    }
+    return result;
+}
+std::map<std::string, uint32_t> plannedFmpTextIds(const std::filesystem::path& gameRoot,
+                                                    const forge::big::File& package) {
+    const auto path = gameRoot / "data" / "lang" / "English" / "text.big";
+    if (!std::filesystem::exists(path))
+        throw std::runtime_error("FMP text links: baseline English/text.big is missing");
+    auto text = forge::big::File::open(path);
+    if (const auto* bank = fmpTextBank(package))
+        for (const auto& entry : bank->entries)
+            forge::textbig::upsertString(text, entry.name,
+                                         forge::textbig::decode(package.entryData(entry), 0));
+    return textIdentityMap(text);
+}
+
 // Apply an .fmp's BIN-record banks onto a base game-root, producing a full
 // drop-in root. This normalizes an .fmp mod into the same root-based shape the
 // diff/merge pipeline consumes: each .fmp entry (name, definition, raw payload)
 // replaces or adds the matching compiled-def record.
-// NOTE: the .fmp's *LinkMetaData banks (names.bin offset / cross-bin ID fixups)
-// are NOT applied here — for a same-vanilla base the raw records line up, and
-// record/field-level merge only needs the payloads. Full link fixup + names.bin
-// merge is a follow-up for producing a directly-playable install from an .fmp.
+// Resolve supported symbolic game links after all package records are present.
+// The composer carries these symbols onward to its final definition identities.
 int fmpApply(const std::string& baseRoot, const std::string& fmpPath,
-             const std::string& outRoot, bool quiet = false) {
+             const std::string& outRoot, bool quiet = false,
+             const std::string& schemaPath = {},
+             forge::fmplinks::RecordLinks* symbolicLinks = nullptr,
+             bool deferMainTextures = false, bool deferGraphics = false) {
     namespace fs = std::filesystem;
-    const auto pkg = forge::big::File::open(fmpPath);
+    const auto pkg = openFmpPackage(fmpPath);
+    for (const char* bankName : {"ScriptBINEntries", "FrontEndBINEntries"}) {
+        const auto* bank = pkg.findBank(bankName);
+        if (bank && !bank->entries.empty())
+            throw std::runtime_error("FMP banks: " + std::string(bankName) +
+                " changes are not supported; package was not applied.");
+    }
+    const auto links = forge::fmplinks::readGameLinks(pkg);
+    if (const auto* metadata = pkg.findBank("graphicsLinkMetaData");
+        metadata && !metadata->entries.empty() &&
+        (!pkg.findBank("graphics") || pkg.findBank("graphics")->entries.empty()))
+        throw std::runtime_error("FMP graphics: link metadata has no graphics entries");
+    const std::set<std::string> supportedBanks{"GameBINEntries", "GameBINLinkMetaData",
+        "Objects", "Settings", "ObjectLinks", "Text", "text", "FinalAlbionWAD", "maintextures",
+        "graphics", "graphicsLinkMetaData"};
+    for (const auto& bank : pkg.banks()) {
+        if (!bank.entries.empty() && !supportedBanks.contains(bank.name))
+            throw std::runtime_error("FMP banks: " + bank.name +
+                " changes are not supported; package was not applied.");
+    }
 
     const fs::path baseDefs = fs::path(baseRoot) / "data" / "CompiledDefs";
     const fs::path defsOut = fs::path(outRoot) / "data" / "CompiledDefs";
-    fs::create_directories(defsOut);
+    const auto* packageText = fmpTextBank(pkg);
+
+    std::optional<forge::big::File> textures;
+    size_t textureEntries = 0;
+    const fs::path textureRel = fs::path("data") / "graphics" / "pc" / "textures.big";
+    if (!deferMainTextures) {
+        const auto* bank = pkg.findBank("maintextures");
+        if (bank && !bank->entries.empty()) {
+            textures.emplace(forge::big::File::open(fs::path(baseRoot) / textureRel));
+            textureEntries = patchFmpMainTextures(*textures, pkg);
+        }
+    }
+    std::optional<forge::big::File> graphics;
+    size_t graphicsEntries = 0;
+    const fs::path graphicsRel = fs::path("data") / "graphics" / "graphics.big";
+    if (!deferGraphics) {
+        if (const auto* bank = pkg.findBank("graphics"); bank && !bank->entries.empty()) {
+            graphics.emplace(forge::big::File::open(fs::path(baseRoot) / graphicsRel));
+            graphicsEntries = patchFmpGraphics(*graphics, pkg);
+            if (textures) validateFmpGraphicLinks(pkg, *textures);
+            else {
+                const auto textureBank = forge::big::File::open(fs::path(baseRoot) / textureRel);
+                validateFmpGraphicLinks(pkg, textureBank);
+            }
+        }
+    }
 
     // game.bin gets the GameBINEntries records; its save() rewrites names.bin
     // preserving existing offsets and appending any new record names, so the
     // copied script/frontend bins still resolve against it.
     auto game = openDefs(baseRoot, "game.bin");
-    size_t replaced = 0, added = 0, skippedUntyped = 0;
+    size_t replaced = 0, added = 0;
+    std::map<std::string, size_t> importedIndexes;
+    std::map<std::string, uint32_t> importedAnonymousTypes;
     // Two dialects carry game.bin records as raw payloads keyed by def name: ChocolateBox
     // (contentType 510, bank GameBINEntries, entries typed) and the older Fable Explorer
     // package (contentType 459: banks Settings / Objects / ObjectLinks / Text, entries
@@ -7914,66 +8721,175 @@ int fmpApply(const std::string& baseRoot, const std::string& fmpPath,
         const auto* bank = pkg.findBank(bankName);
         if (bank == nullptr) continue;
         for (const auto& e : bank->entries) {
-            auto data = pkg.entryData(e);
-            const forge::bin::Entry* existing =
-                e.name.empty() ? nullptr : game.find(e.name);
-            if (existing != nullptr) {
-                game.setEntryData((size_t)(existing - game.entries().data()),
-                                  std::move(data));
+            if (e.name.empty()) {
+                const auto index = size_t(e.id);
+                const auto key = forge::fmplinks::anonymousKey(index);
+                if (std::string_view(bankName) != "GameBINEntries" ||
+                    index >= game.entries().size() || !game.entries()[index].name.empty() ||
+                    e.definition.empty() || e.definition != game.entries()[index].definition)
+                    throw std::runtime_error("FMP records: unnamed entry " + std::to_string(index) +
+                        " has no matching blank-name baseline identity; package was not applied.");
+                auto data = pkg.entryData(e);
+                if (const auto prior = importedIndexes.find(key); prior != importedIndexes.end()) {
+                    if (prior->second != index || importedAnonymousTypes.at(key) != e.type ||
+                        game.entries()[index].data != data)
+                        throw std::runtime_error("FMP records: unnamed entry " + std::to_string(index) +
+                            " has conflicting repeated identity or payloads; package was not applied.");
+                    continue;
+                }
+                game.setEntryData(index, std::move(data));
+                importedIndexes[key] = index;
+                importedAnonymousTypes[key] = e.type;
                 ++replaced;
+                continue;
+            }
+            if (e.name.starts_with("@unnamed:"))
+                throw std::runtime_error("FMP records: named entry " + e.name +
+                    " uses the reserved anonymous identity namespace; package was not applied.");
+            auto data = pkg.entryData(e);
+            const forge::bin::Entry* existing = game.find(e.name);
+            if (existing != nullptr) {
+                if (!e.definition.empty() && e.definition != "-" && e.definition != existing->definition)
+                    throw std::runtime_error("FMP records: " + e.name +
+                        " has a different definition type from the baseline; package was not applied.");
+                const auto index = size_t(existing - game.entries().data());
+                game.setEntryData(index, std::move(data));
+                ++replaced;
+                importedIndexes[e.name] = index;
             } else if (!e.definition.empty() && e.definition != "-") {
-                game.addEntry(e.definition, e.name, std::move(data));
+                importedIndexes[e.name] = game.addEntry(e.definition, e.name, std::move(data));
                 ++added;
             } else {
-                std::fprintf(stderr, "  warning: %s: new record %s has no def type in this package; not added\n", bankName, e.name.c_str());
-                ++skippedUntyped;
+                throw std::runtime_error("FMP records: new record " + e.name +
+                    " has no definition type; package was not applied.");
             }
         }
     }
-    game.save(defsOut / "names.bin", defsOut / "game.bin");
-    // the Fable Explorer package's Text bank: type-0 text.big payloads keyed by string name,
-    // applied to every language's text.big the base install has (the package names none)
-    if (const auto* text = pkg.findBank("Text"); text != nullptr && !text->entries.empty()) {
-        const fs::path langRoot = fs::path(baseRoot) / "data" / "lang";
-        size_t langs = 0, strings = 0, bad = 0;
-        if (fs::is_directory(langRoot))
-            for (const auto& lang : fs::directory_iterator(langRoot)) {
-                const fs::path src = lang.path() / "text.big";
-                if (!fs::exists(src)) continue;
-                auto file = forge::big::File::open(src);
-                size_t applied = 0;
-                for (const auto& e : text->entries) {
+    std::optional<forge::defschema::Schema> linkSchema;
+    std::optional<std::map<std::string, uint32_t>> meshIds;
+    std::optional<std::map<std::string, uint32_t>> textureIds;
+    std::optional<std::map<std::string, uint32_t>> effectIds;
+    std::optional<std::map<std::string, uint32_t>> textIds;
+    if (packageText) textIds.emplace(plannedFmpTextIds(baseRoot, pkg));
+    std::set<std::string> referencedTextNames;
+    size_t linked = 0;
+    for (const auto& [name, recordLinks] : links) {
+        if (recordLinks.empty()) continue;
+        const auto imported = importedIndexes.find(name);
+        if (imported == importedIndexes.end())
+            throw std::runtime_error("FMP links: metadata owner was not imported: " + name);
+        if (!linkSchema) linkSchema = forge::defschema::Schema::load(
+            schemaPath.empty() ? defaultDefSchemaPath() : schemaPath);
+        const auto index = imported->second;
+        const auto* entry = &game.entries().at(index);
+        auto owner = *entry;
+        if (owner.name.empty()) owner.name = name;
+        std::set<forge::fmplinks::Destination> destinations;
+        for (const auto& link : recordLinks)
+            destinations.insert(forge::fmplinks::locate(owner, *linkSchema, link).destination);
+        if (!meshIds && destinations.contains(forge::fmplinks::Destination::MeshEntry)) {
+            meshIds.emplace(meshIdentityMap(fs::path(baseRoot) / graphicsRel));
+            if (const auto* packageMeshes = pkg.findBank("graphics"))
+                for (const auto& mesh : packageMeshes->entries)
+                    (*meshIds)[mesh.name] = mesh.id;
+        }
+        if (!textureIds && destinations.contains(forge::fmplinks::Destination::TextureEntry)) {
+            textureIds.emplace(textureIdentityMap(fs::path(baseRoot) / textureRel));
+            if (const auto* packageTextures = pkg.findBank("maintextures"))
+                for (const auto& texture : packageTextures->entries)
+                    (*textureIds)[texture.name] = texture.id;
+        }
+        if (!effectIds && destinations.contains(forge::fmplinks::Destination::EffectEntry))
+            effectIds.emplace(effectIdentityMap(fs::path(baseRoot) /
+                "data" / "Misc" / "pc" / "effects.big"));
+        if (!textIds && destinations.contains(forge::fmplinks::Destination::TextEntry))
+            textIds.emplace(plannedFmpTextIds(baseRoot, pkg));
+        auto data = forge::fmplinks::relink(owner, game, *linkSchema, recordLinks,
+                                          symbolicLinks != nullptr,
+                                          meshIds ? &*meshIds : nullptr,
+                                          textureIds ? &*textureIds : nullptr,
+                                          effectIds ? &*effectIds : nullptr,
+                                          textIds ? &*textIds : nullptr);
+        for (const auto& link : recordLinks)
+            if (forge::fmplinks::locate(owner, *linkSchema, link).destination ==
+                forge::fmplinks::Destination::TextEntry)
+                referencedTextNames.insert(link.target);
+        game.setEntryData(index, std::move(data));
+        linked += recordLinks.size();
+    }
+    // Validate and serialize every language before writing any output bank.
+    // Definition TextIDs are shared across languages; a locale with a missing
+    // or colliding ID must refuse instead of leaving a partial install.
+    std::vector<std::pair<fs::path, std::vector<uint8_t>>> preparedText;
+    size_t textLangs = 0, textStrings = 0, badText = 0;
+    const fs::path langRoot = fs::path(baseRoot) / "data" / "lang";
+    if (fs::is_directory(langRoot) &&
+        ((packageText && !packageText->entries.empty()) || !referencedTextNames.empty()))
+        for (const auto& lang : fs::directory_iterator(langRoot)) {
+            const fs::path src = lang.path() / "text.big";
+            if (!fs::exists(src)) continue;
+            auto file = forge::big::File::open(src);
+            size_t applied = 0;
+            if (packageText)
+                for (const auto& e : packageText->entries) {
                     try {
                         auto value = forge::textbig::decode(pkg.entryData(e), 0);
-                        forge::textbig::upsertString(file, e.name, std::move(value));
+                        forge::textbig::upsertString(file, e.name, std::move(value),
+                            textIds ? std::optional<uint32_t>(textIds->at(e.name)) : std::nullopt);
                         ++applied;
                     } catch (const std::exception& ex) {
-                        if (langs == 0) { ++bad; std::fprintf(stderr, "  warning: Text %s: %s\n", e.name.c_str(), ex.what()); }
+                        if (textIds) throw;
+                        if (textLangs == 0) {
+                            ++badText;
+                            std::fprintf(stderr, "  warning: Text %s: %s\n", e.name.c_str(), ex.what());
+                        }
                     }
                 }
-                const fs::path dst = fs::path(outRoot) / "data" / "lang" / lang.path().filename() / "text.big";
-                fs::create_directories(dst.parent_path());
-                writeAllBytes(dst.string(), file.serialize());
-                ++langs; strings = applied;
+            if (textIds) {
+                const auto localeIds = textIdentityMap(file);
+                for (const auto& name : referencedTextNames) {
+                    const auto canonical = textIds->find(name);
+                    if (canonical == textIds->end()) continue; // another source may supply it
+                    const auto found = localeIds.find(name);
+                    if (found == localeIds.end() || found->second != canonical->second)
+                        throw std::runtime_error("FMP text links: " + lang.path().filename().string() +
+                            " has no matching TextID for " + name);
+                }
             }
-        if (!quiet) std::printf("  text.big: %zu string(s) applied to %zu language folder(s)%s\n", strings, langs, bad ? " (some payloads did not decode)" : "");
+            if (packageText && !packageText->entries.empty())
+                preparedText.emplace_back(lang.path().filename(), file.serialize());
+            ++textLangs;
+            textStrings = applied;
+        }
+    if (!quiet && linked) std::printf("  resolved %zu named definition link(s)\n", linked);
+    if (symbolicLinks) *symbolicLinks = links;
+    fs::create_directories(defsOut);
+    game.save(defsOut / "names.bin", defsOut / "game.bin");
+    if (textures) {
+        const fs::path dst = fs::path(outRoot) / textureRel;
+        fs::create_directories(dst.parent_path());
+        writeAllBytes(dst.string(), textures->serialize());
     }
+    if (graphics) {
+        const fs::path dst = fs::path(outRoot) / graphicsRel;
+        fs::create_directories(dst.parent_path());
+        writeAllBytes(dst.string(), graphics->serialize());
+    }
+    // The Fable Explorer package's type-0 Text bank was prepared above.
+    for (const auto& [language, bytes] : preparedText) {
+        const fs::path dst = fs::path(outRoot) / "data" / "lang" / language / "text.big";
+        fs::create_directories(dst.parent_path());
+        writeAllBytes(dst.string(), bytes);
+    }
+    if (packageText && !packageText->entries.empty() && !quiet)
+        std::printf("  text.big: %zu string(s) applied to %zu language folder(s)%s\n",
+                    textStrings, textLangs, badText ? " (some payloads did not decode)" : "");
 
     // Copy the untouched sibling bins so the out-root is a complete install.
     for (const char* sib : {"script.bin", "frontend.bin"}) {
         if (fs::exists(baseDefs / sib))
             fs::copy_file(baseDefs / sib, defsOut / sib,
                           fs::copy_options::overwrite_existing);
-    }
-    // Warn if the .fmp changes script/frontend defs — not applied yet (shared
-    // names.bin needs a multi-bin pass).
-    for (const char* b : {"ScriptBINEntries", "FrontEndBINEntries"}) {
-        const auto* bank = pkg.findBank(b);
-        if (bank != nullptr && !bank->entries.empty())
-            std::fprintf(stderr,
-                         "  warning: %s has %zu entries, NOT applied (multi-bin "
-                         "shared-names apply is a follow-up)\n",
-                         b, bank->entries.size());
     }
 
     // ChocolateBox packages can carry level payloads in the WAD bank. Stage
@@ -8003,8 +8919,8 @@ int fmpApply(const std::string& baseRoot, const std::string& fmpPath,
         }
     }
 
-    if (!quiet) std::printf("applied %s onto %s -> %s (game.bin: %zu replaced, %zu added; WAD levels: %zu)\n",
-                fmpPath.c_str(), baseRoot.c_str(), outRoot.c_str(), replaced, added, wadLevels);
+    if (!quiet) std::printf("applied %s onto %s -> %s (game.bin: %zu replaced, %zu added; WAD levels: %zu; textures: %zu; graphics: %zu)\n",
+                fmpPath.c_str(), baseRoot.c_str(), outRoot.c_str(), replaced, added, wadLevels, textureEntries, graphicsEntries);
     return 0;
 }
 
@@ -8017,6 +8933,8 @@ int fmpExport(const std::string& baseRoot, const std::string& moddedRoot,
               const std::string& outFmp) {
     const auto base = openDefs(baseRoot, "game.bin");
     const auto mod = openDefs(moddedRoot, "game.bin");
+    requireUnchangedUnnamedEntries(base, mod, "game.bin", "FMP export");
+    requireUnchangedSiblingBanks(baseRoot, moddedRoot, "FMP export");
 
     std::map<std::string, const forge::bin::Entry*> baseByName;
     for (const auto& e : base.entries())
@@ -8139,13 +9057,16 @@ void patchToRoot(const std::string& baseRoot, const std::string& patchPath,
 // Picks file for the whole order (forge_mods_picks.txt next to forge_mods.json, or --picks):
 // one `key<TAB>winner` per line, the key namespaced by merge stage --
 //   <Record> or defs:<Record>          a game.bin record (as `defs merge --picks`)
+//   field:<JSON identity array>        one supported contested scalar definition field
 //   tng:<level path>|<thing key>       a thing of a level (`FinalAlbion/Arena.tng|uid:...`)
 //   qst:<qst path>|<quest name>        a quest flag
 //   text:<language>|<string name>      a text.big string
 //   fse:<quest key>                    an FSE/quests.lua entry
 //   file:<data/... path, lower-case>   a whole-file layer
+//   texture:<GBANK_MAIN_PC entry name> one maintextures FMP entry
+//   mesh:<MBANK_ALLMESHES entry name> one graphics FMP entry
 // the winner is a mod label of the order, or "vanilla" to keep the retail version.
-struct ModsPicks { std::map<std::string, std::string> defs, tng, qst, text, file, fse; };
+struct ModsPicks { std::map<std::string, std::string> defs, tng, qst, text, file, fse, texture, mesh; };
 ModsPicks splitModsPicks(const std::map<std::string, std::string>& all) {
     ModsPicks p;
     for (const auto& [k, v] : all) {
@@ -8156,7 +9077,9 @@ ModsPicks splitModsPicks(const std::map<std::string, std::string>& all) {
         else if (ns == "qst") p.qst[key] = v;
         else if (ns == "text") p.text[key] = v;
         else if (ns == "fse") p.fse[key] = v;
-        else if (ns == "file") { std::string lk = key; std::transform(lk.begin(), lk.end(), lk.begin(), ::tolower); p.file[lk] = v; }
+        else if (ns == "texture") p.texture[key] = v;
+        else if (ns == "mesh") p.mesh[key] = v;
+        else if (ns == "file") p.file[forge::modchoices::filePathKey(key)] = v;
         else if (ns == "defs") p.defs[key] = v;
         else p.defs[k] = v;
     }
@@ -8209,13 +9132,459 @@ void preflightModRecipes(const std::vector<std::string>& sources) {
     }
 }
 
+bool completeDataSource(const std::filesystem::path& source) {
+    return forge::modorder::classify(source) == forge::modorder::Kind::Tree &&
+        forge::modorder::hasCompleteData(source);
+}
+
+template<class Visit>
+void visitInstallFiles(const std::filesystem::path& source, Visit visit) {
+    namespace fs = std::filesystem;
+    if (!fs::is_directory(source)) return;
+    for (const auto& item : fs::recursive_directory_iterator(source)) {
+        if (item.is_symlink()) throw std::runtime_error("mod installation does not follow symlinks: " + item.path().string());
+        if (!item.is_regular_file()) continue;
+        const auto relative = item.path().lexically_relative(source);
+        for (const auto& part : relative)
+            if (part == ".." || part.string().ends_with(".forgebak"))
+                throw std::runtime_error("mod installation contains a recovery or unsafe path: " + relative.string());
+        visit(item.path(), relative);
+    }
+}
+
+void copyInstallTree(const std::filesystem::path& source, const std::filesystem::path& target,
+                     bool overwrite) {
+    namespace fs = std::filesystem;
+    visitInstallFiles(source, [&](const fs::path& path, const fs::path& relative) {
+        const auto destination = target / relative;
+        if (!overwrite && fs::exists(destination)) return;
+        fs::create_directories(destination.parent_path());
+        fs::copy_file(path, destination, fs::copy_options::overwrite_existing);
+    });
+}
+
+void requireUnredirectedOutputPath(const std::filesystem::path& root,
+                                 const std::filesystem::path& relative) {
+    auto current = std::filesystem::absolute(root).lexically_normal();
+    for (const auto& part : relative) {
+        current /= part;
+#ifdef _WIN32
+        const DWORD attributes = GetFileAttributesW(current.c_str());
+        if (attributes != INVALID_FILE_ATTRIBUTES) {
+            if (attributes & FILE_ATTRIBUTE_REPARSE_POINT)
+                throw std::runtime_error("mod output path uses a redirected file or directory: " + relative.string());
+        } else {
+            const DWORD error = GetLastError();
+            if (error != ERROR_FILE_NOT_FOUND && error != ERROR_PATH_NOT_FOUND)
+                throw std::runtime_error("cannot inspect mod output path: " + current.string() +
+                                         " (Windows error " + std::to_string(error) + ")");
+        }
+#else
+        if (std::filesystem::is_symlink(current))
+            throw std::runtime_error("mod output path uses a redirected file or directory: " + relative.string());
+#endif
+    }
+}
+
+void requireSafeModOutputPath(const std::filesystem::path& target,
+                             const std::filesystem::path& relative) {
+    const auto outputRoot = std::filesystem::weakly_canonical(target);
+    if (relative.empty() || relative.has_root_path() || relative != relative.lexically_normal())
+        throw std::runtime_error("unsafe mod output path: " + relative.string());
+    for (const auto& part : relative) {
+        const auto name = lowered(part.string());
+        if (name.empty() || name.find('\0') != std::string::npos || part == "." || part == ".." ||
+            name.ends_with(".forgebak") || name.starts_with(".forge-mod-output-"))
+            throw std::runtime_error("unsafe mod output path: " + relative.string());
+#ifdef _WIN32
+        const auto stem = name.substr(0, name.find('.'));
+        const bool device = stem == "con" || stem == "prn" || stem == "aux" || stem == "nul" ||
+            (stem.size() == 4 && (stem.starts_with("com") || stem.starts_with("lpt")) && stem[3] >= '1' && stem[3] <= '9');
+        if (name.find_first_of("<>:\"|?*") != std::string::npos || name.back() == '.' || name.back() == ' ' ||
+            device || std::any_of(name.begin(), name.end(), [](unsigned char c) { return c < 32; }))
+            throw std::runtime_error("unsafe mod output path: " + relative.string());
+#endif
+    }
+    const auto resolved = std::filesystem::weakly_canonical(target / relative);
+    if (resolved == outputRoot ||
+        std::mismatch(outputRoot.begin(), outputRoot.end(), resolved.begin(), resolved.end()).first != outputRoot.end())
+        throw std::runtime_error("mod output path escapes output folder: " + relative.string());
+    requireUnredirectedOutputPath(target, relative);
+}
+
+std::string modOutputKey(const std::filesystem::path& relative) {
+#ifdef _WIN32
+    return forge::modchoices::filePathKey(relative.generic_string());
+#else
+    return relative.generic_string();
+#endif
+}
+
+struct ModBuildFile { std::filesystem::path relative; forge::modchoices::FileContent content; };
+using ModBuildFiles = std::map<std::string, ModBuildFile>;
+
+ModBuildFiles readModBuildFiles(const std::filesystem::path& target) {
+    const auto receiptPath = target / "forge_mods_build.json";
+    requireUnredirectedOutputPath(target, "forge_mods_build.json");
+    if (!std::filesystem::exists(receiptPath)) return {};
+    try {
+        if (!std::filesystem::is_regular_file(receiptPath)) throw std::runtime_error("receipt is not a file");
+        std::ifstream input(receiptPath);
+        if (!input) throw std::runtime_error("cannot read receipt");
+        const auto receipt = json::parse(input);
+        if (!receipt.is_object() || !receipt.at("format").is_number_integer() || receipt.at("format") != 1 ||
+            !receipt.at("files").is_object()) throw std::runtime_error("unsupported receipt format");
+        ModBuildFiles result;
+        for (const auto& [name, value] : receipt.at("files").items()) {
+            const std::filesystem::path relative(name);
+            requireSafeModOutputPath(target, relative);
+            if (relative.generic_string() != name || lowered(name) == "forge_mods_build.json")
+                throw std::runtime_error("invalid owned path: " + name);
+            if (!value.is_object() || !value.at("bytes").is_number_unsigned() || !value.at("sha256").is_string())
+                throw std::runtime_error("invalid file identity: " + name);
+            const auto hash = lowered(value.at("sha256").get<std::string>());
+            if (hash.size() != 64 || !std::all_of(hash.begin(), hash.end(), [](unsigned char c) {
+                    return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f'); }))
+                throw std::runtime_error("invalid file digest: " + name);
+            if (!result.emplace(modOutputKey(relative), ModBuildFile{relative,
+                    {true, value.at("bytes").get<uint64_t>(), hash}}).second)
+                throw std::runtime_error("duplicate owned path: " + name);
+        }
+        return result;
+    } catch (const std::exception& error) {
+        throw std::runtime_error("mods build receipt: " + std::string(error.what()));
+    }
+}
+
+void publishInstallTree(const std::filesystem::path& source, const std::filesystem::path& target,
+                        const std::vector<std::filesystem::path>& removals = {}) {
+    if(albion::backups::gameRunningIn(target))
+        throw std::runtime_error("Fable.exe is running from the mod output installation; quit the game before publishing this build");
+    const auto previous = readModBuildFiles(target);
+    ModBuildFiles current;
+    visitInstallFiles(source, [&](const auto& path, const auto& relative) {
+        if (lowered(relative.generic_string()) == "forge_mods_build.json") return;
+        requireSafeModOutputPath(target, relative);
+        if (!current.emplace(modOutputKey(relative), ModBuildFile{relative, forge::modchoices::fileContent(path)}).second)
+            throw std::runtime_error("duplicate mod output path: " + relative.string());
+    });
+    std::map<std::string, std::filesystem::path> erased;
+    for (const auto& relative : removals) {
+        requireSafeModOutputPath(target, relative);
+        // Later recipes may emit this path after a raw-file choice.
+        if (!current.contains(modOutputKey(relative))) erased.emplace(modOutputKey(relative), relative);
+    }
+    for (const auto& [key, file] : previous) {
+        if (current.contains(key)) continue;
+        const auto destination = target / file.relative;
+        if (!std::filesystem::exists(destination)) continue;
+        if (!std::filesystem::is_regular_file(destination) || forge::modchoices::fileContent(destination) != file.content)
+            throw std::runtime_error("mods build receipt: previously generated file changed: " + file.relative.generic_string() +
+                "; preserve or move those edits before rebuilding this output");
+        erased.emplace(key, file.relative);
+    }
+    // The receipt and obsolete owned files participate in the same rollback
+    // transaction as new output. Unlisted files remain outside this ownership.
+    albion::detail::PendingBanks pending(target, ".forge-mod-output-");
+    for (const auto& [key, relative] : erased) pending.remove(relative);
+    visitInstallFiles(source, [&](const auto& path, const auto& relative) {
+        if (lowered(relative.generic_string()) == "forge_mods_build.json") return;
+        std::filesystem::copy_file(path, pending.prepare(relative));
+    });
+    json receipt{{"format", 1}, {"files", json::object()}};
+    for (const auto& [key, file] : current)
+        receipt["files"][file.relative.generic_string()] = {{"bytes", file.content.bytes}, {"sha256", file.content.sha256}};
+    const auto serialized = receipt.dump(2) + "\n";
+    writeAllBytes(pending.prepare("forge_mods_build.json").string(), std::vector<uint8_t>(serialized.begin(), serialized.end()));
+    if(albion::backups::gameRunningIn(target))
+        throw std::runtime_error("Fable.exe started from the mod output installation; quit the game before publishing this build");
+    std::string error;
+    if (!pending.install(false, error))
+        throw std::runtime_error("cannot publish mod build: " + error);
+}
+
+// The ordinary folder/FMP composer reads these engine banks plus paths carried
+// by folder sources. Recipes, binary patches and EgoCore have broader discovery
+// rules and retain the complete snapshot until their dependencies are planned.
+std::optional<std::set<std::string>> ordinaryBaselinePaths(const std::vector<std::string>& sources) {
+    namespace fs = std::filesystem;
+    std::set<std::string> paths{
+        "fse/quests.lua", "mods.ini",
+        "data/compileddefs/names.bin", "data/compileddefs/game.bin",
+        "data/compileddefs/script.bin", "data/compileddefs/frontend.bin",
+        "data/graphics/graphics.big", "data/graphics/pc/graphics.big",
+        "data/graphics/pc/textures.big", "data/misc/pc/effects.big",
+        "data/levels/finalalbion.wad", "data/levels/finalalbion.bwd",
+        "data/levels/finalalbion.wld", "data/levels/finalalbion_rt.stb"};
+    for (const auto& source : sources) {
+        if (!fs::is_directory(source)) {
+            if (lowered(fs::path(source).extension().string()) != ".fmp") return std::nullopt;
+            continue; // FMP WAD payloads are restricted to data/Levels.
+        }
+        if (albion::modpack::isPack(source) ||
+            fs::exists(fs::path(source) / (fs::path(source).filename().string() + ".dll")))
+            return std::nullopt;
+        for (const auto& item : fs::recursive_directory_iterator(source)) {
+            if (item.is_symlink()) return std::nullopt;
+            if (item.is_regular_file())
+                paths.insert(forge::modchoices::filePathKey(item.path().lexically_relative(source).generic_string()));
+        }
+    }
+    return paths;
+}
+
+json copyInstallBaseline(const std::filesystem::path& base, const std::filesystem::path& effective,
+                         const std::set<std::string>* ordinaryPaths = nullptr) {
+    namespace fs = std::filesystem;
+    size_t copied = 0;
+    uintmax_t bytes = 0;
+    std::map<std::string, forge::stage::RecoveryEntry> recovery;
+    if (fs::exists(forge::stage::manifestPath(base)))
+        for (const auto& entry : forge::stage::inspectRecovery(base))
+            recovery.emplace(forge::modchoices::filePathKey(fs::path(entry.relative).generic_string()), entry);
+    auto copy = [&](const fs::path& path) {
+        const auto relative = path.lexically_relative(base);
+        if (lowered(path.filename().string()).ends_with(".forgebak")) return;
+        const auto key = forge::modchoices::filePathKey(relative.generic_string());
+        if (ordinaryPaths && !ordinaryPaths->contains(key)) {
+            const auto extension = lowered(path.extension().string());
+            const bool looseLevel = key.starts_with("data/levels/") &&
+                (extension == ".tng" || extension == ".lev" || extension == ".qst");
+            const bool languageText = key.starts_with("data/lang/") &&
+                lowered(path.filename().string()) == "text.big";
+            if (!looseLevel && !languageText) return;
+        }
+        auto source = path;
+        if (const auto found = recovery.find(key); found != recovery.end()) {
+            if (!found->second.hadOriginal) return;
+            source = found->second.backup;
+        }
+        const auto destination = effective / relative;
+        if (fs::exists(destination)) return;
+        fs::create_directories(destination.parent_path());
+        fs::copy_file(source, destination);
+        ++copied;
+        bytes += fs::file_size(source);
+    };
+    for (const char* folder : {"data", "FSE", "Mods"}) {
+        if (!fs::is_directory(base / folder)) continue;
+        for (const auto& item : fs::recursive_directory_iterator(base / folder)) {
+            if (item.is_symlink()) throw std::runtime_error("mod installation does not follow symlinks: " + item.path().string());
+            if (item.is_regular_file()) copy(item.path());
+        }
+    }
+    if (fs::is_regular_file(base / "Mods.ini")) copy(base / "Mods.ini");
+    return {{"mode", ordinaryPaths ? "ordinary_dependencies" : "complete"},
+            {"files_copied", copied}, {"bytes_copied", bytes}};
+}
+
+// Install a complete definition snapshot intact, then use it as the baseline for
+// following layers. No cross-bank identity or raw-ID relocation is guessed here.
+int modsMerge(const std::string&, const std::string&, const std::vector<std::string>&,
+              const std::string&, bool, bool, const std::vector<std::string>&,
+              const std::string&, const forge::modchoices::Choices*, bool, json*,
+              std::vector<std::filesystem::path>*, bool);
+
+int installCompleteData(const std::string& baseRoot, const std::string& outDir,
+                        const std::vector<std::string>& sources, const std::string& fieldSchema,
+                        bool doStage, bool jsonOutput, const std::vector<std::string>& labels,
+                        const std::string& picksPath, const forge::modchoices::Choices* loadedPicks,
+                        json* reportOut, std::vector<std::filesystem::path>* outputRemovals,
+                        bool reviewChoices) {
+    namespace fs = std::filesystem;
+    const fs::path source = fs::weakly_canonical(sources.front());
+    const fs::path base = fs::weakly_canonical(baseRoot), output = fs::weakly_canonical(outDir);
+    auto within = [](const fs::path& child, const fs::path& parent) {
+        return std::mismatch(parent.begin(), parent.end(), child.begin(), child.end()).first == parent.end();
+    };
+    if (source == base) throw std::runtime_error("Select the extracted mod folder, not the game installation, in Add a mod.");
+    if (within(output, base) || within(base, output) || within(output, source) || within(source, output))
+        throw std::runtime_error("Complete mod output must be outside the game installation and source folder.");
+    // Parse every supplied bank before any output or installation writes.
+    size_t records = 0, unnamed = 0;
+    for (const char* bank : {"game.bin", "script.bin", "frontend.bin"}) {
+        const auto file = openDefs(source.string(), bank);
+        if (std::string_view(bank) == "game.bin") {
+            records = file.entries().size();
+            for (const auto& entry : file.entries()) unnamed += entry.name.empty();
+        }
+    }
+    if (doStage && fs::is_directory(base / "data"))
+        for (const auto& item : fs::recursive_directory_iterator(base / "data"))
+            if (item.is_regular_file() && item.path().extension() == ".tmp" &&
+                fs::exists(item.path().parent_path() / item.path().stem()))
+                throw std::runtime_error("EgoCore has deployed mods on this install; restore them in EgoCore before deploying from Forge.");
+    const albion::detail::TemporaryDirectory workspace("mods-complete-data-");
+    const auto effective = workspace.path() / "effective", prepared = workspace.path() / "prepared";
+    copyInstallTree(source / "data", effective / "data", true);
+    for (const char* folder : {"FSE", "Mods"}) {
+        copyInstallTree(source / folder, effective / folder, true);
+    }
+    copyInstallBaseline(base, effective);
+    copyInstallTree(source / "data", prepared / "data", true);
+    copyInstallTree(source / "FSE", prepared / "FSE", true);
+    copyInstallTree(source / "Mods", prepared / "Mods", true);
+    // Keep packed installs packed. Every authored root/FinalAlbion LEV and TNG
+    // overrides its WAD payload; new maps become native entries. Loose installs
+    // never gain a WAD. This uses the same existing WAD writers as the composer.
+    const auto wad = effective / "data/Levels/FinalAlbion.wad";
+    size_t repacked = 0, appended = 0;
+    if (fs::is_regular_file(wad)) {
+        const auto archive = forge::wad::Archive::open(wad);
+        auto wadKey = [](std::string value) {
+            std::replace(value.begin(), value.end(), '/', '\\');
+            return lowered(value);
+        };
+        std::map<std::string, std::string> known;
+        for (const auto& entry : archive.entries()) known.emplace(wadKey(entry.name), entry.name);
+        std::map<std::string, std::vector<uint8_t>> replacements;
+        std::vector<forge::wad::NativeEntry> additions;
+        const auto levels = effective / "data/Levels";
+        for (const auto& [folder, prefix] : std::vector<std::pair<fs::path, std::string>>{
+                 {levels, "Data\\Levels\\"}, {levels / "FinalAlbion", "Data\\Levels\\FinalAlbion\\"}}) {
+            if (!fs::is_directory(folder)) continue;
+            for (const auto& item : fs::directory_iterator(folder)) {
+                const auto extension = lowered(item.path().extension().string());
+                if (!item.is_regular_file() || (extension != ".lev" && extension != ".tng")) continue;
+                const auto name = prefix + item.path().filename().string();
+                auto payload = readAllBytes(item.path().string());
+                if (const auto existing = known.find(wadKey(name)); existing != known.end())
+                    replacements.emplace(existing->second, std::move(payload));
+                else additions.push_back({name, std::move(payload)});
+            }
+        }
+        auto temporary = wad; temporary += ".complete.tmp";
+        if (!replacements.empty()) {
+            repacked = forge::wad::repack(wad, replacements, temporary); fs::rename(temporary, wad);
+        }
+        if (!additions.empty()) {
+            appended = forge::wad::appendNativeEntries(wad, additions, temporary); fs::rename(temporary, wad);
+        }
+        if (repacked || appended) {
+            fs::create_directories(prepared / "data/Levels");
+            fs::copy_file(wad, prepared / "data/Levels/FinalAlbion.wad", fs::copy_options::overwrite_existing);
+        }
+    }
+    std::vector<std::string> following(sources.begin() + 1, sources.end());
+    // Controller Support ships alternate text definitions alongside its runtime.
+    // Its legacy FMP supplies the game-data layer for this route; installing both
+    // would let EgoCore overwrite the relinked controller records at launch.
+    bool controllerPackage = false;
+    const std::set<std::string> controllerRecords{
+        "CAMERA_MANAGER_SET_TEMPLATE", "FABLE_XBOX_CONTROL_SCHEME_BASE",
+        "PLAYER_GUI_PC", "PLAYER_GUI_DEFAULT", "CAMERA_MANAGER_PC_MAIN_COMBAT"};
+    for (const auto& path : following) {
+        if (lowered(fs::path(path).extension().string()) != ".fmp") continue;
+        const auto package = forge::big::File::open(path);
+        const auto* bank = package.findBank("GameBINEntries");
+        if (!bank) continue;
+        std::set<std::string> names;
+        for (const auto& entry : bank->entries) names.insert(entry.name);
+        if (std::includes(names.begin(), names.end(), controllerRecords.begin(), controllerRecords.end()))
+            controllerPackage = true;
+    }
+    json runtimePlans = json::array();
+    for (size_t i = 0; i < following.size(); ++i) {
+        const fs::path original = following[i];
+        const auto dll = original / "FableControllerSupport.dll";
+        if (!fs::is_directory(original) || !fs::is_regular_file(dll)) continue;
+        if (!controllerPackage)
+            throw std::runtime_error("Controller Support over a complete overhaul also needs its legacy ControllerSupport.fmp. Add the FMP before deploying the runtime.");
+        const auto runtime = workspace.path() / ("runtime-" + std::to_string(i)) / "FableControllerSupport";
+        fs::create_directories(runtime);
+        fs::copy_file(dll, runtime / dll.filename());
+        following[i] = runtime.string();
+        runtimePlans.push_back({{"source", original.string()}, {"dll", dll.filename().string()},
+                                {"data_excluded", fs::is_directory(original / "Data")},
+                                {"reason", "The controller FMP supplies game data; EgoCore loads only the runtime DLL."}});
+    }
+    std::vector<std::string> followingLabels;
+    if (!labels.empty()) followingLabels.assign(labels.begin() + 1, labels.end());
+    const auto changes = workspace.path() / "following";
+    json report;
+    const int rc = modsMerge(effective.string(), changes.string(), following, fieldSchema, false,
+                             true, followingLabels, picksPath, loadedPicks, false, &report, outputRemovals,
+                             reviewChoices);
+    if (rc) return rc;
+    copyInstallTree(changes, prepared, true);
+    // Empty following orders preserve the supplied complete BINs byte for byte.
+    if (following.empty())
+        for (const char* bank : {"names.bin", "game.bin", "script.bin", "frontend.bin"})
+            fs::copy_file(source / "data/CompiledDefs" / bank, prepared / "data/CompiledDefs" / bank,
+                          fs::copy_options::overwrite_existing);
+    const std::string label = labels.empty() ? source.filename().string() : labels.front();
+    report["sources"] = json::array();
+    for (size_t i = 0; i < sources.size(); ++i) {
+        const fs::path path = sources[i];
+        const std::string sourceLabel = i < labels.size() ? labels[i] :
+            (fs::is_directory(path) ? path.filename().string() : path.stem().string());
+        report["sources"].push_back({{"label", sourceLabel}, {"source", sources[i]}});
+    }
+    report["complete_data"] = {{"label", label}, {"definition_records", records}, {"unnamed_records", unnamed},
+                                {"wad_repacked", repacked}, {"wad_appended", appended}};
+    report["summary"]["sources"] = sources.size();
+    if (!runtimePlans.empty()) report["runtime_plan"] = runtimePlans;
+    // All validation/composition completes before the requested output is touched.
+    copyInstallTree(prepared, output, true);
+    if (doStage) {
+        const auto staged = forge::stage::apply(base, output);
+        report["stage"] = {{"staged", staged.staged.size()}, {"backed_up", staged.backedUp.size()}};
+    }
+    if (reportOut) *reportOut = report;
+    else if (jsonOutput) std::puts(report.dump(2).c_str());
+    else std::printf("Installed complete Data files from '%s': %zu definition records (%zu unnamed); %zu following mod(s).\n",
+                     label.c_str(), records, unnamed, following.size());
+    return 0;
+}
+
 int modsMerge(const std::string& baseRoot, const std::string& outDir,
-              const std::vector<std::string>& sources,
+              const std::vector<std::string>& sourcePaths,
               const std::string& fieldSchema, bool doStage, bool jsonOutput,
               const std::vector<std::string>& labels, const std::string& picksPath,
-              const std::map<std::string, std::string>* loadedPicks = nullptr) {
+              const forge::modchoices::Choices* loadedPicks = nullptr,
+              bool allowCompleteData = false, json* reportOut = nullptr,
+              std::vector<std::filesystem::path>* outputRemovals = nullptr,
+              bool reviewChoices = false) {
     namespace fs = std::filesystem;
+    // Conflict checks compose only in an owned temporary directory. Keep their
+    // contributor report available for clearing stale choices; published builds
+    // always retain strict winner validation.
+    if (reviewChoices && doStage)
+        throw std::runtime_error("choice review cannot stage a mod build");
+    std::vector<std::string> sources;
+    for (const auto& source : sourcePaths) sources.push_back(forge::modorder::normalizeSource(source).string());
+    std::vector<std::string> effectiveLabels;
+    for (size_t i = 0; i < sources.size(); ++i) {
+        const fs::path source(sources[i]);
+        const auto label = i < labels.size() && !labels[i].empty() ? labels[i] :
+            fs::is_directory(source) ? source.filename().string() : source.stem().string();
+        effectiveLabels.push_back(label);
+    }
+    forge::modorder::requireLabels(effectiveLabels);
     preflightModRecipes(sources);
+    if (allowCompleteData && (sources.empty() || !completeDataSource(sources.front())))
+        throw std::runtime_error("The complete Data source is missing its compiled banks; restore the extracted mod files before building.");
+    if (allowCompleteData)
+        return installCompleteData(baseRoot, outDir, sources, fieldSchema, doStage, jsonOutput,
+                                   labels, picksPath, loadedPicks, reportOut, outputRemovals, reviewChoices);
+    if (!doStage && fs::exists(forge::stage::manifestPath(baseRoot))) {
+        // Review and ordinary builds must use the same originals that Deploy
+        // restores before composing. Otherwise an installed winner disappears
+        // from its own contributors and a valid review looks stale.
+        const albion::detail::TemporaryDirectory originals("mods-originals-");
+        const auto paths = ordinaryBaselinePaths(sources);
+        const auto snapshot = copyInstallBaseline(baseRoot, originals.path(), paths ? &*paths : nullptr);
+        json report;
+        const int rc = modsMerge(originals.path().string(), outDir, sources, fieldSchema, false,
+                                jsonOutput, labels, picksPath, loadedPicks, false,
+                                jsonOutput ? &report : nullptr, outputRemovals, reviewChoices);
+        if (rc == 0 && jsonOutput) {
+            report["baseline_originals"] = snapshot;
+            if (reportOut) *reportOut = report;
+            else std::puts(report.dump(2).c_str());
+        }
+        return rc;
+    }
     const albion::detail::TemporaryDirectory mergeWorkspace("mods-merge-");
     const fs::path& tmp = mergeWorkspace.path();
 
@@ -8230,7 +9599,10 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
         for (auto& ch : leaf) if (!std::isalnum(static_cast<unsigned char>(ch))) ch = '_';
         return (tmp / (std::to_string(i) + "_" + leaf)).string();
     };
-    const ModsPicks picks = splitModsPicks(loadedPicks ? *loadedPicks : loadPicks(picksPath));
+    const auto choices = loadedPicks ? *loadedPicks : picksPath.empty() ?
+        forge::modchoices::Choices{} : forge::modchoices::read(picksPath);
+    const ModsPicks picks = splitModsPicks(choices.picks);
+    const auto& fileReviews = choices.fileReviews;
     json rep;   // `--json`: the one report, printed at the end
     {
         json srcs = json::array();
@@ -8241,6 +9613,8 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
 
     std::vector<std::string> roots;
     std::vector<std::string> rootLabels;   // parallel to roots
+    std::vector<forge::fmplinks::RecordLinks> rootLinks;
+    std::vector<bool> numericFmpRoots;      // only FMP entries carry verified baseline numeric ids
     std::vector<std::string> contentRoots = sources; // .fmp WAD banks become staged trees
     std::vector<std::string> egoFolders;
     std::vector<size_t> forgePacks;   // FableForge packs (forge_pack.json): their recipes run after the layers below
@@ -8253,15 +9627,23 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
         const std::string ext = fs::path(s).extension().string();
         if (ext == ".fmp" || ext == ".FMP") {
             const std::string root = tmpRoot(i);
-            fmpApply(baseRoot, s, root, jsonOutput);
+            forge::fmplinks::RecordLinks links;
+            fmpApply(baseRoot, s, root, jsonOutput, fieldSchema, &links,
+                     /*deferMainTextures*/ true, /*deferGraphics*/ true);
             contentRoots[i] = root;
             roots.push_back(root); rootLabels.push_back(srcLabel(i));
+            rootLinks.push_back(std::move(links));
+            numericFmpRoots.push_back(true);
         } else if (ext == ".patch" || ext == ".PATCH") {
             const std::string root = tmpRoot(i);
             patchToRoot(baseRoot, s, root, jsonOutput);
             roots.push_back(root); rootLabels.push_back(srcLabel(i));
+            rootLinks.emplace_back();
+            numericFmpRoots.push_back(false);
         } else if (fs::exists(fs::path(s) / "data" / "CompiledDefs" / "game.bin")) {
             roots.push_back(s); rootLabels.push_back(srcLabel(i));  // already a game-root
+            rootLinks.emplace_back();
+            numericFmpRoots.push_back(false);
         } else if (fs::is_directory(s) && fs::exists(fs::path(s) / (fs::path(s).filename().string() + ".dll"))) {
             // an EgoCore mod folder: the DLL goes into Mods/ below; its .def text becomes a defs layer now
             egoFolders.push_back(s);
@@ -8271,6 +9653,8 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
             const std::string root = tmpRoot(i);
             if (forge::egocore::normaliseDefs(s, baseRoot, root, ep, erep)) {
                 roots.push_back(root); rootLabels.push_back(srcLabel(i));
+                rootLinks.emplace_back();
+                numericFmpRoots.push_back(false);
                 if (jsonOutput) rep["egocore_defs"].push_back({{"mod", erep.modName}, {"def_files", erep.defFiles}, {"records_changed", erep.recordsChanged}, {"fields", erep.fieldsApplied}, {"new", erep.recordsNew}, {"skipped", erep.recordsSkipped}});
                 if (!jsonOutput) std::printf("egocore %s: %zu .def file(s), %zu block(s) replaced, %zu added -> %zu record(s) changed (%zu field(s)), %zu new, %zu skipped\n",
                             erep.modName.c_str(), erep.defFiles, erep.blocksReplaced, erep.blocksAdded, erep.recordsChanged, erep.fieldsApplied, erep.recordsNew, erep.recordsSkipped);
@@ -8296,12 +9680,352 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
     if (!jsonOutput) std::printf("normalized %zu source(s) -> %zu game-root(s); field-level merge:\n",
                 sources.size(), roots.size());
     json defsRep;
+    // Plan whole-bank namespaces before writes, then validate sibling banks.
+    const auto baselineDefs = openDefs(baseRoot, "game.bin");
+    auto plannedDefs = baselineDefs;
+    std::set<std::string> wholeBankSources;
+    std::map<std::string, std::vector<std::string>> siblingRoots, siblingLabels;
+    for (size_t i = 0; i < roots.size(); ++i) {
+        if (numericFmpRoots.at(i)) continue;
+        const auto source = openDefs(roots[i], "game.bin");
+        if (hasChangedUnnamedEntries(baselineDefs, source)) {
+            reserveWholeBankLayout(plannedDefs, source, rootLabels[i]);
+            wholeBankSources.insert(roots[i]);
+            for (const char* bank : {"script.bin", "frontend.bin"}) {
+                if (!fs::exists(fs::path(roots[i]) / "data/CompiledDefs" / bank)) continue;
+                siblingRoots[bank].push_back(roots[i]);
+                siblingLabels[bank].push_back(rootLabels[i]);
+            }
+        }
+    }
+    for (const auto& [bank, bankRoots] : siblingRoots) {
+        const auto baselineBank = openDefs(baseRoot, bank);
+        auto plan = baselineBank;
+        for (size_t i = 0; i < bankRoots.size(); ++i)
+            reserveWholeBankLayout(plan, openDefs(bankRoots[i], bank), siblingLabels.at(bank)[i]);
+    }
+    for (size_t i = 0; i < roots.size(); ++i)
+        if (!wholeBankSources.contains(roots[i])) requireUnchangedSiblingBanks(baseRoot, roots[i], rootLabels[i]);
+    for (size_t i = 0; i < contentRoots.size(); ++i)
+        if (fs::is_directory(contentRoots[i]) && !wholeBankSources.contains(contentRoots[i]))
+            requireUnchangedSiblingBanks(baseRoot, contentRoots[i], srcLabel(i));
+    // Prepare the text union in scratch before linking game.bin. Final text IDs
+    // must reflect load order and picks, including names added by earlier mods.
+    const fs::path textPlanRoot = tmp / "text-plan";
+    size_t textLangsMerged = 0, textKeysApplied = 0, textKeysContested = 0;
+    // --- text.big key union: every root whose data/lang/<L>/text.big differs from the base
+    // contributes its changed or new strings (by name); a name several roots change takes
+    // the load-order winner.
+    {
+        const fs::path langRoot = fs::path(baseRoot) / "data" / "lang";
+        json textRows = json::array();
+        // A folder bank without its baseline would otherwise be skipped here
+        // and excluded again from whole-file layers, yielding a successful no-op.
+        for (size_t ri = 0; ri < contentRoots.size(); ++ri) {
+            const auto languages = fs::path(contentRoots[ri]) / "data" / "lang";
+            if (!fs::is_directory(languages)) continue;
+            for (const auto& language : fs::directory_iterator(languages)) {
+                if (!language.is_directory() || !fs::is_regular_file(language.path() / "text.big")) continue;
+                if (!fs::is_regular_file(langRoot / language.path().filename() / "text.big"))
+                    throw std::runtime_error("mods text baseline: " + language.path().filename().string() +
+                        "/text.big is missing for " + srcLabel(ri) +
+                        "; restore the language baseline before composing this bank");
+            }
+        }
+        if (fs::is_directory(langRoot))
+            for (const auto& lang : fs::directory_iterator(langRoot)) {
+                const fs::path basePath = lang.path() / "text.big";
+                if (!fs::exists(basePath)) continue;
+                const std::string langName = lang.path().filename().string();
+                std::vector<std::tuple<std::string, std::string, bool>> changers; // label, path, fixed numeric ids
+                for (size_t ri = 0; ri < contentRoots.size(); ++ri) {
+                    const fs::path p = fs::path(contentRoots[ri]) / "data" / "lang" / lang.path().filename() / "text.big";
+                    if (fs::exists(p) && readAllBytes(p.string()) != readAllBytes(basePath.string()))
+                        changers.push_back({srcLabel(ri), p.string(), wholeBankSources.contains(contentRoots[ri])});
+                }
+                if (changers.empty()) continue;
+                auto base = forge::big::File::open(basePath);
+                std::map<std::string, std::vector<uint8_t>> baseByName;
+                std::map<std::string, uint32_t> baseTypes;
+                std::map<std::string, std::vector<uint8_t>> baseHeaders;
+                std::map<std::string, uint32_t> fixedTextIds;
+                std::map<uint32_t, std::string> occupiedTextIds;
+                uint64_t nextTextId = 0;
+                for (const auto& b : base.banks()) for (const auto& e : b.entries) {
+                    occupiedTextIds[e.id] = e.name;
+                    if (!e.name.empty()) fixedTextIds[e.name] = e.id;
+                    nextTextId = std::max(nextTextId, uint64_t(e.id) + 1);
+                }
+                std::optional<std::vector<uint8_t>> donorHeader;
+                using UnnamedIdentity = std::tuple<std::string, uint32_t, uint32_t>;
+                std::map<UnnamedIdentity, std::vector<const forge::big::Entry*>> baseUnnamed;
+                for (const auto& b : base.banks()) for (const auto& e : b.entries) if (e.name.empty())
+                    baseUnnamed[{b.name, b.id, e.id}].push_back(&e);
+                for (const auto& b : base.banks()) for (const auto& e : b.entries)
+                    if (e.type == 0 && !donorHeader) donorHeader = e.subHeader;
+                for (const auto& b : base.banks()) for (const auto& e : b.entries) if (!e.name.empty()) {
+                    baseByName[e.name] = base.entryData(e);
+                    baseTypes[e.name] = e.type;
+                    baseHeaders[e.name] = e.subHeader;
+                }
+                struct Version { std::string mod; std::vector<uint8_t> data; uint32_t type;
+                                 std::vector<uint8_t> header; bool speakerHeader = false; };
+                std::map<std::string, std::vector<Version>> versions;   // string name -> every changer's version, in load order
+                std::vector<std::string> order;
+                for (const auto& [label, c, fixedIds] : changers) {
+                    auto f = forge::big::File::open(c);
+                    auto remainingUnnamed = baseUnnamed;
+                    std::set<std::string> namedEntries;
+                    for (const auto& b : f.banks())
+                        for (const auto& e : b.entries) {
+                            if (e.name.empty()) {
+                                // Unnamed strings/groups have no safe symbolic merge key.
+                                // Accept only unchanged baseline occurrences, including metadata;
+                                // consume matches so a duplicate addition cannot masquerade as a no-op.
+                                auto& originals = remainingUnnamed[{b.name, b.id, e.id}];
+                                const auto data = f.entryData(e);
+                                const auto original = std::find_if(originals.begin(), originals.end(),
+                                    [&](const forge::big::Entry* candidate) {
+                                        return candidate->type == e.type && candidate->magic == e.magic &&
+                                            candidate->devFileType == e.devFileType && candidate->devCrc == e.devCrc &&
+                                            candidate->devSources == e.devSources && candidate->subHeader == e.subHeader &&
+                                            base.entryData(*candidate) == data;
+                                    });
+                                if (original == originals.end())
+                                    throw std::runtime_error("mods text entry: " + langName + "/unnamed ID " +
+                                        std::to_string(e.id) + " in " + b.name + " from " + label +
+                                        " differs from the language baseline; unnamed entry changes cannot be composed");
+                                originals.erase(original);
+                                continue;
+                            }
+                            if (!namedEntries.insert(e.name).second)
+                                throw std::runtime_error("mods text entry: " + langName + "/" + e.name +
+                                    " from " + label + "; duplicate named entries cannot be composed");
+                            if (fixedIds) {
+                                const auto named = fixedTextIds.find(e.name);
+                                const auto occupied = occupiedTextIds.find(e.id);
+                                if ((named != fixedTextIds.end() && named->second != e.id) ||
+                                    (occupied != occupiedTextIds.end() && occupied->second != e.name))
+                                    throw std::runtime_error("whole-bank text identity collision: " + langName + "/" +
+                                        e.name + " from " + label + " requires ID " + std::to_string(e.id));
+                                fixedTextIds[e.name] = e.id;
+                                occupiedTextIds[e.id] = e.name;
+                                nextTextId = std::max(nextTextId, uint64_t(e.id) + 1);
+                            }
+                            auto data = f.entryData(e);
+                            const auto it = baseByName.find(e.name);
+                            if (it != baseByName.end() && it->second == data && baseTypes.at(e.name) == e.type &&
+                                baseHeaders.at(e.name) == e.subHeader) continue;
+                            if (!versions.count(e.name)) order.push_back(e.name);
+                            bool speakerHeader = false;
+                            if (const auto* baselineBank = base.findBank(b.name); baselineBank && e.type == 0) {
+                                try {
+                                    speakerHeader = forge::textbig::compatibleSpeakerHeader(*baselineBank, b, e,
+                                        forge::textbig::decode(data, 0));
+                                } catch (const std::exception&) { /* selected payload validation follows below */ }
+                            }
+                            versions[e.name].push_back({label, std::move(data), e.type, e.subHeader, speakerHeader});
+                        }
+                }
+                for (const auto& name : order) {
+                    const auto& vs = versions[name];
+                    const Version* win = &vs.back();
+                    bool overridden = false, keepBase = false, unavailable = false;
+                    if (auto pk = picks.text.find(langName + "|" + name); pk != picks.text.end()) {
+                        overridden = true;
+                        if (pk->second == "vanilla") keepBase = true;
+                        else {
+                            const auto selected = std::find_if(vs.begin(), vs.end(),
+                                [&](const auto& v) { return v.mod == pk->second; });
+                            if (selected == vs.end()) {
+                                if (!reviewChoices)
+                                    throw std::runtime_error("mods text choice: " + langName + "/" + name +
+                                        " selects unavailable contributor " + pk->second +
+                                        "; review or clear this saved choice");
+                                unavailable = true;
+                                overridden = false;
+                            } else win = &*selected;
+                        }
+                    }
+                    bool agree = true;
+                    for (const auto& v : vs)
+                        if (v.data != vs.front().data || v.type != vs.front().type || v.header != vs.front().header) {
+                            agree = false; break;
+                        }
+                    if (vs.size() > 1 && !agree) {
+                        ++textKeysContested;
+                        json mods = json::array();
+                        for (const auto& v : vs) mods.push_back(v.mod);
+                        textRows.push_back({{"language", langName}, {"name", name}, {"mods", mods},
+                                            {"winner", keepBase ? "vanilla" : win->mod},
+                                            {"overridden", overridden}, {"choice_unavailable", unavailable}});
+                    }
+                    if (keepBase) {
+                        if (!baseByName.contains(name) && fixedTextIds.contains(name))
+                            throw std::runtime_error("Cannot remove reserved whole-bank text entry " + langName + "/" +
+                                name + ": definitions may reference its numeric ID; choose a contributing source");
+                        continue;
+                    }
+                    if (win->type != 0)
+                        throw std::runtime_error("mods text entry: " + langName + "/" + name + " from " + win->mod +
+                            " has unsupported type " + std::to_string(win->type) +
+                            "; only string entry changes can be composed");
+                    const auto originalHeader = baseHeaders.find(name);
+                    const auto expectedHeader = originalHeader != baseHeaders.end() ?
+                        std::optional<std::vector<uint8_t>>(originalHeader->second) : donorHeader;
+                    if (expectedHeader && win->header != *expectedHeader && !win->speakerHeader)
+                        throw std::runtime_error("mods text entry: " + langName + "/" + name + " from " + win->mod +
+                            " has unsupported TOC metadata changes; the selected entry metadata cannot be preserved");
+                    try {
+                        const auto value = forge::textbig::decode(win->data, 0);
+                        if (forge::textbig::encode(value) != win->data)
+                            throw std::runtime_error("selected payload cannot be preserved by the string codec");
+                        std::optional<uint32_t> id;
+                        if (const auto fixed = fixedTextIds.find(name); fixed != fixedTextIds.end()) id = fixed->second;
+                        else {
+                            if (nextTextId > UINT32_MAX) throw std::runtime_error("text entry IDs exhausted");
+                            id = uint32_t(nextTextId++);
+                        }
+                        const auto inserted = forge::textbig::upsertString(base, name, value, id);
+                        for (auto& entry : base.findBank(inserted.bank)->entries)
+                            if (entry.id == inserted.id) {
+                                // The authoring helper fills an empty identifier;
+                                // composition must retain the selected raw payload.
+                                entry.data = win->data;
+                                if (win->speakerHeader) entry.subHeader = win->header;
+                            }
+                        ++textKeysApplied;
+                    } catch (const std::exception& error) {
+                        throw std::runtime_error("mods text entry: " + langName + "/" + name + " from " + win->mod +
+                            " could not be applied: " + error.what());
+                    }
+                }
+                const fs::path dst = textPlanRoot / "data" / "lang" / lang.path().filename() / "text.big";
+                fs::create_directories(dst.parent_path());
+                writeAllBytes(dst.string(), base.serialize());
+                ++textLangsMerged;
+            }
+        if (jsonOutput) rep["text"] = {{"languages", textLangsMerged}, {"applied", textKeysApplied}, {"contested", textRows}};
+    }
+
     // field-level merge whenever the def schema is at hand: two mods editing different fields of one record agree
     const std::string schemaPath = fieldSchema.empty() ? defaultDefSchemaPath() : fieldSchema;
+    std::optional<std::map<std::string, uint32_t>> plannedMeshIds;
+    std::optional<std::map<std::string, uint32_t>> plannedTextureIds;
+    std::optional<std::map<std::string, uint32_t>> plannedEffectIds;
+    std::optional<std::map<std::string, uint32_t>> plannedTextIds;
+    std::set<forge::fmplinks::Destination> linkDestinations;
+    if (std::any_of(rootLinks.begin(), rootLinks.end(),
+                    [](const auto& records) { return !records.empty(); })) {
+        const auto schema = forge::defschema::Schema::load(schemaPath);
+        for (size_t ri = 0; ri < rootLinks.size(); ++ri) {
+            if (rootLinks[ri].empty()) continue;
+            const auto definitions = openDefs(roots[ri], "game.bin");
+            for (size_t ei = 0; ei < definitions.entries().size(); ++ei) {
+                const auto& entry = definitions.entries()[ei];
+                const auto key = entry.name.empty() ? forge::fmplinks::anonymousKey(ei) : entry.name;
+                const auto found = rootLinks[ri].find(key);
+                if (found == rootLinks[ri].end()) continue;
+                auto owner = entry;
+                if (owner.name.empty()) owner.name = key;
+                for (const auto& link : found->second)
+                    linkDestinations.insert(forge::fmplinks::locate(owner, schema, link).destination);
+            }
+        }
+    }
+    const bool hasNamedMeshLinks = linkDestinations.contains(forge::fmplinks::Destination::MeshEntry);
+    const bool hasNamedTextureLinks = linkDestinations.contains(forge::fmplinks::Destination::TextureEntry);
+    const bool hasNamedEffectLinks = linkDestinations.contains(forge::fmplinks::Destination::EffectEntry);
+    auto planAssetIds = [&](const fs::path& tail, const char* targetBank, const char* packageBank) {
+        auto ids = assetIdentityMap(fs::path(baseRoot) / "data" / tail, targetBank);
+        for (const auto& source : sources) {
+            if (lowered(fs::path(source).extension().string()) == ".fmp") {
+                const auto pkg = openFmpPackage(source);
+                if (const auto* bank = pkg.findBank(packageBank))
+                    for (const auto& entry : bank->entries)
+                        ids[entry.name] = entry.id;
+                continue;
+            }
+            for (const auto& dataName : {"data", "Data"}) {
+                const fs::path bank = fs::path(source) / dataName / tail;
+                if (fs::exists(bank)) {
+                    ids = assetIdentityMap(bank, targetBank);
+                    break;
+                }
+            }
+        }
+        return ids;
+    };
+    if (hasNamedMeshLinks)
+        plannedMeshIds.emplace(planAssetIds(fs::path("graphics") / "graphics.big",
+                                            "MBANK_ALLMESHES", "graphics"));
+    if (hasNamedTextureLinks)
+        plannedTextureIds.emplace(planAssetIds(fs::path("graphics") / "pc" / "textures.big",
+                                               "GBANK_MAIN_PC", "maintextures"));
+    if (hasNamedEffectLinks)
+        plannedEffectIds.emplace(planAssetIds(fs::path("Misc") / "pc" / "effects.big",
+                                              "PARTICLE_MAIN_PC", "effects"));
+    const bool hasNamedTextLinks = linkDestinations.contains(forge::fmplinks::Destination::TextEntry);
+    if (hasNamedTextLinks)
+        plannedTextIds.emplace(textIdentityMap(fs::exists(textPlanRoot / "data" / "lang" / "English" / "text.big")
+                                                  ? textPlanRoot : fs::path(baseRoot)));
+    std::vector<std::pair<std::string, std::map<std::string, uint32_t>>> languageTextIds;
+    if (hasNamedTextLinks) {
+        const fs::path langRoot = fs::path(baseRoot) / "data" / "lang";
+        for (const auto& lang : fs::directory_iterator(langRoot)) {
+            const fs::path staged = textPlanRoot / "data" / "lang" /
+                                    lang.path().filename() / "text.big";
+            const fs::path baseline = lang.path() / "text.big";
+            const fs::path& selected = fs::exists(staged) ? staged : baseline;
+            if (fs::exists(selected))
+                languageTextIds.emplace_back(lang.path().filename().string(),
+                    textIdentityMap(forge::big::File::open(selected)));
+        }
+    }
     const int rc = mergeDefs(baseRoot, outDir, "game.bin", roots, /*picks*/ "",
-                             schemaPath, jsonOutput, jsonOutput ? &defsRep : nullptr, &picks.defs, &rootLabels);
+                             schemaPath, jsonOutput, jsonOutput ? &defsRep : nullptr, &picks.defs, &rootLabels, &rootLinks,
+                             plannedMeshIds ? &*plannedMeshIds : nullptr,
+                             plannedTextureIds ? &*plannedTextureIds : nullptr,
+                             plannedEffectIds ? &*plannedEffectIds : nullptr,
+                             plannedTextIds ? &*plannedTextIds : nullptr, &numericFmpRoots,
+                             hasNamedTextLinks ? &languageTextIds : nullptr, reviewChoices);
     if (rc != 0) return rc;
     if (jsonOutput) rep["defs"] = defsRep;
+
+    // Sibling banks share the completed game name pool. Its stable prefix keeps
+    // all source offsets valid; each bank reserves its own numeric record slots.
+    for (const auto& [bank, bankRoots] : siblingRoots) {
+        const auto siblingBase = tmp / ("baseline-" + bank);
+        const auto defs = siblingBase / "data/CompiledDefs";
+        fs::create_directories(defs);
+        fs::copy_file(fs::path(baseRoot) / "data/CompiledDefs" / bank, defs / bank,
+                      fs::copy_options::overwrite_existing);
+        fs::copy_file(fs::path(outDir) / "data/CompiledDefs/names.bin", defs / "names.bin",
+                      fs::copy_options::overwrite_existing);
+        std::map<std::string, std::string> bankPicks;
+        const std::string prefix = bank + ":";
+        for (const auto& [key, winner] : picks.defs) {
+            if (key.starts_with("field:")) bankPicks[key] = winner;
+            else if (key.starts_with(prefix)) bankPicks[key.substr(prefix.size())] = winner;
+        }
+        json bankReport;
+        const int result = mergeDefs(siblingBase.string(), outDir, bank, bankRoots, "", schemaPath,
+            jsonOutput, jsonOutput ? &bankReport : nullptr, &bankPicks, &siblingLabels.at(bank),
+            nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, reviewChoices, true);
+        if (result != 0) return result;
+        if (jsonOutput) {
+            rep["definition_banks"][bank] = bankReport;
+            for (const char* counter : {"applied", "added", "record_conflicts", "field_merged_records",
+                                        "auto_merged_fields", "field_conflicts", "overridden"})
+                rep["defs"]["summary"][counter] = rep["defs"]["summary"][counter].get<size_t>() +
+                    bankReport["summary"][counter].get<size_t>();
+            for (auto row : bankReport["conflicts"]) {
+                row["bank"] = bank;
+                row["record"] = prefix + row["record"].get<std::string>();
+                rep["defs"]["conflicts"].push_back(std::move(row));
+            }
+        }
+    }
 
     // --- Level TNG merge (loose .tng under data/Levels of content roots) -------
     // An FMP's WAD bank is staged above, so its TNGs join this merge too.
@@ -8338,8 +10062,14 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
         return materialized;
     };
     // key (path relative to data/Levels) -> [(label, absPath) that differ from base]
-    std::map<std::string, std::vector<std::pair<std::string, std::string>>> tngChangers;
-    std::map<std::string, std::vector<std::pair<std::string, std::string>>> qstChangers;
+    const auto levelPathLess = [](const std::string& left, const std::string& right) {
+        return forge::modchoices::filePathKey(left) < forge::modchoices::filePathKey(right);
+    };
+    // Preserve the first spelling for reports/output while grouping every Windows alias.
+    std::map<std::string, std::vector<std::pair<std::string, std::string>>, decltype(levelPathLess)>
+        tngChangers(levelPathLess), qstChangers(levelPathLess);
+    std::map<std::string, std::vector<std::vector<std::string>>, decltype(levelPathLess)>
+        tngContributorGroups(levelPathLess);
     if (fs::exists(baseLevels)) {
         for (size_t si = 0; si < sources.size(); ++si) {
             const std::string& s = contentRoots[si];
@@ -8348,7 +10078,9 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
             const std::string label = srcLabel(si);
             for (auto& de : fs::recursive_directory_iterator(srcLevels)) {
                 if (!de.is_regular_file()) continue;
-                const std::string ext = de.path().extension().string();
+                std::string ext = de.path().extension().string();
+                std::transform(ext.begin(), ext.end(), ext.begin(),
+                    [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
                 if (ext != ".tng" && ext != ".qst") continue;
                 const std::string key =
                     fs::relative(de.path(), srcLevels).generic_string();
@@ -8361,12 +10093,16 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
                 if (differs) {
                     auto& changers = (ext == ".tng" ? tngChangers : qstChangers)[key];
                     // A derivative pack may ship the same complete TNG as its
-                    // predecessor. Keep the later owner without parsing and
-                    // merging hundreds of identical copies.
+                    // predecessor. Keep the later physical owner without parsing
+                    // hundreds of copies, while retaining every real contributor.
                     if (ext == ".tng" && !changers.empty() &&
-                        filesIdentical(de.path(), changers.back().second))
+                        filesIdentical(de.path(), changers.back().second)) {
+                        tngContributorGroups[key].back().push_back(label);
                         changers.back() = {label, de.path().string()};
-                    else changers.push_back({label, de.path().string()});
+                    } else {
+                        changers.push_back({label, de.path().string()});
+                        if (ext == ".tng") tngContributorGroups[key].push_back({label});
+                    }
                 }
             }
         }
@@ -8374,23 +10110,35 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
 
     size_t tngCopied = 0, tngMerged = 0, tngThingConflicts = 0;
     json tngRows = json::array();
-    json provenance;   // level -> thing key -> mod, for the editor's badges (forge_mods_provenance.json)
+    json provenance = json::object();   // level -> thing key -> mod, for the editor's badges (forge_mods_provenance.json)
     for (const auto& [key, changers] : tngChangers) {
         const fs::path outTng = fs::path(outDir) / "data" / "Levels" / key;
         const fs::path baseTng = baselineLevelPath(key);
         json row{{"level", key}, {"mods", json::array()}};
-        for (const auto& [lbl, path] : changers) row["mods"].push_back(lbl);
+        const auto& contributorGroups = tngContributorGroups.at(key);
+        for (const auto& group : contributorGroups)
+            for (const auto& label : group) row["mods"].push_back(label);
+        std::map<std::string, std::string> levelPicks;
+        const auto choicePrefix = forge::modchoices::canonicalKey("tng:" + key + "|").substr(4);
+        for (const auto& [k, v] : picks.tng)
+            if (k.starts_with(choicePrefix) && k.size() > choicePrefix.size())
+                levelPicks[k.substr(choicePrefix.size())] = v;
         // EgoCore-style partial TNG mods (a [Settings] header, or far fewer things than the level)
         // merge even when they are the only editor: copying one would replace the level with its
         // handful of things. Replace=true asks for exactly that copy.
-        std::vector<std::string> deleteUids;
+        std::map<std::string, std::vector<std::string>> removalMods;
         bool partial = false, replaceWhole = false;
         if (fs::exists(baseTng)) {
             size_t baseThings = 0;
             try { baseThings = forge::tng::File::parse(baseTng.string()).things().size(); } catch (const std::exception&) {}
-            for (const auto& [lbl, path] : changers) {
+            for (size_t ci = 0; ci < changers.size(); ++ci) {
+                const auto& [lbl, path] = changers[ci];
                 const auto st = readTngModSettings(path);
-                deleteUids.insert(deleteUids.end(), st.deleteUids.begin(), st.deleteUids.end());
+                for (const auto& uid : st.deleteUids) {
+                    auto& labels = removalMods["uid:" + uid];
+                    for (const auto& label : contributorGroups[ci])
+                        if (std::find(labels.begin(), labels.end(), label) == labels.end()) labels.push_back(label);
+                }
                 if (st.replace) replaceWhole = true;
                 size_t modThings = 0;
                 try { modThings = forge::tng::File::parse(path).things().size(); } catch (const std::exception&) {}
@@ -8419,26 +10167,41 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
                     if (it == baseSig.end() || it->second != thingSignature(t)) lvl[k] = changers.back().first;
                 }
             } catch (const std::exception&) {}
+            if (!levelPicks.empty()) {
+                const auto tr = mergeTngLabeled(baseTng.string(), changers, outTng.string(),
+                                               levelPicks, reviewChoices, true, &contributorGroups);
+                json crows = json::array();
+                for (const auto& c : tr.rows) {
+                    crows.push_back({{"thing", c.thing}, {"mods", c.mods}, {"winner", c.winner},
+                                     {"overridden", c.overridden}, {"choice_unavailable", c.choiceUnavailable}});
+                    if (c.winner == "vanilla") {
+                        if (provenance.contains(key) && provenance[key].is_object()) provenance[key].erase(c.thing);
+                    }
+                    else if (!c.choiceUnavailable) provenance[key][c.thing] = c.winner;
+                }
+                row["conflicts"] = crows;
+                tngThingConflicts += tr.conflicts;
+            }
         } else {
             // this level's picks: `tng:<level>|<thing>` -> `<thing>`
-            std::map<std::string, std::string> levelPicks;
-            for (const auto& [k, v] : picks.tng)
-                if (k.size() > key.size() + 1 && k.compare(0, key.size(), key) == 0 && k[key.size()] == '|') levelPicks[k.substr(key.size() + 1)] = v;
-            const auto tr = mergeTngLabeled(baseTng.string(), changers, outTng.string(), levelPicks);
+            const auto tr = mergeTngLabeled(baseTng.string(), changers, outTng.string(), levelPicks, reviewChoices,
+                                           false, &contributorGroups, &removalMods);
             tngThingConflicts += tr.conflicts;
             ++tngMerged;
             for (const auto& [k, m] : tr.origin) provenance[key][k] = m;
-            if (const size_t dropped = dropThingsByUid(outTng.string(), deleteUids)) row["deleted"] = dropped;
+            if (tr.deleted) row["deleted"] = tr.deleted;
             row["mode"] = "thing-merged";
             row["things"] = tr.things; row["applied"] = tr.applied; row["added"] = tr.added;
             json crows = json::array();
-            for (const auto& c : tr.rows) crows.push_back({{"thing", c.thing}, {"mods", c.mods}, {"winner", c.winner}, {"overridden", c.overridden}});
+            for (const auto& c : tr.rows) crows.push_back({{"thing", c.thing}, {"mods", c.mods}, {"winner", c.winner},
+                                                        {"overridden", c.overridden}, {"choice_unavailable", c.choiceUnavailable},
+                                                        {"removal_mods", c.removalMods}});
             row["conflicts"] = crows;
         }
         tngRows.push_back(row);
     }
     if (jsonOutput) rep["tng"] = {{"levels", tngRows}, {"merged", tngMerged}, {"copied", tngCopied}, {"conflicts", tngThingConflicts}};
-    if (!provenance.empty()) {
+    if (!provenance.empty() || !tngRows.empty()) {
         // next to forge_mods.json once staged: the editor badges the things a mod placed or changed
         json labels = json::array();
         for (size_t i = 0; i < sources.size(); ++i) labels.push_back(srcLabel(i));
@@ -8462,6 +10225,12 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
         const fs::path baseQst = baseLevels / key;
         json row{{"file", key}, {"mods", json::array()}};
         for (const auto& [lbl, path] : changers) row["mods"].push_back(lbl);
+        std::map<std::string, std::string> filePicks;
+        const auto choicePrefix = forge::modchoices::canonicalKey("qst:" + key + "|").substr(4);
+        for (const auto& [k, v] : picks.qst)
+            if (k.starts_with(choicePrefix) && k.size() > choicePrefix.size())
+                filePicks[k.substr(choicePrefix.size())] = v;
+        std::optional<forge::qst::MergeResult> choiceResult;
         if (changers.size() == 1 || !fs::exists(baseQst)) {
             // Single editor (or no base to 3-way against): take the last version.
             fs::create_directories(outQst.parent_path());
@@ -8469,20 +10238,23 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
                           fs::copy_options::overwrite_existing);
             ++qstCopied;
             row["mode"] = "single-editor";
+            if (!filePicks.empty())
+                choiceResult = mergeQstLabeled(baseQst.string(), changers, outQst.string(), filePicks, reviewChoices, true);
         } else {
-            std::map<std::string, std::string> filePicks;   // `qst:<file>|<quest>` -> `<quest>`
-            for (const auto& [k, v] : picks.qst)
-                if (k.size() > key.size() + 1 && k.compare(0, key.size(), key) == 0 && k[key.size()] == '|') filePicks[k.substr(key.size() + 1)] = v;
-            const auto qr = mergeQstLabeled(baseQst.string(), changers, outQst.string(), filePicks);
-            qstConflicts += qr.conflicts.size();
+            choiceResult = mergeQstLabeled(baseQst.string(), changers, outQst.string(), filePicks, reviewChoices);
             ++qstMerged;
             row["mode"] = "statement-merged";
+        }
+        if (choiceResult) {
+            const auto& qr = *choiceResult;
+            qstConflicts += qr.conflicts.size();
             row["applied"] = qr.applied; row["added_quests"] = qr.addedQuests;
             json crows = json::array();
             for (const auto& c : qr.conflicts) {
                 json wanted = json::array();
                 for (const auto& [m, flag] : c.wanted) wanted.push_back({{"mod", m}, {"flag", flag}});
-                crows.push_back({{"quest", c.name}, {"wanted", wanted}, {"winner", c.winner}, {"overridden", c.overridden}});
+                crows.push_back({{"quest", c.name}, {"wanted", wanted}, {"winner", c.winner},
+                                 {"overridden", c.overridden}, {"choice_unavailable", c.choiceUnavailable}});
             }
             row["conflicts"] = crows;
         }
@@ -8494,74 +10266,20 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
                     "%zu single-editor copies), %zu quest conflicts\n",
                     qstChangers.size(), qstMerged, qstCopied, qstConflicts);
 
-    // --- text.big key union: every root whose data/lang/<L>/text.big differs from the base
-    // contributes its changed or new strings (by name); a name several roots change takes
-    // the load-order winner.
-    {
-        const fs::path langRoot = fs::path(baseRoot) / "data" / "lang";
-        size_t langsMerged = 0, keysApplied = 0, keysContested = 0;
-        json textRows = json::array();
-        if (fs::is_directory(langRoot))
-            for (const auto& lang : fs::directory_iterator(langRoot)) {
-                const fs::path basePath = lang.path() / "text.big";
-                if (!fs::exists(basePath)) continue;
-                const std::string langName = lang.path().filename().string();
-                std::vector<std::pair<std::string, std::string>> changers;   // (label, path)
-                for (size_t ri = 0; ri < roots.size(); ++ri) {
-                    const fs::path p = fs::path(roots[ri]) / "data" / "lang" / lang.path().filename() / "text.big";
-                    if (fs::exists(p) && readAllBytes(p.string()) != readAllBytes(basePath.string())) changers.push_back({rootLabels[ri], p.string()});
-                }
-                if (changers.empty()) continue;
-                auto base = forge::big::File::open(basePath);
-                std::map<std::string, std::vector<uint8_t>> baseByName;
-                for (const auto& b : base.banks()) for (const auto& e : b.entries) if (!e.name.empty()) baseByName[e.name] = base.entryData(e);
-                struct Version { std::string mod; std::vector<uint8_t> data; };
-                std::map<std::string, std::vector<Version>> versions;   // string name -> every changer's version, in load order
-                std::vector<std::string> order;
-                for (const auto& [label, c] : changers) {
-                    auto f = forge::big::File::open(c);
-                    for (const auto& b : f.banks())
-                        for (const auto& e : b.entries) {
-                            if (e.name.empty()) continue;
-                            auto data = f.entryData(e);
-                            const auto it = baseByName.find(e.name);
-                            if (it != baseByName.end() && it->second == data) continue;
-                            if (!versions.count(e.name)) order.push_back(e.name);
-                            versions[e.name].push_back({label, std::move(data)});
-                        }
-                }
-                for (const auto& name : order) {
-                    const auto& vs = versions[name];
-                    const Version* win = &vs.back();
-                    bool overridden = false, keepBase = false;
-                    if (auto pk = picks.text.find(langName + "|" + name); pk != picks.text.end()) {
-                        overridden = true;
-                        if (pk->second == "vanilla") keepBase = true;
-                        else for (const auto& v : vs) if (v.mod == pk->second) win = &v;
-                    }
-                    bool agree = true;
-                    for (const auto& v : vs) if (v.data != vs.front().data) { agree = false; break; }
-                    if (vs.size() > 1 && !agree) {
-                        ++keysContested;
-                        json mods = json::array();
-                        for (const auto& v : vs) mods.push_back(v.mod);
-                        textRows.push_back({{"language", langName}, {"name", name}, {"mods", mods}, {"winner", keepBase ? "vanilla" : win->mod}, {"overridden", overridden}});
-                    }
-                    if (keepBase) continue;
-                    try {
-                        forge::textbig::upsertString(base, name, forge::textbig::decode(win->data, 0));
-                        ++keysApplied;
-                    } catch (const std::exception&) {}
-                }
-                const fs::path dst = fs::path(outDir) / "data" / "lang" / lang.path().filename() / "text.big";
-                fs::create_directories(dst.parent_path());
-                writeAllBytes(dst.string(), base.serialize());
-                ++langsMerged;
-            }
-        if (jsonOutput) rep["text"] = {{"languages", langsMerged}, {"applied", keysApplied}, {"contested", textRows}};
-        if (langsMerged)
-            if (!jsonOutput) std::printf("text.big merge: %zu language folder(s), %zu string(s) applied, %zu contested (load order decided)\n", langsMerged, keysApplied, keysContested);
-    }
+    const fs::path plannedLanguages = textPlanRoot / "data" / "lang";
+    if (fs::is_directory(plannedLanguages))
+        for (const auto& lang : fs::directory_iterator(plannedLanguages)) {
+            const fs::path src = lang.path() / "text.big";
+            if (!fs::exists(src)) continue;
+            const fs::path dst = fs::path(outDir) / "data" / "lang" /
+                                 lang.path().filename() / "text.big";
+            fs::create_directories(dst.parent_path());
+            fs::copy_file(src, dst, fs::copy_options::overwrite_existing);
+        }
+    if (textLangsMerged && !jsonOutput)
+        std::printf("text.big merge: %zu language folder(s), %zu string(s) applied, "
+                    "%zu contested (load order decided)\n",
+                    textLangsMerged, textKeysApplied, textKeysContested);
 
     // --- FSE quest registry union: every dir source whose FSE/quests.lua differs from the base
     // contributes its entries (by key, its own bytes); a key several mods define takes the load-
@@ -8603,11 +10321,22 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
             for (const auto& key : order) {
                 const auto& vs = versions[key];
                 const Version* win = &vs.back();
-                bool overridden = false, keepBase = false;
+                bool overridden = false, keepBase = false, unavailable = false;
                 if (auto pk = picks.fse.find(key); pk != picks.fse.end()) {
                     overridden = true;
                     if (pk->second == "vanilla") keepBase = true;
-                    else for (const auto& v : vs) if (v.mod == pk->second) win = &v;
+                    else {
+                        const auto selected = std::find_if(vs.begin(), vs.end(),
+                            [&](const auto& v) { return v.mod == pk->second; });
+                        if (selected == vs.end()) {
+                            if (!reviewChoices)
+                                throw std::runtime_error("mods FSE choice: " + key +
+                                    " selects unavailable contributor " + pk->second +
+                                    "; review or clear this saved choice");
+                            unavailable = true;
+                            overridden = false;
+                        } else win = &*selected;
+                    }
                 }
                 bool agree = true;
                 for (const auto& v : vs) if (v.raw != vs.front().raw) { agree = false; break; }
@@ -8615,7 +10344,8 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
                     ++contested;
                     json mods = json::array();
                     for (const auto& v : vs) mods.push_back(v.mod);
-                    fseRows.push_back({{"quest", key}, {"mods", mods}, {"winner", keepBase ? "vanilla" : win->mod}, {"overridden", overridden}});
+                    fseRows.push_back({{"quest", key}, {"mods", mods}, {"winner", keepBase ? "vanilla" : win->mod},
+                                      {"overridden", overridden}, {"choice_unavailable", unavailable}});
                 }
                 if (keepBase) continue;
                 if (win->hasId) {
@@ -8646,6 +10376,7 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
     struct WorldCarrier { std::string label; fs::path wld, bwd; };
     std::vector<WorldCarrier> worldCarriers;   // mods shipping FinalAlbion.wld / .bwd, in load order (merged per record below)
     std::map<std::string, size_t> dialogueWholeFileAt; // final raw archive layer for each language
+    std::optional<size_t> texturesWholeFileAt, graphicsWholeFileAt;
     {
         struct Carrier { std::string label; fs::path src; std::string rel; size_t sourceIndex; };
         std::map<std::string, std::vector<Carrier>> carriers;   // lower rel path -> sources, in load order
@@ -8659,7 +10390,8 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
             for (auto& de : fs::recursive_directory_iterator(s)) {
                 if (!de.is_regular_file()) continue;
                 const std::string rel = fs::relative(de.path(), s).generic_string();
-                std::string lower = rel; std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
+                std::string lower = forge::modchoices::filePathKey(rel);
+                if (lower == "forge_mods_build.json") continue; // output ownership is generated here, never imported
                 const std::string ext = de.path().extension().string();
                 std::string lext = ext; std::transform(lext.begin(), lext.end(), lext.begin(), ::tolower);
                 if (lext == ".tng" || lext == ".qst") continue;                      // merged above
@@ -8689,25 +10421,88 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
         json fileRows = json::array();
         for (const auto& [lower, who] : carriers) {
             const Carrier* win = &who.back();
-            bool overridden = false, keepBase = false;
+            bool overridden = false, keepBase = false, unavailable = false;
             if (auto pk = picks.file.find(lower); pk != picks.file.end()) {
                 overridden = true;
                 if (pk->second == "vanilla") keepBase = true;
-                else for (const auto& c : who) if (c.label == pk->second) win = &c;
+                else {
+                    const auto selected = std::find_if(who.begin(), who.end(),
+                        [&](const Carrier& c) { return c.label == pk->second; });
+                    if (selected == who.end()) {
+                        if (!reviewChoices)
+                            throw std::runtime_error("mods file choice: " + lower +
+                                " selects unavailable contributor " + pk->second +
+                                "; review or clear this saved choice");
+                        unavailable = true;
+                        overridden = false;
+                    } else win = &*selected;
+                }
             }
             bool agree = true;
             for (size_t ci = 1; ci < who.size() && agree; ++ci) agree = filesIdentical(who[ci].src, who.front().src);
+            const auto reviewed = fileReviews.find("file:" + lower);
+            const auto choice = picks.file.find(lower);
+            const bool hasReview = reviewed != fileReviews.end() && choice != picks.file.end();
+            forge::modchoices::FileReview currentReview;
+            bool stale = false;
+            if (hasReview || (jsonOutput && who.size() > 1 && !agree)) {
+                currentReview.winner = choice != picks.file.end() ? choice->second : "";
+                currentReview.baseline = forge::modchoices::fileContent(fs::path(baseRoot) / who.back().rel);
+                for (const auto& c : who)
+                    if (!currentReview.versions.emplace(c.label, forge::modchoices::fileContent(c.src)).second)
+                        throw std::runtime_error("mods file choice: ambiguous contributor label " + c.label + " for " + lower);
+                stale = hasReview && reviewed->second != currentReview;
+                if (stale && !reviewChoices)
+                    throw std::runtime_error("mods file choice: " + lower +
+                        " contents changed since the saved choice was reviewed; check conflicts and choose again or clear it");
+                if (stale) {
+                    overridden = keepBase = false;
+                    win = &who.back();
+                }
+            }
             if (who.size() > 1 && !agree) {
                 ++contested;
                 json mods = json::array();
                 for (const auto& c : who) mods.push_back(c.label);
-                fileRows.push_back({{"path", lower}, {"mods", mods}, {"winner", keepBase ? "vanilla" : win->label}, {"overridden", overridden}});
+                json row={{"path", lower}, {"mods", mods}, {"winner", keepBase ? "vanilla" : win->label},
+                          {"overridden", overridden}, {"choice_unavailable", unavailable},
+                          {"choice_stale", stale}, {"choice_reviewed", hasReview}};
+                if (jsonOutput) {
+                    // Raw source-file snapshots, not the later recipe/resource result
+                    // and not choose-time fingerprints for persisted label picks.
+                    auto content=[](const forge::modchoices::FileContent& file) -> json {
+                        if (!file.present) return {{"present",false}};
+                        return {{"present",file.present},{"bytes",file.bytes},{"sha256",file.sha256}};
+                    };
+                    json versions=json::array();
+                    for (const auto& c:who) {
+                        json version=content(currentReview.versions.at(c.label));version["mod"]=c.label;
+                        versions.push_back(std::move(version));
+                    }
+                    row["file_content"]={{"baseline",content(currentReview.baseline)},
+                                         {"versions",std::move(versions)}};
+                }
+                fileRows.push_back(std::move(row));
             }
-            if (keepBase) continue;
+            if (keepBase) {
+                // An explicit baseline choice must restore known baseline bytes
+                // even when publishing over a previous build's modded file.
+                const fs::path baselinePath = fs::path(baseRoot) / win->rel;
+                if (fs::is_regular_file(baselinePath)) {
+                    const fs::path restored = fs::path(outDir) / win->rel;
+                    fs::create_directories(restored.parent_path());
+                    fs::copy_file(baselinePath, restored, fs::copy_options::overwrite_existing);
+                } else if (outputRemovals) {
+                    outputRemovals->push_back(win->rel);
+                }
+                continue;
+            }
             // keep the source's own spelling for the output path
             fs::path outPath = fs::path(outDir) / win->rel;
             fs::create_directories(outPath.parent_path());
             fs::copy_file(win->src, outPath, fs::copy_options::overwrite_existing);
+            if (lower == "data/graphics/pc/textures.big") texturesWholeFileAt = win->sourceIndex;
+            if (lower == "data/graphics/graphics.big") graphicsWholeFileAt = win->sourceIndex;
             if(lower.rfind("data/lang/",0)==0 && lower.ends_with("/dialogue.big"))
                 dialogueWholeFileAt[lower]=win->sourceIndex;
         }
@@ -8716,6 +10511,287 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
             if (!jsonOutput) std::printf("whole-file layers: %zu file(s) copied (last source wins), %zu carried by more than one source, %zu identical to the install skipped\n", carriers.size(), contested, unchanged);
         for (const auto& l : settingsSkipped) if (!jsonOutput) std::printf("  %s ships userst.ini: not applied (your settings stay yours)\n", l.c_str());
         for (const auto& l : parkedWad) if (!jsonOutput) std::printf("  %s parks the retail WAD as _FinalAlbion.wad: skipped, its loose levels are repacked into FinalAlbion.wad instead\n", l.c_str());
+    }
+    // FMP texture entries are independent layers. Build one bank from the
+    // selected whole-file texture source (or retail), then apply later FMP
+    // entries in order. An earlier FMP is masked by a later whole-file layer.
+    // This preserves disjoint texture edits from multiple FMPs.
+    {
+        struct Version {
+            std::string mod;
+            size_t sourceIndex;
+            uint32_t id, type;
+            std::vector<uint8_t> payload, header;
+        };
+        std::map<std::string, std::vector<Version>> touched;
+        json masked = json::array();
+        std::optional<forge::big::File> textures;
+        const fs::path rel = fs::path("data") / "graphics" / "pc" / "textures.big";
+        for (size_t si = 0; si < sources.size(); ++si) {
+            if (lowered(fs::path(sources[si]).extension().string()) != ".fmp") continue;
+            const auto pkg = openFmpPackage(sources[si]);
+            const auto* bank = pkg.findBank("maintextures");
+            if (!bank || bank->entries.empty()) continue;
+            if (texturesWholeFileAt && si < *texturesWholeFileAt) {
+                masked.push_back({{"mod", srcLabel(si)}, {"by", srcLabel(*texturesWholeFileAt)},
+                                  {"entries", bank->entries.size()}});
+                continue;
+            }
+            if (!textures) {
+                const fs::path built = fs::path(outDir) / rel;
+                textures.emplace(forge::big::File::open(fs::exists(built) ? built : fs::path(baseRoot) / rel));
+            }
+            patchFmpMainTextures(*textures, pkg);
+            for (const auto& e : bank->entries)
+                touched[e.name].push_back({srcLabel(si), si, e.id, e.type,
+                                           pkg.entryData(e), e.subHeader});
+        }
+        // EgoCore .resource banks are currently applied after this pass. If
+        // such a texture source loads earlier than an FMP changing the same
+        // entry, that timing would reverse the requested winner: refuse it.
+        for (size_t si = 0; si < sources.size(); ++si) {
+            if (std::find(egoFolders.begin(), egoFolders.end(), sources[si]) == egoFolders.end())
+                continue;
+            fs::path data = fs::path(sources[si]) / "Data";
+            if (!fs::is_directory(data)) data = fs::path(sources[si]) / "data";
+            if (!fs::is_directory(data)) continue;
+            for (const auto& de : fs::recursive_directory_iterator(data)) {
+                if (!de.is_regular_file() || lowered(de.path().extension().string()) != ".resource") continue;
+                const std::string path = lowered(de.path().generic_string());
+                if (path.find("/textures.big/") == std::string::npos ||
+                    lowered(de.path().parent_path().filename().string()) == "gbank_gui_pc") continue;
+                const std::string resourceName = lowered(de.path().stem().string());
+                for (const auto& [entry, versions] : touched) {
+                    if (lowered(entry) != resourceName) continue;
+                    for (const auto& version : versions)
+                        if (si < version.sourceIndex)
+                            throw std::runtime_error("FMP maintextures: " + srcLabel(si) +
+                                " has an earlier EgoCore .resource for " + entry +
+                                " than " + version.mod + "; this mixed asset order is not supported yet");
+                    if (picks.texture.contains(entry))
+                        throw std::runtime_error("FMP maintextures: a saved choice for " + entry +
+                            " cannot override the EgoCore .resource in " + srcLabel(si) + " yet");
+                }
+            }
+        }
+        json conflicts = json::array(), entries = json::array();
+        std::optional<forge::big::File> baselineTextures;
+        for (const auto& [name, versions] : touched) {
+            json mods = json::array();
+            bool differs = false, overridden = false, unavailable = false, keepBase = false;
+            const Version* winner = &versions.back();
+            for (const auto& version : versions) {
+                mods.push_back(version.mod);
+                if (version.id != versions.front().id || version.type != versions.front().type ||
+                    version.payload != versions.front().payload || version.header != versions.front().header)
+                    differs = true;
+            }
+            if (const auto choice = picks.texture.find(name); choice != picks.texture.end()) {
+                if (choice->second == "vanilla") {
+                    keepBase = overridden = true;
+                } else {
+                    const auto found = std::find_if(versions.begin(), versions.end(),
+                        [&](const Version& v) { return v.mod == choice->second; });
+                    if (found != versions.end()) { winner = &*found; overridden = true; }
+                    else {
+                        if (!reviewChoices)
+                            throw std::runtime_error("mods texture choice: " + name +
+                                " selects unavailable contributor " + choice->second +
+                                "; review or clear the saved choice");
+                        unavailable = true;
+                    }
+                }
+            }
+            if (overridden) {
+                auto* bank = textures->findBank("GBANK_MAIN_PC");
+                auto target = std::find_if(bank->entries.begin(), bank->entries.end(),
+                    [&](const forge::big::Entry& e) { return e.name == name; });
+                if (target == bank->entries.end())
+                    throw std::runtime_error("FMP maintextures: selected entry is absent: " + name);
+                if (keepBase) {
+                    if (!baselineTextures)
+                        baselineTextures.emplace(forge::big::File::open(fs::path(baseRoot) / rel));
+                    const auto* baseBank = baselineTextures->findBank("GBANK_MAIN_PC");
+                    const auto original = std::find_if(baseBank->entries.begin(), baseBank->entries.end(),
+                        [&](const forge::big::Entry& e) { return e.name == name; });
+                    if (original == baseBank->entries.end()) bank->entries.erase(target);
+                    else {
+                        target->id = original->id;
+                        target->type = original->type;
+                        target->subHeader = original->subHeader;
+                        target->data = baselineTextures->entryData(*original);
+                        target->length = uint32_t(target->data.size());
+                    }
+                } else {
+                    target->id = winner->id;
+                    target->type = winner->type;
+                    target->subHeader = winner->header;
+                    target->data = winner->payload;
+                    target->length = uint32_t(target->data.size());
+                }
+            }
+            json row{{"entry", name}, {"id", versions.back().id}, {"mods", mods},
+                     {"winner", keepBase ? "vanilla" : winner->mod},
+                     {"overridden", overridden}, {"choice_unavailable", unavailable}};
+            entries.push_back(row);
+            if (versions.size() > 1 && differs) conflicts.push_back(row);
+        }
+        if (textures) {
+            const auto* bank = textures->findBank("GBANK_MAIN_PC");
+            std::set<uint32_t> ids;
+            for (const auto& entry : bank->entries)
+                if (!ids.insert(entry.id).second)
+                    throw std::runtime_error("FMP maintextures: selected entries share texture id " +
+                        std::to_string(entry.id));
+            const fs::path dst = fs::path(outDir) / rel;
+            fs::create_directories(dst.parent_path());
+            writeAllBytes(dst.string(), textures->serialize());
+        }
+        if (jsonOutput) rep["maintextures"] = {{"entries", entries},
+            {"conflicts", conflicts}, {"masked", masked}};
+        else if (!touched.empty() || !masked.empty())
+            std::printf("FMP maintextures: %zu entry layer(s), %zu contested, %zu package(s) masked by a later whole-file bank\n",
+                touched.size(), conflicts.size(), masked.size());
+    }
+    // Compose individual FMP meshes over the chosen whole graphics bank.
+    // The metadata names textures, so validate it against the final texture
+    // bank after all texture layers and picks have been applied.
+    {
+        struct Version { std::string mod; size_t sourceIndex; uint32_t id, type;
+                         std::vector<uint8_t> payload, header; };
+        std::map<std::string, std::vector<Version>> touched;
+        json masked = json::array();
+        std::optional<forge::big::File> graphics, textures;
+        const fs::path rel = fs::path("data") / "graphics" / "graphics.big";
+        const fs::path textureRel = fs::path("data") / "graphics" / "pc" / "textures.big";
+        for (size_t si = 0; si < sources.size(); ++si) {
+            if (lowered(fs::path(sources[si]).extension().string()) != ".fmp") continue;
+            const auto pkg = openFmpPackage(sources[si]);
+            const auto* bank = pkg.findBank("graphics");
+            if (!bank || bank->entries.empty()) {
+                if (const auto* links = pkg.findBank("graphicsLinkMetaData"); links && !links->entries.empty())
+                    throw std::runtime_error("FMP graphics: link metadata has no graphics entries in " + srcLabel(si));
+                continue;
+            }
+            if (graphicsWholeFileAt && si < *graphicsWholeFileAt) {
+                masked.push_back({{"mod", srcLabel(si)}, {"by", srcLabel(*graphicsWholeFileAt)},
+                                  {"entries", bank->entries.size()}});
+                continue;
+            }
+            if (!graphics) {
+                const fs::path built = fs::path(outDir) / rel;
+                graphics.emplace(forge::big::File::open(fs::exists(built) ? built : fs::path(baseRoot) / rel));
+            }
+            if (!textures) {
+                const fs::path built = fs::path(outDir) / textureRel;
+                textures.emplace(forge::big::File::open(fs::exists(built) ? built : fs::path(baseRoot) / textureRel));
+            }
+            patchFmpGraphics(*graphics, pkg);
+            validateFmpGraphicLinks(pkg, *textures);
+            for (const auto& entry : bank->entries)
+                touched[entry.name].push_back({srcLabel(si), si, entry.id, entry.type,
+                                               pkg.entryData(entry), entry.subHeader});
+        }
+        // EgoCore .resource files are applied after this pass. Reject a
+        // same-entry earlier resource whose intended later FMP win would be lost.
+        for (size_t si = 0; si < sources.size(); ++si) {
+            if (std::find(egoFolders.begin(), egoFolders.end(), sources[si]) == egoFolders.end()) continue;
+            fs::path data = fs::path(sources[si]) / "Data";
+            if (!fs::is_directory(data)) data = fs::path(sources[si]) / "data";
+            if (!fs::is_directory(data)) continue;
+            for (const auto& de : fs::recursive_directory_iterator(data)) {
+                if (!de.is_regular_file() || lowered(de.path().extension().string()) != ".resource") continue;
+                const std::string path = lowered(de.path().generic_string());
+                if (path.find("/graphics.big/") == std::string::npos) continue;
+                const std::string resourceName = lowered(de.path().stem().string());
+                for (const auto& [entry, versions] : touched) {
+                    if (lowered(entry) != resourceName) continue;
+                    for (const auto& version : versions)
+                        if (si < version.sourceIndex)
+                            throw std::runtime_error("FMP graphics: " + srcLabel(si) +
+                                " has an earlier EgoCore .resource for " + entry +
+                                " than " + version.mod + "; this mixed asset order is not supported yet");
+                    if (picks.mesh.contains(entry))
+                        throw std::runtime_error("FMP graphics: a saved choice for " + entry +
+                            " cannot override the EgoCore .resource in " + srcLabel(si) + " yet");
+                }
+            }
+        }
+        json conflicts = json::array(), entries = json::array();
+        std::optional<forge::big::File> baselineGraphics;
+        for (const auto& [name, versions] : touched) {
+            json mods = json::array();
+            bool differs = false, overridden = false, unavailable = false, keepBase = false;
+            const Version* winner = &versions.back();
+            for (const auto& version : versions) {
+                mods.push_back(version.mod);
+                if (version.id != versions.front().id || version.type != versions.front().type ||
+                    version.payload != versions.front().payload || version.header != versions.front().header)
+                    differs = true;
+            }
+            if (const auto choice = picks.mesh.find(name); choice != picks.mesh.end()) {
+                if (choice->second == "vanilla") keepBase = overridden = true;
+                else {
+                    const auto found = std::find_if(versions.begin(), versions.end(),
+                        [&](const Version& v) { return v.mod == choice->second; });
+                    if (found != versions.end()) { winner = &*found; overridden = true; }
+                    else {
+                        if (!reviewChoices)
+                            throw std::runtime_error("mods mesh choice: " + name +
+                                " selects unavailable contributor " + choice->second +
+                                "; review or clear the saved choice");
+                        unavailable = true;
+                    }
+                }
+            }
+            if (overridden) {
+                auto* bank = graphics->findBank("MBANK_ALLMESHES");
+                auto target = std::find_if(bank->entries.begin(), bank->entries.end(),
+                    [&](const forge::big::Entry& e) { return e.name == name; });
+                if (target == bank->entries.end())
+                    throw std::runtime_error("FMP graphics: selected mesh is absent: " + name);
+                if (keepBase) {
+                    if (!baselineGraphics)
+                        baselineGraphics.emplace(forge::big::File::open(fs::path(baseRoot) / rel));
+                    const auto* baseBank = baselineGraphics->findBank("MBANK_ALLMESHES");
+                    const auto original = std::find_if(baseBank->entries.begin(), baseBank->entries.end(),
+                        [&](const forge::big::Entry& e) { return e.name == name; });
+                    if (original == baseBank->entries.end()) bank->entries.erase(target);
+                    else {
+                        target->id = original->id;
+                        target->type = original->type;
+                        target->subHeader = original->subHeader;
+                        target->data = baselineGraphics->entryData(*original);
+                        target->length = uint32_t(target->data.size());
+                    }
+                } else {
+                    target->id = winner->id;
+                    target->type = winner->type;
+                    target->subHeader = winner->header;
+                    target->data = winner->payload;
+                    target->length = uint32_t(target->data.size());
+                }
+            }
+            json row{{"entry", name}, {"id", versions.back().id}, {"mods", mods},
+                     {"winner", keepBase ? "vanilla" : winner->mod},
+                     {"overridden", overridden}, {"choice_unavailable", unavailable}};
+            entries.push_back(row);
+            if (versions.size() > 1 && differs) conflicts.push_back(row);
+        }
+        if (graphics) {
+            const auto* bank = graphics->findBank("MBANK_ALLMESHES");
+            std::set<uint32_t> ids;
+            for (const auto& entry : bank->entries)
+                if (!ids.insert(entry.id).second)
+                    throw std::runtime_error("FMP graphics: selected entries share mesh id " + std::to_string(entry.id));
+            const fs::path dst = fs::path(outDir) / rel;
+            fs::create_directories(dst.parent_path());
+            writeAllBytes(dst.string(), graphics->serialize());
+        }
+        if (jsonOutput) rep["graphics"] = {{"entries", entries}, {"conflicts", conflicts}, {"masked", masked}};
+        else if (!touched.empty() || !masked.empty())
+            std::printf("FMP graphics: %zu entry layer(s), %zu contested, %zu package(s) masked by a later whole-file bank\n",
+                touched.size(), conflicts.size(), masked.size());
     }
     for (const auto& folder : egoFolders) {
         forge::egocore::Report erep;
@@ -8866,7 +10942,7 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
                     if (!c.bwd.empty()) layers.push_back({c.label, forge::bwd::File::parse(c.bwd)});
                     else layers.push_back({c.label, forge::bwd::compileFromWld(forge::wld::File::parse(c.wld), dims)});
                 } catch (const std::exception& e) {
-                    std::fprintf(stderr, "world %s: %s (its world files are skipped)\n", c.label.c_str(), e.what());
+                    throw std::runtime_error("world source '" + c.label + "' could not be composed: " + e.what());
                 }
             }
             forge::worldmerge::Report wrep;
@@ -8885,7 +10961,7 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
                 for (const auto& n : wrep.notes) std::printf("  note: %s\n", n.c_str());
             }
         } catch (const std::exception& e) {
-            std::fprintf(stderr, "world merge failed: %s\n", e.what());
+            throw std::runtime_error("world merge failed: " + std::string(e.what()));
         }
     }
 
@@ -9087,10 +11163,168 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
         const size_t defsConflicts = rep.contains("defs") ? rep["defs"]["summary"]["record_conflicts"].get<size_t>() : 0;
         rep["summary"] = {{"sources", sources.size()}, {"defs_conflicts", defsConflicts}, {"tng_conflicts", tngThingConflicts}, {"qst_conflicts", qstConflicts},
                           {"text_contested", rep.contains("text") ? rep["text"]["contested"].size() : 0}, {"files_contested", rep.contains("files") ? rep["files"]["contested"].size() : 0},
+                          {"maintextures_conflicts", rep.contains("maintextures") ? rep["maintextures"]["conflicts"].size() : 0},
+                          {"graphics_conflicts", rep.contains("graphics") ? rep["graphics"]["conflicts"].size() : 0},
                           {"lip_sync_contested", lipSyncConflicts},
                           {"fse_contested", rep.contains("fse") ? rep["fse"]["contested"].size() : 0}, {"fse_id_clashes", rep.contains("fse") ? rep["fse"]["id_clashes"].size() : 0}};
-        std::puts(rep.dump(2).c_str());
+        if (reportOut) *reportOut = rep;
+        else std::puts(rep.dump(2).c_str());
     }
+    return 0;
+}
+
+int fmpLinks(const std::string& path, bool jsonOutput, bool graphics = false,
+             bool groups = false) {
+    const auto package = openFmpPackage(path);
+    if (groups) {
+        json records = json::array();
+        const std::vector<std::string> banks = graphics ?
+            std::vector<std::string>{"graphicsLinkMetaData"} :
+            std::vector<std::string>{"GameBINLinkMetaData", "ObjectLinks"};
+        for (const auto& bankName : banks) {
+            const auto* bank = package.findBank(bankName);
+            if (!bank) continue;
+            for (const auto& entry : bank->entries) {
+                json items = json::array();
+                for (const auto& group : forge::fmplinks::readMetadataGroups(package.entryData(entry))) {
+                    items.push_back({{"path", group.path}, {"targets", group.targets}});
+                    if (!jsonOutput)
+                        std::printf("%s: %s -> %s\n", entry.name.c_str(), group.path.c_str(),
+                                    json(group.targets).dump().c_str());
+                }
+                records.push_back({{"record", entry.name}, {"bank", bankName}, {"groups", items}});
+            }
+        }
+        if (jsonOutput) std::puts(json{{"file", path}, {"records", records}}.dump(2).c_str());
+        return 0;
+    }
+    forge::fmplinks::RecordLinks links;
+    if (graphics) {
+        if (const auto* bank = package.findBank("graphicsLinkMetaData"))
+            for (const auto& entry : bank->entries) {
+                if (entry.name.empty() || links.contains(entry.name))
+                    throw std::runtime_error("FMP graphics links: unnamed or duplicate metadata entry");
+                links.emplace(entry.name, forge::fmplinks::readMetadata(package.entryData(entry)));
+            }
+    } else links = forge::fmplinks::readGameLinks(package);
+    json records = json::array();
+    for (const auto& [record, pairs] : links) {
+        json items = json::array();
+        for (const auto& link : pairs)
+            items.push_back({{"path", link.path}, {"target", link.target}});
+        records.push_back({{"record", record}, {"links", items}});
+        if (!jsonOutput) {
+            std::printf("%s: %zu link(s)\n", record.c_str(), pairs.size());
+            for (const auto& link : pairs)
+                std::printf("  %s -> %s\n", link.path.c_str(), link.target.c_str());
+        }
+    }
+    if (jsonOutput) std::puts(json{{"file", path}, {"bank", graphics ? "graphicsLinkMetaData" : "GameBINLinkMetaData"},
+                                    {"records", records}}.dump(2).c_str());
+    return 0;
+}
+
+int fmpDecode(const std::string& path, const std::string& which, bool jsonOutput) {
+    const auto package = openFmpPackage(path);
+    const auto* bank = package.findBank("GameBINEntries");
+    if (!bank) throw std::runtime_error("FMP decode: GameBINEntries is absent");
+    const auto source = std::find_if(bank->entries.begin(), bank->entries.end(),
+        [&](const forge::big::Entry& e) { return e.name == which; });
+    if (source == bank->entries.end())
+        throw std::runtime_error("FMP decode: record is absent: " + which);
+    const auto data = package.entryData(*source);
+    const auto schema = forge::defschema::Schema::load(defaultDefSchemaPath());
+    const auto* def = forge::defdecode::resolveType(schema, source->definition, data);
+    if (!def) throw std::runtime_error("FMP decode: no clean schema for " + source->definition);
+    const auto decoded = forge::defdecode::decode(data, *def);
+    json fields = json::array();
+    for (const auto& field : decoded.fields) {
+        std::string bytes;
+        static constexpr char digits[] = "0123456789abcdef";
+        for (const uint8_t byte : field.value) {
+            bytes += digits[byte >> 4]; bytes += digits[byte & 15];
+        }
+        fields.push_back({{"name", field.name}, {"type", field.type},
+                          {"value", forge::defdecode::formatValue(field)},
+                          {"raw_hex", bytes}});
+    }
+    const json report{{"record", source->name}, {"definition", source->definition},
+                      {"prefix_len", decoded.prefixLen}, {"clean", decoded.clean()},
+                      {"fields", fields}};
+    if (jsonOutput) std::puts(report.dump(2).c_str());
+    else for (const auto& field : fields)
+        std::printf("%s (%s): %s\n", field["name"].get<std::string>().c_str(),
+                    field["type"].get<std::string>().c_str(), field["value"].get<std::string>().c_str());
+    return 0;
+}
+
+// A direct build may encounter an unreadable source after its definitions were
+// already written. Keep the caller's output untouched until composition succeeds.
+void requireModBuildOutput(const std::string& baseRoot, const std::string& outDir,
+                           const std::vector<std::string>& sources) {
+    auto key = [](const std::filesystem::path& path) {
+        auto result = std::filesystem::weakly_canonical(path);
+#ifdef _WIN32
+        result = forge::modchoices::filePathKey(result.generic_string());
+#endif
+        return result;
+    };
+    auto overlaps = [](const auto& a, const auto& b) {
+        auto within = [](const auto& child, const auto& parent) {
+            return std::mismatch(parent.begin(), parent.end(), child.begin(), child.end()).first == parent.end();
+        };
+        return within(a, b) || within(b, a);
+    };
+    const auto output = key(outDir);
+    if (overlaps(output, key(baseRoot)))
+        throw std::runtime_error("Mod output must be outside the game installation and source folders.");
+    for (const auto& source : sources)
+        if (overlaps(output, key(forge::modorder::normalizeSource(source))))
+            throw std::runtime_error("Mod output must be outside the game installation and source folders.");
+}
+
+void requireCleanModStage(const std::string& baseRoot) {
+    namespace fs = std::filesystem;
+    if (albion::backups::gameRunningIn(baseRoot))
+        throw std::runtime_error("Fable.exe is running from this installation; quit the game before staging");
+    if (fs::exists(forge::stage::manifestPath(baseRoot)))
+        throw std::runtime_error("A mod is already staged; undeploy it before staging this build");
+    const auto data = fs::path(baseRoot) / "data";
+    if (fs::is_directory(data))
+        for (const auto& item : fs::recursive_directory_iterator(data))
+            if (item.is_regular_file() && lowered(item.path().extension().string()) == ".tmp" &&
+                fs::exists(item.path().parent_path() / item.path().stem()))
+                throw std::runtime_error("EgoCore has deployed mods on this install; restore vanilla in EgoCore before staging");
+}
+
+int modsMergePrepared(const std::string& baseRoot, const std::string& outDir,
+                      const std::vector<std::string>& sources,
+                      const std::string& fieldSchema, bool jsonOutput,
+                      const std::vector<std::string>& labels,
+                      const std::string& picksPath, bool allowCompleteData, bool doStage = false) {
+    requireModBuildOutput(baseRoot, outDir, sources);
+    if(albion::backups::gameRunningIn(outDir))
+        throw std::runtime_error("Fable.exe is running from the mod output installation; quit the game before building into it");
+    if (doStage) requireCleanModStage(baseRoot);
+    const albion::detail::TemporaryDirectory workspace("mods-output-");
+    json report;
+    std::vector<std::filesystem::path> removals;
+    const int rc = modsMerge(baseRoot, workspace.path().string(), sources,
+                             fieldSchema, false, jsonOutput, labels, picksPath,
+                             nullptr, allowCompleteData,
+                             jsonOutput ? &report : nullptr, &removals);
+    if (rc != 0) return rc;
+    publishInstallTree(workspace.path(), outDir, removals);
+    if (doStage) {
+        requireCleanModStage(baseRoot);
+        // Stage exactly this composition, excluding receipt and unlisted files
+        // retained in the reusable output folder.
+        const auto staged = forge::stage::apply(baseRoot, workspace.path());
+        if (jsonOutput) report["stage"] = {{"staged", staged.staged.size()}, {"backed_up", staged.backedUp.size()}};
+        else std::printf("staged %zu file(s) onto %s (%zu backed up)\n",
+                         staged.staged.size(), baseRoot.c_str(), staged.backedUp.size());
+    }
+    if (jsonOutput) std::puts(report.dump(2).c_str());
     return 0;
 }
 
@@ -9142,7 +11376,7 @@ int saveRead(const std::string& path, bool jsonOutput) {
 
 // Hidden: read a BIG/.fmp and re-serialize it (validates forge::big::serialize).
 int fmpRewrite(const std::string& inPath, const std::string& outPath) {
-    const auto f = forge::big::File::open(inPath);
+    const auto f = openFmpPackage(inPath);
     writeAllBytes(outPath, f.serialize());
     std::printf("rewrote %s -> %s\n", inPath.c_str(), outPath.c_str());
     return 0;
@@ -10154,9 +12388,26 @@ int sceneAuditAll(const std::filesystem::path& root,
 } // namespace
 
 int main(int argc, char** argv) {
-    const std::vector<std::string> args(argv + 1, argv + argc);
-
     try {
+        const auto args = albion::process::arguments(argc, argv);
+        if (args.size() >= 2 && args[0] == "defs" && args[1] == "review-namespace") {
+            const bool asJson = args.back() == "--json";
+            const size_t end = args.size() - (asJson ? 1 : 0);
+            if (end < 4 || std::any_of(args.begin() + 2, args.begin() + end,
+                                      [](const auto& value) { return value.starts_with("--"); })) {
+                std::fputs("usage: forge-tools defs review-namespace <baseline-root> <source-root>... [--json]\n", stderr);
+                return 2;
+            }
+            return reviewDefinitionNamespace(args[2], {args.begin() + 3, args.begin() + end}, asJson);
+        }
+        if (args.size() >= 2 && args[0] == "world" && args[1] == "review-storage") {
+            if (args.size() < 3 || args.size() > 4 ||
+                (args.size() == 4 && args[3] != "--json") || args[2] == "--json") {
+                std::fputs("usage: forge-tools world review-storage <file> [--json]\n", stderr);
+                return 2;
+            }
+            return reviewWorldStorage(args[2], args.size() == 4);
+        }
         if (args.size() >= 3 && args[0] == "save" && args[1] == "read") {
             const bool asJson = !args.empty() && args.back() == "--json";
             return saveRead(args[2], asJson);
@@ -10187,7 +12438,14 @@ int main(int argc, char** argv) {
                 };
                 if (a == "--out") outPath = next();
                 else if (a == "--in-place") inPlace = true;
-                else if (a == "--id") requestedId = (uint32_t)std::stoul(next());
+                else if (a == "--id") {
+                    const auto token = next();
+                    uint32_t value = 0;
+                    const auto parsed = std::from_chars(token.data(), token.data()+token.size(), value);
+                    if (parsed.ec != std::errc{} || parsed.ptr != token.data()+token.size() || value == 0)
+                        throw std::invalid_argument("text set: --id must be a complete decimal integer from 1 to 4294967295");
+                    requestedId = value;
+                }
                 else if (a == "--donor") donor = next();
                 else if (a == "--speaker") speaker = next();
                 else if (a == "--speech-bank") speechBank = next();
@@ -10336,7 +12594,7 @@ int main(int argc, char** argv) {
             auto i32 = [&](size_t o) { int32_t v = 0; if (o + 4 <= sh.size()) std::memcpy(&v, sh.data() + o, 4); return v; };
             auto f32 = [&](size_t o) { float v = 0; if (o + 4 <= sh.size()) std::memcpy(&v, sh.data() + o, 4); return v; };
             if (sh.size() >= 56) {
-                info["physics_index"] = i32(0);
+                info["physics_index"] = uint32_t(i32(0));
                 info["sphere"] = {f32(4), f32(8), f32(12), f32(16)};
                 info["info_bbox_min"] = {f32(20), f32(24), f32(28)};
                 info["info_bbox_max"] = {f32(32), f32(36), f32(40)};
@@ -10351,7 +12609,7 @@ int main(int argc, char** argv) {
                 const size_t room = sh.size() > o + 8 ? (sh.size() - o - 8) / 4 : 0;
                 const size_t n = std::min(size_t(std::max(0, i32(o + 4))), room);
                 json tex = json::array();
-                for (size_t t = 0; t < n; ++t) tex.push_back(i32(o + 8 + t * 4));
+                for (size_t t = 0; t < n; ++t) tex.push_back(uint32_t(i32(o + 8 + t * 4)));
                 info["texture_ids"] = tex;
             }
             json j = {{"name", e->name}, {"id", e->id}, {"type", e->type}, {"payload_bytes", e->length}, {"info_bytes", sh.size()},
@@ -10363,13 +12621,21 @@ int main(int argc, char** argv) {
             std::printf("%s: id %u type %u, %zu vertices, %zu triangles, %zu material(s), %u primitive(s), %u bone(s), payload %u bytes, info %zu bytes\n",
                         e->name.c_str(), e->id, e->type, g.vertices.size(), g.triangles.size(), g.materials.size(), g.primitiveCount, g.boneCount, e->length, sh.size());
             std::printf("  bounds x %.4f..%.4f  y %.4f..%.4f  z %.4f..%.4f\n", mn[0], mx[0], mn[1], mx[1], mn[2], mx[2]);
-            if (info.contains("texture_ids")) std::printf("  info: physics %d, lods %d, textures %s\n", info["physics_index"].get<int>(), info["lod_count"].get<int>(), info["texture_ids"].dump().c_str());
+            if (info.contains("texture_ids")) std::printf("  info: physics %u, lods %d, textures %s\n", info["physics_index"].get<uint32_t>(), info["lod_count"].get<int>(), info["texture_ids"].dump().c_str());
             return 0;
         }
         if (args.size() >= 3 && args[0] == "fmp" && args[1] == "list") {
             const bool asJson = !args.empty() && args.back() == "--json";
             return fmpList(args[2], asJson);
         }
+        if (args.size() >= 3 && args[0] == "fmp" && args[1] == "links") {
+            const bool asJson = std::find(args.begin() + 3, args.end(), "--json") != args.end();
+            const bool graphics = std::find(args.begin() + 3, args.end(), "--graphics") != args.end();
+            const bool groups = std::find(args.begin() + 3, args.end(), "--groups") != args.end();
+            return fmpLinks(args[2], asJson, graphics, groups);
+        }
+        if (args.size() >= 4 && args[0] == "fmp" && args[1] == "decode")
+            return fmpDecode(args[2], args[3], std::find(args.begin() + 4, args.end(), "--json") != args.end());
         if (args.size() >= 5 && args[0] == "fmp" && args[1] == "apply") {
             return fmpApply(args[2], args[3], args[4]);
         }
@@ -10999,7 +13265,9 @@ int main(int argc, char** argv) {
             for (size_t i = 6; i < args.size(); ++i) {
                 const std::string& a = args[i];
                 auto next = [&]() -> std::string {
-                    return i + 1 < args.size() ? args[++i] : std::string();
+                    if (i + 1 >= args.size() || args[i+1].empty() || args[i+1].starts_with("--"))
+                        throw std::runtime_error("texture import: " + a + " needs a value");
+                    return args[++i];
                 };
                 if (a == "--add") add = true;
                 else if (a == "--bank") bank = next();
@@ -12041,6 +14309,20 @@ int main(int argc, char** argv) {
             return uiSetCardModel(gameRoot, schemaPath, entryName, (uint32_t)meshId,
                                   outRoot, inPlace);
         }
+        if(args.size()>=2 && args[0]=="defs" && args[1]=="clone") {
+            std::string names,out;bool asJson=false;std::vector<std::string> positional;
+            for(size_t i=2;i<args.size();++i) {
+                const auto& argument=args[i];
+                if(argument=="--names" || argument=="--out") {
+                    if(i+1>=args.size() || args[i+1].rfind("--",0)==0) throw std::runtime_error("defs clone: option requires a path");
+                    if(argument=="--names") names=args[++i];else out=args[++i];
+                } else if(argument=="--json") asJson=true;
+                else if(argument.rfind("--",0)==0) throw std::runtime_error("defs clone: unknown option "+argument);
+                else positional.push_back(argument);
+            }
+            if(positional.size()!=3 || out.empty()) throw std::runtime_error("defs clone: usage: defs clone <bin> <donor-name-or-index> <new-name> --out <bin> [--names <names.bin>] [--json]");
+            return defsClone(positional[0],names,positional[1],positional[2],out,asJson);
+        }
         // forge defs set-field <bin> [--names <names.bin>] <entryName> <field>
         //   <value> [--schema <schema.json>] [--out <out.bin>] [--json]
         if (args.size() >= 5 && args[0] == "defs" && args[1] == "set-field") {
@@ -12225,7 +14507,7 @@ int main(int argc, char** argv) {
             namespace mo = forge::modorder;
             const std::string root = args[2];
             const std::string& verb = args[1];
-            bool asJson = false, doStage = false;
+            bool asJson = false, doStage = false, installData = false;
             std::string name, note, fieldSchema;
             std::optional<std::string> picksOverride;
             int at = -1, destination = 0;
@@ -12253,6 +14535,7 @@ int main(int argc, char** argv) {
                 const auto& option = args[i];
                 if (option == "--json" && (verb == "list" || verb == "build" || verb == "conflicts" || verb == "deploy")) asJson = true;
                 else if (option == "--stage" && verb == "build") doStage = true;
+                else if (option == "--install-data" && verb == "add") installData = true;
                 else if ((verb == "add" && (option == "--name" || option == "--note" || option == "--at")) ||
                          (verb == "build" && option == "--fields") ||
                          ((verb == "build" || verb == "conflicts" || verb == "deploy") && option == "--picks")) {
@@ -12276,7 +14559,7 @@ int main(int argc, char** argv) {
                     const auto order = mo::load(root);
                     if (asJson) {
                         json mods = json::array();
-                        for (const auto& e : order.mods) mods.push_back({{"name", e.name}, {"source", e.source}, {"kind", mo::kindName(e.kind)}, {"sha256", e.sha256}, {"enabled", e.enabled}, {"note", e.note}});
+                        for (const auto& e : order.mods) mods.push_back({{"name", e.name}, {"source", e.source}, {"kind", mo::kindName(e.kind)}, {"sha256", e.sha256}, {"enabled", e.enabled}, {"note", e.note}, {"install_data", e.installData}});
                         std::puts(json{{"file", mo::orderPath(root).generic_string()}, {"mods", mods}}.dump(2).c_str());
                         return 0;
                     }
@@ -12290,7 +14573,7 @@ int main(int argc, char** argv) {
                 if (args[1] == "add") {
                     if (args.size() < 4) { std::fprintf(stderr, "mods add <game-root> <source> [--name N] [--at i] [--note text]\n"); return 2; }
                     auto order = mo::load(root);
-                    auto& e = mo::add(order, root, args[3], name, at);
+                    auto& e = mo::add(order, root, args[3], name, at, installData);
                     e.note = note;
                     mo::save(root, order);
                     std::printf("added \"%s\" (%s, sha256 %.12s) at %d of %zu\n", e.name.c_str(), mo::kindName(e.kind), e.sha256.c_str(), mo::indexOf(order, e.name), order.mods.size());
@@ -12316,13 +14599,13 @@ int main(int argc, char** argv) {
                     mo::Order order;
                     std::vector<std::string> sources;
                     std::string picksPath;
-                    std::map<std::string, std::string> loadedPicks;
+                    forge::modchoices::Choices loadedPicks;
                     if (args[1] == "deploy") {
                         // Read user decisions before reverting; reuse this snapshot during the build.
                         order = mo::load(root);
                         sources = mo::buildSources(order, root);
                         picksPath = picksOverride.value_or(modsPicksDefault(root));
-                        loadedPicks = loadPicks(picksPath);
+                        if (!picksPath.empty()) loadedPicks = forge::modchoices::read(picksPath);
                         preflightModRecipes(sources);
                     }
                     // deploy = the install rebuilt from the order: a previous stage is reverted first (its
@@ -12344,18 +14627,21 @@ int main(int argc, char** argv) {
                     const albion::detail::TemporaryDirectory workspace("mods-deploy-");
                     const auto& scratch = workspace.path();
                     if (!asJson) std::printf("building %zu enabled mod(s) in order onto %s%s%s\n", sources.size(), root.c_str(), picksPath.empty() ? "" : ", picks from ", picksPath.c_str());
-                    const int rc = modsMerge(root, scratch.string(), sources, {}, /*stage*/ true, asJson, mo::buildLabels(order), picksPath, &loadedPicks);
+                    const int rc = modsMerge(root, scratch.string(), sources, {}, /*stage*/ true, asJson, mo::buildLabels(order), picksPath, &loadedPicks, mo::installsCompleteData(order));
                     return rc;
                 }
                 if (args[1] == "conflicts") {   // a dry-run build into a scratch folder: the report without the files
                     const auto order = mo::load(root);
                     const auto sources = mo::buildSources(order, root);
-                    if (sources.empty()) { std::fprintf(stderr, "mods conflicts: the order has no enabled mods\n"); return 1; }
+                    // An empty order still has a valid dry-run report. The GUI
+                    // needs it to review saved choices after the last mod is removed.
                     const std::string picksPath = picksOverride.value_or(modsPicksDefault(root));
                     const albion::detail::TemporaryDirectory workspace("mods-conflicts-");
                     const auto& scratch = workspace.path();
                     if (!asJson) std::printf("dry run of %zu enabled mod(s) in order onto %s%s%s\n", sources.size(), root.c_str(), picksPath.empty() ? "" : ", picks from ", picksPath.c_str());
-                    const int rc = modsMerge(root, scratch.string(), sources, {}, false, asJson, mo::buildLabels(order), picksPath);
+                    const int rc = modsMerge(root, scratch.string(), sources, {}, false, asJson,
+                        mo::buildLabels(order), picksPath, nullptr, mo::installsCompleteData(order),
+                        nullptr, nullptr, /*reviewChoices*/ true);
                     return rc;
                 }
                 if (args[1] == "build") {
@@ -12365,7 +14651,8 @@ int main(int argc, char** argv) {
                     const auto sources = mo::buildSources(order, root);
                     if (sources.empty()) { std::fprintf(stderr, "mods build: the order has no enabled mods (mods add first)\n"); return 1; }
                     if (!asJson) std::printf("building %zu enabled mod(s) in order onto %s\n", sources.size(), root.c_str());
-                    return modsMerge(root, args[3], sources, fieldSchema, doStage, asJson, mo::buildLabels(order), picksPath);
+                    return modsMergePrepared(root, args[3], sources, fieldSchema, asJson,
+                                             mo::buildLabels(order), picksPath, mo::installsCompleteData(order), doStage);
                 }
             } catch (const std::exception& e) {
                 std::fprintf(stderr, "mods %s: %s\n", args[1].c_str(), e.what());
@@ -12374,22 +14661,28 @@ int main(int argc, char** argv) {
         }
         if (args.size() >= 5 && args[0] == "mods" && args[1] == "merge") {
             const bool asJson = !args.empty() && args.back() == "--json";
-            bool doStage = false;
-            std::string fieldSchema;
+            bool doStage = false, installData = false;
+            std::string fieldSchema, picksPath;
             std::vector<std::string> sources;
             bool seenWith = false;
             for (size_t i = 4; i < args.size(); ++i) {
                 if (args[i] == "--json") continue;
                 if (args[i] == "--stage") { doStage = true; continue; }
+                if (args[i] == "--install-data") { installData = true; continue; }
                 if (args[i] == "--fields" && i + 1 < args.size()) {
                     fieldSchema = args[++i];
+                    continue;
+                }
+                if (args[i] == "--picks" && i + 1 < args.size()) {
+                    picksPath = args[++i];
                     continue;
                 }
                 if (args[i] == "--with") { seenWith = true; continue; }
                 sources.push_back(args[i]);
             }
             (void)seenWith;
-            return modsMerge(args[2], args[3], sources, fieldSchema, doStage, asJson, {}, "");
+            return modsMergePrepared(args[2], args[3], sources, fieldSchema,
+                                     asJson, {}, picksPath, installData, doStage);
         }
         if (args.size() >= 6 && args[0] == "defs" && args[1] == "merge") {
             const bool asJson = !args.empty() && args.back() == "--json";

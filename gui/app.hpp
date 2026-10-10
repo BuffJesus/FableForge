@@ -33,8 +33,14 @@
 #include "forge/lipsync.hpp"
 #include "forge/lipsync_preset.hpp"
 #include "forge/dialoguetext.hpp"
+#include "forge/textbig.hpp"
+#include "forge/bin.hpp"
+#include "forge/defdecode.hpp"
+#include "forge/defschema.hpp"
+#include "textmetadata.hpp"
 #include "forge/headpose.hpp"
 #include "forge/modorder.hpp"
+#include "forge/modchoices.hpp"
 #include "imgui.h"
 #include "foliageexport.hpp"
 #include "leveledit.hpp"
@@ -73,6 +79,8 @@ struct MapEntry {
 };
 
 struct ExportSettings {
+    bool autosave = true;
+    int autosaveMinutes = 5;
     int format = 0;          // 0 = glb, 1 = obj
     bool textures = true;
     int texels = 8;
@@ -102,7 +110,7 @@ public:
     // script asked to quit.
     bool tick(class App& app);
     void registerWidget(const char* id);   // records the last item's rect
-    void registerRect(const char* id, const ImVec4& rect) { if (active_) widgets_[id] = rect; }
+    void registerRect(const char* id, const ImVec4& rect) { if (active_) { widgets_[id] = rect; widgetClips_.erase(id); } }
     bool takeScreenshot(std::string& path); // host polls this after rendering
     // The scripted mouse position, re-applied by the host every frame so the
     // Win32 backend's real-cursor fallback cannot override it.
@@ -137,11 +145,19 @@ private:
     uint64_t ownedSnapUid_=0;
     uint64_t ownedSnapParentUid_=0;
     std::vector<float> heightSnap_;   // snapshot_heights / assert_heights_changed   // reveal <widget>: scroll its window so the widget is on screen
+    struct PassabilitySnapshot { std::vector<uint8_t> walkable, camera; };
+    std::optional<PassabilitySnapshot> passabilitySnap_;
+    std::optional<std::vector<uint8_t>> shoreSnap_;
+    std::optional<std::vector<uint8_t>> soundSnap_;   // snapshot_sounds / assert_sound_changes
+    struct ThemeSnapshot { std::vector<std::array<uint8_t, 3>> indices, strengths; };
+    std::optional<ThemeSnapshot> themeSnap_;   // snapshot_themes / assert_theme_changes
+    std::optional<ThemeSnapshot> environmentSnap_;   // snapshot_environments / assert_environment_changes
     int clickPhase_ = 0;
     float dragDx_ = 0, dragDy_ = 0;   // drag_gizmo in progress when dragPhase_ > 0
     int dragPhase_ = 0;
     float dragX0_ = 0, dragY0_ = 0;
     std::map<std::string, ImVec4> widgets_;
+    std::map<std::string, ImVec4> widgetClips_;
     std::vector<std::string> failures_;
     std::vector<std::string> log_;
     bool quit_ = false;
@@ -279,10 +295,12 @@ public:
     char meshTexturePng_[512] = {};
     std::string meshImportError_;
     std::string meshImportSuccess_;
+    std::vector<std::string> meshImportNotes_;
     struct MeshImportJob {
         bool ok = false;
         std::string error;
         std::vector<std::string> notes;
+        std::vector<std::string> modelNotes;
         std::string objectName;
         std::array<std::string, 3> submittedFields;
     };
@@ -291,7 +309,22 @@ public:
     bool importMesh(const std::string& model, const std::string& name, const std::string& texturePng);
     bool meshImportBusy() const { return meshImportFuture_.valid(); }
     void pollMeshImport();
+    bool replaceMesh(const std::string& model);
+    bool meshReplaceBusy() const {return meshReplaceFuture_.valid() || modelReplaceReselect_.has_value();}
+    void pollMeshReplace();
 private:
+    struct MeshReplaceJob {
+        bool ok=false;uint32_t id=0;
+        std::string error,name,submittedPath;
+        std::vector<std::string> notes;
+    };
+    std::future<MeshReplaceJob> meshReplaceFuture_;
+    bool modelReplaceOpen_=false;
+    uint32_t modelReplaceTargetId_=0;
+    std::string modelReplaceTarget_,meshReplaceError_,meshReplaceSuccess_;
+    char meshReplacePath_[512]={};
+    std::optional<uint32_t> modelReplaceReselect_;
+    void drawModelReplaceCard(float pad,float inner,float cardInner);
     void duplicateSelected();
     void deleteSelected();
     void applyOwnedDelete(bool includeOwned);
@@ -300,8 +333,11 @@ private:
     void frameSelected();
     void showSelectedInPalette();
     void drawPlacementOptions(float width);
+    void snapPlacementPoint(float position[3]) const;
+    void cameraPlacementPoint(float position[3]) const;
     bool placeDefinition(const std::string& def, const std::string& scriptName = "");   // at the camera focus point, on the ground; CREATURE_ as an AICreature
     bool placeDefinitionAt(const std::string& def, const float position[3], const std::string& scriptName = "");
+    bool saveDraft();                                   // objects plus ignored terrain authoring file
     bool saveDocument();                                // loose .tng under saveRoot()
     bool deployDocument();                              // FinalAlbion.wad under saveRoot()
     void revertDocument();
@@ -326,6 +362,12 @@ private:
     const MapEntry* findEntry(const std::string& key) const;
     void loadSettings(std::string& savedInstall);
     std::string settingsPath() const;
+    bool settingsEnabled() const;
+    std::string sessionMap_, sessionInstall_;
+    std::optional<Camera> sessionCamera_;
+    struct MapView { Camera camera; ViewMode mode=ViewMode::Textured; };
+    std::map<std::string,MapView> mapViews_;
+    bool sessionEdit_ = false;
     // what the chosen folder offers: each false switches a feature off with a reason
     // levels = FinalAlbion.wad or the loose FinalAlbion\*.lev files (modders' extracted installs);
     // missing = the full path of every required file that is not there, for the Setup panel
@@ -337,6 +379,7 @@ private:
     bool helpOpen_ = false;          // the shortcut cheat-sheet (? / F1, or the header button)
     void drawHelpOverlay();
     bool confirmRestore_ = false;
+    std::string restoreError_;
     std::vector<backups::Entry> backupList_;
     double backupsScannedAt_ = -1;
 public:
@@ -477,6 +520,7 @@ private:
     int placeFacing_ = 0;            // 0 toward the camera, 1 random (vanilla), 2 fixed angle
     float placeAngleDeg_ = 0.0f;     // fixed angle, degrees clockwise from +Y (vanilla turns x 360)
     bool placeFixedHeight_ = false;  // vanilla "Place at constant height": absolute Z, never under the ground
+    bool placeSnapGrid_ = false;     // vanilla Options > Snap To Grid (cell-centre placement/carry)
     // vanilla owner combo (NEditGui::CMenu PLAYER_LIST_BOX -> CEditControlCentre::SelectedPlayerNumber):
     // -1 Auto, 0..3 Player N, 4 Neutral. Placement: creatures, buildings, villages, objects take it;
     // Auto = a creature def's DefaultOwner, 4 otherwise (PaintInputPlaceThingAt 0x02994490, owner 5 ->
@@ -537,9 +581,116 @@ private:
     bool addToPackOrGame(bool model);
     void drawGroundThemeCard(float pad, float inner, float cardInner);
 public:
-    void setAssetsTab(int t) { assetsTab_ = std::clamp(t, 0, 4); }
-    bool standaloneAssetPreview() const { return texturesMode_ && (assetsTab_ == 1 || assetsTab_ == 3 || assetsTab_ == 4); }
+    void setAssetsTab(int t) { assetsTab_ = std::clamp(t, 0, 6); }
+    bool standaloneAssetPreview() const { return texturesMode_ && (assetsTab_ == 1 || assetsTab_ == 3 || assetsTab_ == 4 || assetsTab_ == 5 || assetsTab_ == 6); }
+    void refreshDefinitions();
+    void pollDefinitions();
+    bool selectDefinition(const std::string& nameOrIndex);
+    bool setDefinitionBank(const std::string& bank);
+    void browseDefinition(const std::string& name);
+    bool beginDefinitionEdit(size_t field);
+    bool setDefinitionEditValue(const std::string& value);
+    bool saveDefinitionEdit();
+    bool definitionsBusy() const {return definitionFuture_.valid();}
 private:
+    struct DefinitionJob {
+        std::filesystem::path names,bank;
+        forge::bin::File file;
+        forge::defschema::Schema schema;
+        std::vector<std::vector<size_t>> members;
+        std::string error;
+    };
+    std::future<DefinitionJob> definitionFuture_;
+    forge::bin::File definitionFile_;
+    forge::defschema::Schema definitionSchema_;
+    std::optional<forge::defdecode::Decoded> definitionDecoded_;
+    std::vector<size_t> definitionFiltered_;
+    std::vector<std::vector<size_t>> definitionMembers_;
+    std::vector<std::optional<size_t>> definitionGroupOf_;
+    std::map<uint32_t,size_t> definitionNameIndices_;
+    std::map<std::string,std::map<std::optional<size_t>,std::vector<size_t>>> definitionTree_;
+    bool definitionReveal_=false;
+    std::vector<std::string> definitionTypes_;
+    std::optional<size_t> definitionSelected_;
+    std::optional<std::string> definitionBrowseRequest_;
+    std::optional<size_t> definitionBrowseIndex_;
+    std::filesystem::path definitionLoadedNames_,definitionLoadedBank_;
+    std::string definitionBank_="game.bin",definitionType_,definitionError_,definitionSelectionError_,definitionDecodeError_;
+    char definitionSearch_[256]={};
+    bool definitionLoaded_=false,definitionFilterDirty_=true;
+    bool definitionEditing_=false,definitionEditConfirm_=false;
+    size_t definitionEditIndex_=0;
+    forge::bin::Entry definitionEditExpected_;
+    std::vector<std::pair<uint32_t,std::string>> definitionEditExpectedNames_;
+    std::filesystem::path definitionEditNames_,definitionEditBank_,definitionEditDestination_;
+    std::string definitionEditField_,definitionEditType_,definitionEditError_,definitionEditSuccess_;
+    char definitionEditValue_[128]={};
+    char definitionNameSearch_[128]={};
+    std::pair<std::filesystem::path,std::filesystem::path> definitionPaths() const;
+    bool selectDefinitionIndex(size_t index,bool reveal=true);
+    void drawDefinitionBrowser(float pad,float inner,float cardInner);
+    void drawDefinitionViewport(const ImVec2& origin,const ImVec2& size);
+public:
+    void refreshTextBank();
+    void pollTextBank();
+    bool selectText(const std::string& nameOrId);
+    bool beginTextEdit();
+    bool beginTextAdd();
+    bool setTextAddName(const std::string& name);
+    bool saveTextEdit();
+    bool setTextEditContent(const std::string& content);
+    void browseText(const std::string& nameOrId);
+    bool exportTextTsv(const std::string& path);
+    void pollTextExport();
+    bool textExportBusy() const { return textExportFuture_.valid(); }
+    bool setTextLanguage(const std::string& language);
+    bool setTextEditSpeaker(const std::string& speaker);
+    bool setTextEditSpeechBank(const std::string& bank);
+    bool setTextEditIdentifier(const std::string& identifier);
+    bool setTextEditTag(size_t index,int32_t position,const std::string& name);
+    bool addTextEditTag();
+    bool removeTextEditTag(size_t index);
+    bool textsBusy() const { return textFuture_.valid(); }
+private:
+    struct TextRow {
+        std::string bank,name,error;
+        uint32_t id=0,type=0;
+        forge::textbig::Entry value;
+        std::vector<std::string> narrators;
+        std::vector<uint8_t> speakerHeader;
+    };
+    struct TextJob { std::filesystem::path path;std::string error;std::vector<TextRow> rows; };
+    std::future<TextJob> textFuture_;
+    std::vector<TextRow> textRows_;
+    std::vector<size_t> textFilteredRows_;
+    std::map<std::pair<std::string,uint32_t>,std::vector<size_t>> textById_;
+    std::optional<size_t> textSelected_;
+    std::optional<std::string> textBrowseRequest_;
+    std::filesystem::path textLoadedPath_;
+    std::string textLanguage_="English",textError_,textSelectionError_;
+    char textSearch_[256]={};
+    bool textLoaded_=false,textFilterDirty_=true;
+    struct TextExportJob { std::string path,error;size_t rows=0; };
+    std::future<TextExportJob> textExportFuture_;
+    char textExportPath_[1024]={};
+    std::string textExportError_,textExportSuccess_;
+    std::vector<char> textEditContent_;
+    std::string textEditName_,textEditBank_,textEditError_,textEditSuccess_;
+    uint32_t textEditId_=0;
+    forge::textbig::Entry textEditExpected_;
+    std::filesystem::path textEditSource_,textEditDestination_;
+    bool textEditing_=false,textEditConfirm_=false;
+    bool textEditAdding_=false;
+    textwrite::MetadataChanges textEditChanges_;
+    char textEditSpeechBank_[4096]={},textEditIdentifier_[4096]={};
+    int textEditTagSelected_=-1;
+    std::vector<std::string> textEditSpeakerNames_;
+    std::vector<uint8_t> textEditSpeakerHeader_;
+    char textAddName_[256]={};
+    std::filesystem::path textBigPath() const;
+    std::vector<std::string> textLanguages() const;
+    void drawTextBrowser(float pad,float inner,float cardInner);
+    void drawTextViewport(const ImVec2& origin,const ImVec2& size);
     struct PendingColour { std::string id; float rgba[4] = {}; bool live = false; } pendingColour_;   // a light colour being edited
     void applySectionVisibility();
     void drawLinkLines(const ImVec2& origin, const ImVec2& size);
@@ -603,7 +754,6 @@ private:
     std::map<std::string, ID3D11ShaderResourceView*> defThumbs_;
     std::vector<terrainexport::Image> thumbImages_;
     std::map<uint32_t, int> thumbTextureToImage_;
-    bool thumbBankOpen_ = false;
     int thumbBudget_ = 0;
 public:
     void dismissRule(const std::string& key) { rulesDismissed_.insert(key); if (ruleKey_ == key) ruleKey_.clear(); }
@@ -615,9 +765,19 @@ private:
     // 10 paint environment (atmos), 11 paint sound -- the .lev's 4x4 game-map grid
     int terrainMode_ = 0;
     int paintTheme_ = 0;             // LEV palette slot painted (6) / put in (7, 8)
+    bool paintSmear_ = false;        // Ground: corrected three-theme neighbour blending
+    bool paintStamp_ = false;        // Ground: full native stamp instead of soft blending
     int replaceFrom_ = -1;           // LEV palette slot taken out (7, 8); Ctrl+Shift+click samples it
     int envSlot_ = 0;                // 10: atmos palette slot painted (0 = the "no environment" slot)
+    bool envSmear_ = false;          // Environment: blend the neighbouring game cells
+    bool shoreSet_ = true, shoreOverlayShow_ = true;
     int soundIndex_ = 0;             // 11: sound list index painted (0 = none)
+    int soundOverlayShow_ = 1;       // off, all, selected
+    bool environmentOverlayShow_ = true;
+    int surveyOverlayKind_ = 0, surveyOverlayFilter_ = -1;
+    uint64_t surveyOverlayRevision_ = ~0ull;
+    std::string surveyOverlayMap_;
+    void refreshSurveyOverlay();
     char envSearch_[64] = {};
     forge::fractal::Params fractal_;     // the Fractals card (vanilla dialog defaults)
     // 14 copy region (drag), 15 paste region (click; R rotates): vanilla Copy and paste
@@ -682,7 +842,7 @@ public:
     size_t wholeMapRaise(float d, bool moveThings);
     size_t wholeMapScale(float pct);
     size_t wholeMapSet(float v);
-    void setBudgetOpen(bool on) { budgetOpen_ = on; budgetDirty_ = on; }
+    void setBudgetOpen(bool on) { budgetOpen_ = on; budgetDirty_ = on; if (!on) budgetAreaDrag_ = budgetPicking_ = false; }
     void runBudgetSurvey();   // the budget survey window's numbers for the current options
     const forge::budget::Report& budgetReport() const { return budgetReport_; }
     bool fitBusy() const { return fitFuture_.valid(); }
@@ -697,7 +857,16 @@ private:
     std::vector<LocalDetailItem> localDetail_;   // the open map's baked plants, kept from the foliage load
     bool budgetOpen_ = false;
     bool budgetDirty_ = false;       // options changed: re-run next frame
-    int budgetScope_ = 0;            // 0 whole map, 1 the selection, 2 around the view centre
+    int budgetScope_ = 0;            // 0 map, 1 selection, 2 view centre, 3 captured areas
+    std::vector<std::array<float,4>> budgetAreas_;
+    std::set<uint64_t> budgetThings_;
+    bool budgetAreaDrag_ = false, budgetPicking_ = false;
+    uint64_t budgetAreaPressUid_ = 0, budgetRevision_ = ~0ull;
+    std::array<float,2> budgetAreaStart_{}, budgetAreaEnd_{};
+    void clearBudgetAreas();
+    bool addBudgetArea(float x0, float y0, float x1, float y1);
+    void budgetAreaInput(const ImVec2& origin, const ImVec2& size);
+    void drawBudgetOverlay(const ImVec2& origin, const ImVec2& size);
     float budgetRadius_ = 20.0f;
     unsigned budgetInclude_ = forge::budget::kAll;
     bool budgetAllDuplicates_ = false;
@@ -743,11 +912,18 @@ private:
     size_t thingsShown_ = 0;
     bool penApplied_ = false;          // this stroke has had its one application (spray off)
     bool keyStroke_ = false;           // a -/= stroke (vanilla height keys) is running
+    float keyAnchor_[2] = {0, 0};      // ground point latched for the key stroke
     void fillPen(editor::TerrainBrush& b) const;
     void drawPenControls(float cardInner);
     void drawViewportEdges();
-    bool isVanillaPen(int mode) const { return mode == 2 || mode == 3 || mode == 16 || ((mode == 0 || mode == 1) && penExactStep_); }
+    bool isVanillaPen(int mode) const { return (mode == 6 && paintSmear_) || mode == 2 || mode == 3 || mode == 16 || ((mode == 0 || mode == 1) && penExactStep_); }
     bool brushHit_ = false;
+    bool brushPinned_ = false, brushPinHeld_ = false, brushPinHaveLast_ = false;
+    int brushPinTool_ = -1;
+    float brushPinPoint_[2] = {0,0}, brushLastPoint_[2] = {0,0};
+    size_t brushCursorVertices_ = 0;  // affected vertex dots visible for a small exact pen
+    size_t brushCursorSoundCells_ = 0;  // outlined sound cells for a small brush
+    size_t brushCursorEnvironmentCells_ = 0;
     float brushFable_[2] = {0, 0};   // map-local x/y under the cursor
     uint64_t syncedTerrainRev_ = 0;
     struct TerrainDeployResult { bool ok = false; std::string error, pack; std::vector<std::string> notes; std::shared_ptr<editor::Document> written; };
@@ -829,7 +1005,7 @@ private:
     bool newLevelBusy() const { return newLevelFuture_.valid(); }
     bool confirmTerrainDeploy_ = false;
     bool confirmWriteBoth_ = false;
-    bool confirmPending() const { return confirmDeploy_ || confirmTerrainDeploy_ || confirmWriteBoth_ || confirmWorldApply_ || confirmRestore_; }
+    bool confirmPending() const { return confirmDeploy_ || confirmTerrainDeploy_ || confirmWriteBoth_ || confirmWorldApply_ || confirmRestore_ || textEditConfirm_ || !snapshotDeletePending_.empty(); }
     bool writeObjectsAfterTerrain_ = false;   // set by startWriteBoth until the terrain job finishes
     std::string writeBothMap_, writeBothPack_;
     void finishWriteBoth(bool terrainOk);
@@ -842,6 +1018,7 @@ public:
     void setTexturesMode(bool on);
     bool texturesMode() const { return texturesMode_; }
     void refreshTextures();
+    void invalidateTextureViews();
     std::filesystem::path texturesBigPath() const;
     std::filesystem::path graphicsBigPath() const;
     bool selectTexture(const std::string& nameOrLabel);
@@ -853,9 +1030,10 @@ public:
     void drawTexturesPanel(float pad, float inner, float cardInner);
     void refreshModels();
     bool selectModel(const std::string& nameOrId);
+    bool selectModelById(uint32_t id);
     void drawModelBrowser(float pad, float inner, float cardInner);
     void drawModelViewport(const ImVec2& origin, const ImVec2& size);
-    struct ModelRow { uint32_t id, type, bytes; std::string name; };
+    struct ModelRow { uint32_t id, type, bytes; std::string name; bool ambiguousId = false; };
     std::vector<ModelRow> modelRows_;
     std::map<uint32_t, std::vector<std::string>> modelUsers_;
     bool modelsLoaded_ = false, modelUsersLoaded_ = false, modelReady_ = false, modelImportOpen_ = false;
@@ -899,7 +1077,7 @@ public:
     void drawEffectViewport(const ImVec2& origin, const ImVec2& size);
     // Dialogue and lip sync preview/editor (gui/dialoguebrowser.cpp).
     void drawDialogueBrowser(float pad, float inner, float cardInner);
-    enum class PathField { ModSource, Image, Png, Model, DialogueExport };
+    enum class PathField { ModSource, Image, Png, Model, DialogueExport, TextExport };
     bool drawPathInput(const char* id, const char* hint, char* value, size_t capacity,
                        float width, PathField kind, const char* widget);
     void drawDialogueViewport(const ImVec2& origin, const ImVec2& size);
@@ -993,24 +1171,50 @@ private:
     struct ModsToolResult { std::vector<std::string> lines; int rc = 0; };
     std::future<ModsToolResult> modsFuture_;
     std::string modsVerb_;
+    std::string modsActionError_;
+    std::string modsChoiceError_;
     // the conflict report of the last Check conflicts (forge-tools mods conflicts --json) and the
     // picks the user made on it (forge_mods_picks.txt next to forge_mods.json; deploy reads it)
 public:
+    struct ModFieldConflict { std::string field; std::vector<std::string> mods; std::string winner;
+        std::string type, baseline; std::vector<std::pair<std::string, std::string>> values;
+        bool hasValues = false; std::string choiceKey; };
+    struct ModFileContent { std::string mod; bool present = false; uint64_t bytes = 0;
+                            std::string sha256; };
     struct ModConflict { std::string kind, key, label; std::vector<std::string> mods;
-                         std::string winner; bool overridden = false, pickable = true, fieldMerged = false; };
+                         std::string winner; bool overridden = false, pickable = true, fieldMerged = false;
+                         std::vector<ModFieldConflict> fields;
+                         bool hasFileContent = false; ModFileContent fileBaseline;
+                         std::vector<ModFileContent> fileVersions;
+                         std::string wholeFileWinner;
+                         std::vector<std::string> removalMods; };
     std::string modConflictWinner(const ModConflict& conflict) const;
+    bool modChoiceUnavailable(const ModConflict& conflict) const;
+    bool modFileChoiceStale(const ModConflict& conflict) const;
+    bool modFieldChoiceUnavailable(const ModConflict& conflict, const ModFieldConflict& field) const;
+    static std::string modSavedChoiceLabel(const std::string& key);
+    std::string modFieldWinner(const ModConflict& conflict, const ModFieldConflict& field) const;
+    std::string modFieldValue(const ModConflict& conflict, const ModFieldConflict& field) const;
+    bool modConflictMatches(const ModConflict& conflict) const;
+    std::vector<std::pair<std::string, std::string>> modUnreportedChoices() const;
+    struct ModOutcomes { std::vector<std::string> won, lost; };
+    std::map<std::string, ModOutcomes> modConflictOutcomes() const;
 private:
     std::vector<ModConflict> modConflicts_;
+    char modConflictSearch_[192] = {};
+    bool modChoicesOnly_ = false;
     std::map<std::string, std::string> modPicks_;
+    std::map<std::string, forge::modchoices::FileReview> modFileReviews_;
     bool modReportLoaded_ = false;
     std::string modReportSummary_;
+    std::string modInstallSummary_;
     struct ModMissingMesh { std::string definition, type; uint32_t meshId = 0; };
     std::vector<ModMissingMesh> modNewMissingMeshes_;
     size_t modMissingMeshTotal_ = 0, modMissingMeshBaseline_ = 0;
     size_t modAssetUnparsed_ = 0;
     std::string modAssetStatus_, modAssetError_;
     void loadModPicks();
-    bool saveModPicks(const std::map<std::string, std::string>& picks);
+    bool saveModPicks(const forge::modchoices::Choices& choices);
 public:
     size_t modConflictCount() const { return modConflicts_.size(); }
     // pick a winner for a conflict (by its key, or the first row when key is "*"); "-" = back to load order
@@ -1023,6 +1227,7 @@ private:
     std::vector<texbrowse::TextureRow> texRows_;
     std::vector<std::string> texBanks_;
     std::string texBank_, texSelected_, texPreviewFor_, lastTexturePng_;
+    std::string texExportError_, texReplaceError_, texAddError_;
     ID3D11ShaderResourceView* texPreview_ = nullptr;
     ImVec2 texPreviewSize_ = ImVec2(1, 1);
     // list thumbnails: one open textures.big (index only), reopened when the file changes
@@ -1210,7 +1415,27 @@ private:
     bool promptInAuto_ = false;      // scripted runs skip the prompt unless they opt in
     bool discardEdits_ = false;      // set by the prompt's Discard: the next selectMap drops the document
     void drawUnsavedPrompt();
-    bool hasUnsavedEdits() const { return documentLoaded() && (doc_.dirty() || (doc_.hasTerrain() && doc_.terrainDirty())); }
+    struct RecoveryResult { bool ok=false, history=false; std::string error, map; std::filesystem::path path; };
+    std::future<RecoveryResult> recoveryFuture_;
+    std::set<std::filesystem::path> recoveryRetired_;
+    std::filesystem::path recoveryPending_, recoveryRoot_;
+    std::chrono::steady_clock::time_point recoveryAt_ = std::chrono::steady_clock::now();
+    bool recoveryPromptInAuto_ = false;
+    bool recoveryTimerInAuto_ = false;
+    bool snapshotsOpen_ = false, snapshotRestore_ = false;
+    std::vector<std::filesystem::path> snapshots_;
+    std::filesystem::path snapshotsFor_;
+    std::filesystem::path snapshotDeletePending_;
+    std::filesystem::path recoveryPath() const;
+    std::filesystem::path snapshotDirectory() const;
+    bool createSnapshot();
+    void refreshSnapshots();
+    void drawSnapshotsWindow();
+    bool autosaveNow();
+    void pollRecovery();
+    void retireRecovery();
+    void drawRecoveryPrompt();
+    bool hasUnsavedEdits() const { return documentLoaded() && (doc_.dirty() || (doc_.hasTerrain() && doc_.terrainDraftDirty())); }
     ImVec2 viewportOrigin_, viewportSize_;
     // Viewport overlays (0.15b #3): the ground under the cursor (map-local Fable
     // coordinates + height) and a compass; drawn every frame the viewport is hovered.

@@ -82,8 +82,8 @@ namespace {
 struct Seed {
     int      palIdx;
     uint32_t meshIdx;
-    uint32_t zsprite;
     uint32_t shadow;
+    uint32_t zsprite;
     PrimType prim;
     float    fadeEnd;
     float    fadeStart;
@@ -185,8 +185,8 @@ bool recordsValid(const uint8_t* data, size_t size, size_t rec, uint32_t count) 
         const uint8_t* r = data + rec + static_cast<size_t>(i) * kRecordSize;
         const uint32_t meshIdx = rdU32(r + 0x00);
         if (meshIdx >= 20000) return false;                 // MBANK_ALLMESHES ~8112
-        if (rdU32(r + 0x04) >= 20000) return false;          // zsprite idx
-        if (rdU32(r + 0x08) >= 20000) return false;          // shadow idx
+        if (rdU32(r + 0x04) >= 20000) return false;          // shadow idx
+        if (rdU32(r + 0x08) >= 20000) return false;          // zsprite idx
         if (!fadeSane(rdF32(r + 0x0c))) return false;        // FadeEnd
         if (!fadeSane(rdF32(r + 0x10))) return false;        // FadeStart
     }
@@ -204,10 +204,12 @@ FoliageType parseRecord(const uint8_t* r, int palIdx) {
     FoliageType t;
     t.paletteIndex   = palIdx;
     t.meshIdx        = rdU32(r + 0x00);
-    t.zspriteMeshIdx = rdU32(r + 0x04);
-    t.shadowMeshIdx  = rdU32(r + 0x08);
+    t.shadowMeshIdx  = rdU32(r + 0x04);
+    t.zspriteMeshIdx = rdU32(r + 0x08);
     t.fadeEnd        = rdF32(r + 0x0c);
     t.fadeStart      = rdF32(r + 0x10);
+    for (size_t i = 0; i < t.runtimeSettings.size(); ++i)
+        t.runtimeSettings[i] = rdU32(r + 0x0c + 4 * i);
     if (const KnownMesh* m = lookupMesh(t.meshIdx)) {
         t.meshName     = m->meshName;
         t.gbankTexture = m->gbankTexture;

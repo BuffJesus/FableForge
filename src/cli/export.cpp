@@ -86,8 +86,8 @@ int cmdMesh(const Install& install, const std::string& idOrName) {
         for (const auto& t : g.triangles) ++perMat[t.material];
         for (size_t i = 0; i < g.materials.size(); ++i) {
             const auto& m = g.materials[i];
-            auto nm = [&](int32_t t) { return t > 0 && texNames.count(uint32_t(t)) ? texNames[uint32_t(t)] : std::string("-"); };
-            std::printf("  material[%zu] id=%d diffuse=%d %s bump=%d %s alphaMap=%d alpha=%d flags=0x%x  triangles=%zu\n", i, m.id,
+            auto nm = [&](uint32_t t) { return t > 0 && texNames.count(t) ? texNames[t] : std::string("-"); };
+            std::printf("  material[%zu] id=%d diffuse=%u %s bump=%u %s alphaMap=%u alpha=%d flags=0x%x  triangles=%zu\n", i, m.id,
                         m.diffuseTexture, nm(m.diffuseTexture).c_str(), m.bumpTexture, nm(m.bumpTexture).c_str(), m.alphaMapTexture,
                         int(m.alphaEnabled), m.textureFlags, perMat.count(int32_t(i)) ? perMat[int32_t(i)] : 0);
         }
@@ -213,10 +213,14 @@ int runExport(const std::string& cmd, const Args& args) {
             if (!albion::effects::openBank(install.root, err)) { std::fprintf(stderr, "%s\n", err.c_str()); return 1; }
             const auto bank = forge::big::File::open(install.root / "data" / "Misc" / "pc" / "effects.big");
             int full = 0, partial = 0, sprites = 0, lights = 0, meshes = 0;
-            for (const auto& b : bank.banks())
+            for (const auto& b : bank.banks()) if (b.name=="PARTICLE_MAIN_PC")
                 for (const auto& e : b.entries) {
                     const auto fx = albion::effects::byName(install.root,e.name);
-                    if (!fx) continue;
+                    if (!fx) {
+                        ++partial;
+                        if (target=="verbose") std::printf("unresolved: %s (no unique entry)\n",e.name.c_str());
+                        continue;
+                    }
                     if (fx->parsedFully) ++full; else { ++partial; if (!target.empty() && target == "verbose") std::printf("partial: %s\n", e.name.c_str()); }
                     sprites += int(fx->sprites.size()); lights += int(fx->lights.size()); meshes += int(fx->meshes.size());
                     if (!target.empty() && target != "verbose" && lower(target) == lower(e.name)) {

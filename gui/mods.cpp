@@ -7,12 +7,14 @@
 #include "dialogueaudio.hpp"
 
 #include <array>
+#include <algorithm>
 #include <cctype>
 #include <cstdio>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <sstream>
+#include <set>
 
 #ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
@@ -21,6 +23,7 @@
 
 #include "backups.hpp"
 #include "pendingbanks.hpp"
+#include "windowsprocess.hpp"
 #include "forge/modorder.hpp"
 #include "modpack.hpp"
 #include "nlohmann/json.hpp"
@@ -35,9 +38,7 @@ namespace {
 
 fs::path exeDir() {
 #ifdef _WIN32
-    char buf[MAX_PATH];
-    const DWORD n = GetModuleFileNameA(nullptr, buf, MAX_PATH);
-    if (n > 0 && n < MAX_PATH) return fs::path(std::string(buf, n)).parent_path();
+    return process::executableDirectory();
 #endif
     return fs::current_path();
 }
@@ -77,24 +78,44 @@ void App::setSaveRoot(const std::string& root) {
     const fs::path previous = fs::path(saveRoot()).lexically_normal();
     const fs::path next = fs::path(root.empty() ? installPath_ : root).lexically_normal();
     if (previous != next && fileWriteBlocked("save folder")) return;
+    const fs::path previousTextures = texturesBigPath().lexically_normal();
+    const fs::path previousGraphics = graphicsBigPath().lexically_normal();
+    const bool hadModel = !modelName_.empty();
+    const uint32_t selectedModel = modelId_;
     saveRoot_ = root;
+    modelRoot_ = saveRoot();
     if (previous != fs::path(saveRoot()).lexically_normal()) resetModDestination();
+    if (previousTextures != texturesBigPath().lexically_normal()) invalidateTextureViews();
+    if (modelsLoaded_ && previousGraphics != graphicsBigPath().lexically_normal()) {
+        refreshModels();
+        if (hadModel) selectModelById(selectedModel);
+    }
 }
 
 void App::resetModDestination() {
+    modsActionError_.clear();
+    modsChoiceError_.clear();
+    texReplaceError_.clear();
+    texAddError_.clear();
     meshImportError_.clear(); customThemeError_.clear();
     meshImportSuccess_.clear();
+    meshImportNotes_.clear();
+    meshReplaceError_.clear();
+    meshReplaceSuccess_.clear();
     packDest_.clear(); packDestChosen_ = false;
     modConflicts_.clear(); modReportSummary_.clear();
+    modConflictSearch_[0] = 0; modChoicesOnly_ = false;
     modsVerb_.clear();
     thingOrigin_.clear(); originMods_.clear(); originFilter_.clear();
     refreshModOrder();
     modPicks_.clear();
+    modFileReviews_.clear();
     loadModPicks();
 }
 
 void App::refreshModOrder() {
     modReportLoaded_ = false;   // a report describes one order; Check conflicts again after a change
+    modInstallSummary_.clear();
     modNewMissingMeshes_.clear(); modMissingMeshTotal_ = modMissingMeshBaseline_ = modAssetUnparsed_ = 0;
     modAssetStatus_.clear(); modAssetError_.clear();
     try { modOrder_ = mo::load(saveRoot()); modOrderError_.clear(); }
@@ -148,9 +169,12 @@ bool App::modAdd(const std::string& source, const std::string& name) {
     if (fileWriteBlocked("add mod")) return false;
     try {
         auto order = mo::load(saveRoot());
-        auto& e = mo::add(order, saveRoot(), source, name);
+        const auto normalized = mo::normalizeSource(fs::weakly_canonical(source));
+        const bool complete = mo::classify(normalized) == mo::Kind::Tree && mo::hasCompleteData(normalized);
+        auto& e = mo::add(order, saveRoot(), normalized, name, -1, complete);
         mo::save(saveRoot(), order);
         pushLog("mods: added \"" + e.name + "\" (" + mo::kindName(e.kind) + ")", 0);
+        if (complete) pushLog("mods: complete Data files will be installed first; keep this mod at the top of the enabled order", 0);
         refreshModOrder();
         return true;
     } catch (const std::exception& e) { pushLog(std::string("mods: ") + e.what(), 2); return false; }
@@ -179,9 +203,14 @@ bool App::runModsTool(const std::string& verb) {
     if (modsFuture_.valid()) { pushLog("mods: still busy", 1); return false; }
     if (fileWriteBlocked("mods")) return false;
     if (batchActive()) { pushLog("mods: wait for the batch export to finish", 1); return false; }
+    modsActionError_.clear();
     const fs::path tool = findForgeTools();
-    if (tool.empty()) { pushLog("mods: forge-tools.exe not found next to FableForge.exe", 2); return false; }
+    if (tool.empty()) {
+        modsActionError_ = "Mod tools were not found. Extract the complete Forge package, then retry.";
+        pushLog("mods: forge-tools.exe not found next to FableForge.exe", 2); return false;
+    }
     if (verb != "conflicts" && backups::gameRunningIn(saveRoot())) {
+        modsActionError_ = "Fable is running from this install. Quit to the desktop before deploying or undeploying.";
         pushLog("mods: Fable is running from this install; quit to the desktop before deploying", 2);
         return false;
     }
@@ -221,14 +250,14 @@ void App::launchModsCommand(const std::string& cmd) {
         input.value = CreateFileW(L"NUL", GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE,
             &security, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
         if (input.value == INVALID_HANDLE_VALUE) { failed("cannot open mod command input"); return r; }
-        STARTUPINFOA startup{};
+        STARTUPINFOW startup{};
         startup.cb = sizeof(startup);
         startup.dwFlags = STARTF_USESTDHANDLES;
         startup.hStdInput = input.value;
         startup.hStdOutput = startup.hStdError = write.value;
         PROCESS_INFORMATION child{};
-        std::string command = cmd;
-        if (!CreateProcessA(nullptr, command.data(), nullptr, nullptr, TRUE, CREATE_NO_WINDOW,
+        std::wstring command = process::wide(cmd);
+        if (!CreateProcessW(nullptr, command.data(), nullptr, nullptr, TRUE, CREATE_NO_WINDOW,
                 nullptr, nullptr, &startup, &child)) {
             failed("cannot start forge-tools.exe"); return r;
         }
@@ -267,104 +296,285 @@ void App::launchModsCommand(const std::string& cmd) {
 
 // Read a fresh candidate before editing so external choices are not overwritten.
 namespace {
-std::map<std::string, std::string> readModPicks(const fs::path& root) {
-    const auto path = root / "forge_mods_picks.txt";
-    std::map<std::string, std::string> picks;
-    if (!fs::exists(path)) return picks;
-    if (!fs::is_regular_file(path)) throw std::runtime_error("not a regular file: " + path.string());
-    std::ifstream in(path);
-    if (!in) throw std::runtime_error("cannot open " + path.string());
-    std::string line;
-    while (std::getline(in, line)) {
-        if (line.empty() || line[0] == '#') continue;
-        size_t sep = line.find('\t');
-        if (sep == std::string::npos) sep = line.find('=');
-        if (sep == std::string::npos) continue;
-        auto key = line.substr(0, sep), winner = line.substr(sep + 1);
-        while (!key.empty() && std::isspace(static_cast<unsigned char>(key.back()))) key.pop_back();
-        while (!winner.empty() && std::isspace(static_cast<unsigned char>(winner.front()))) winner.erase(winner.begin());
-        while (!winner.empty() && std::isspace(static_cast<unsigned char>(winner.back()))) winner.pop_back();
-        if (!key.empty()) picks[key] = winner;
-    }
-    if (in.bad() || !in.eof()) throw std::runtime_error("incomplete read of " + path.string());
-    return picks;
+forge::modchoices::Choices readModPicks(const fs::path& root) {
+    return forge::modchoices::read(root / "forge_mods_picks.txt", true);
+}
+forge::modchoices::FileReview fileReview(const App::ModConflict& row, const std::string& winner) {
+    forge::modchoices::FileReview result;
+    result.winner = winner;
+    result.baseline = {row.fileBaseline.present, row.fileBaseline.bytes, row.fileBaseline.sha256};
+    for (const auto& version : row.fileVersions)
+        if (!result.versions.emplace(version.mod, forge::modchoices::FileContent{
+            version.present, version.bytes, version.sha256}).second)
+            throw std::runtime_error("duplicate file contributor in conflict report: " + version.mod);
+    return result;
 }
 } // namespace
 
 void App::loadModPicks() {
-    try { modPicks_ = readModPicks(saveRoot()); }
-    catch (const std::exception& e) { pushLog(std::string("mods: cannot read conflict choices: ") + e.what(), 2); }
+    try {
+        auto choices = readModPicks(saveRoot());
+        modPicks_ = std::move(choices.picks);
+        modFileReviews_ = std::move(choices.fileReviews);
+    }
+    catch (const std::exception& e) {
+        modsChoiceError_ = "Cannot read forge_mods_picks.txt. See Activity for the file error.";
+        pushLog(std::string("mods: cannot read conflict choices: ") + e.what(), 2);
+    }
 }
 
-bool App::saveModPicks(const std::map<std::string, std::string>& picks) {
+bool App::saveModPicks(const forge::modchoices::Choices& choices) {
     try {
         detail::PendingBanks pending(saveRoot(), ".forge-mod-picks-");
-        if (picks.empty()) pending.remove("forge_mods_picks.txt");
+        if (choices.picks.empty()) pending.remove("forge_mods_picks.txt");
         else {
             std::ofstream out;
             out.exceptions(std::ios::failbit | std::ios::badbit);
             out.open(pending.prepare("forge_mods_picks.txt"), std::ios::binary);
-            out << "# FableForge: the winners picked on the Mods tab; forge-tools mods deploy reads this file\n";
-            for (const auto& [k, v] : picks) out << k << '\t' << v << '\n';
+            out << forge::modchoices::serialize(choices);
             out.close();
         }
         std::string error;
         if (!pending.install(false, error)) throw std::runtime_error(error);
         return true;
     } catch (const std::exception& e) {
+        modsChoiceError_ = "Cannot save forge_mods_picks.txt. See Activity for the file error.";
         pushLog(std::string("mods: cannot save conflict choices: ") + e.what(), 2);
         return false;
     }
 }
 
 bool App::setModPick(const std::string& key, const std::string& winner) {
-    if (fileWriteBlocked("mod conflict choice")) return false;
-    std::map<std::string, std::string> picks;
-    try { picks = readModPicks(saveRoot()); }
+    if (const char* job = activeFileJob()) {
+        modsChoiceError_ = std::string("Cannot change conflict choices: wait for ") + job + " to finish, then retry.";
+        fileWriteBlocked("mod conflict choice");
+        return false;
+    }
+    forge::modchoices::Choices choices;
+    try { choices = readModPicks(saveRoot()); }
     catch (const std::exception& e) {
+        modsChoiceError_ = "Cannot read forge_mods_picks.txt. See Activity for the file error.";
         pushLog(std::string("mods: cannot read conflict choices: ") + e.what(), 2);
         return false;
     }
-    if (winner == "-") picks.erase(key); else picks[key] = winner;
-    if (!saveModPicks(picks)) return false;
-    modPicks_ = std::move(picks);
+    if (winner == "-") choices.picks.erase(key); else choices.picks[key] = winner;
+    choices.fileReviews.erase(key);
+    if (winner != "-" && key.starts_with("file:")) {
+        for (const auto& row : modConflicts_) {
+            if (row.key != key || !row.hasFileContent) continue;
+            if (winner == "vanilla" || std::find(row.mods.begin(), row.mods.end(), winner) != row.mods.end())
+                choices.fileReviews[key] = fileReview(row, winner);
+            break;
+        }
+    }
+    if (!saveModPicks(choices)) return false;
+    modPicks_ = std::move(choices.picks);
+    modFileReviews_ = std::move(choices.fileReviews);
+    modsChoiceError_.clear();
     return true;
 }
 
 bool App::modPick(const std::string& key, const std::string& winner) {
-    if (fileWriteBlocked("mod conflict choice")) return false;
+    const auto identity = forge::modchoices::canonicalKey(key);
     const ModConflict* row = nullptr;
-    for (const auto& c : modConflicts_) if (key == "*" || c.key == key) { row = &c; break; }
+    const ModFieldConflict* selectedField = nullptr;
+    for (const auto& c : modConflicts_) {
+        if (key == "*" || c.key == identity) { row = &c; break; }
+        for (const auto& field : c.fields)
+            if (!field.choiceKey.empty() && field.choiceKey == key) { row = &c; selectedField = &field; break; }
+        if (row) break;
+    }
     if (!row) { pushLog("mods: no conflict " + key, 2); return false; }
-    if (!row->pickable) { pushLog("mods: reorder packs to choose this lip sync winner", 1); return false; }
-    if (!setModPick(row->key, winner)) return false;
-    pushLog("mods: " + row->label + " -> " + (winner == "-" ? "load order" : winner) + " (forge_mods_picks.txt; deploy applies it)", 0);
+    if (!row->pickable) { pushLog("mods: reorder packs to change this " + row->kind + " winner", 1); return false; }
+    if (!setModPick(selectedField ? selectedField->choiceKey : row->key, winner)) return false;
+    pushLog("mods: " + row->label + (selectedField ? " / " + selectedField->field : "") + " -> " +
+        (winner == "-" ? selectedField ? "record / load order" : "load order" : winner) +
+        " (forge_mods_picks.txt; deploy applies it)", 0);
     return true;
 }
 
+static bool isModBaselineChoice(const App::ModConflict& conflict, const std::string& winner) {
+    // Only the definitions composer reserves these aliases. In other families
+    // a mod may actually be named "base" or "none".
+    return winner == "vanilla" || (conflict.kind == "record" &&
+        (winner == "base" || winner == "none" || winner == "-"));
+}
+
 std::string App::modConflictWinner(const ModConflict& conflict) const {
+    if (!conflict.removalMods.empty()) return "removed";
     if (!conflict.pickable) return conflict.winner;
+    if (modFileChoiceStale(conflict) && !conflict.mods.empty()) return conflict.mods.back();
     const auto pick = modPicks_.find(conflict.key);
-    if (pick != modPicks_.end()) return pick->second;
+    if (pick != modPicks_.end()) {
+        const auto& winner = pick->second;
+        if (isModBaselineChoice(conflict, winner)) return "vanilla";
+        if (std::find(conflict.mods.begin(), conflict.mods.end(), winner) != conflict.mods.end()) return winner;
+    }
+    // Whole-file copies also carry removals absent from the entry contributors.
+    // Retain that default independently of the cached report's selected winner.
+    if (!conflict.wholeFileWinner.empty()) return conflict.wholeFileWinner;
     // The report's winner may include a choice that has since been cleared.
     // Contributors are reported in load order; field merges retain their label.
     if (!conflict.fieldMerged && !conflict.mods.empty()) return conflict.mods.back();
     return conflict.winner;
 }
 
-// the conflict report: every row a thing several enabled mods want differently, with the winner the
-// load order (or a pick) gives it
+bool App::modChoiceUnavailable(const ModConflict& conflict) const {
+    if (!conflict.pickable) return false;
+    const auto pick = modPicks_.find(conflict.key);
+    if (pick == modPicks_.end()) return false;
+    if (!conflict.removalMods.empty()) return true;
+    const auto& winner = pick->second;
+    if (isModBaselineChoice(conflict, winner)) return false;
+    return std::find(conflict.mods.begin(), conflict.mods.end(), winner) == conflict.mods.end();
+}
+
+bool App::modFileChoiceStale(const ModConflict& conflict) const {
+    if (!conflict.hasFileContent) return false;
+    const auto picked = modPicks_.find(conflict.key);
+    const auto reviewed = modFileReviews_.find(conflict.key);
+    return picked != modPicks_.end() && reviewed != modFileReviews_.end() &&
+        reviewed->second != fileReview(conflict, picked->second);
+}
+
+bool App::modFieldChoiceUnavailable(const ModConflict& conflict, const ModFieldConflict& field) const {
+    const auto saved=modPicks_.find(field.choiceKey);
+    return !field.choiceKey.empty() && saved!=modPicks_.end() &&
+        !isModBaselineChoice(conflict,saved->second) &&
+        std::find(field.mods.begin(),field.mods.end(),saved->second)==field.mods.end();
+}
+
+std::string App::modSavedChoiceLabel(const std::string& key) {
+    if (key.rfind("field:",0)==0) {
+        try {
+            const auto identity=nlohmann::json::parse(key.substr(6));
+            if (identity.is_array() && identity.size()==6 && identity[0].is_string() &&
+                identity[1].is_string() && identity[5].is_string())
+                return identity[0].get<std::string>()+" / "+identity[1].get<std::string>()+
+                    " / "+identity[5].get<std::string>()+" (saved field)";
+        } catch (const std::exception&) {}
+    }
+    return key;
+}
+
+std::string App::modFieldWinner(const ModConflict& conflict, const ModFieldConflict& field) const {
+    if (!field.choiceKey.empty()) {
+        if (const auto selected=modPicks_.find(field.choiceKey); selected!=modPicks_.end()) {
+            if (isModBaselineChoice(conflict,selected->second)) return "vanilla";
+            if (std::find(field.mods.begin(),field.mods.end(),selected->second)!=field.mods.end()) return selected->second;
+        }
+    }
+    const auto pick=modPicks_.find(conflict.key);
+    if (pick!=modPicks_.end()) {
+        const auto& winner=pick->second;
+        if (winner=="vanilla" || winner=="base" || winner=="none" || winner=="-") return "vanilla";
+        // A record choice wins only fields it actually changed from baseline.
+        if (std::find(field.mods.begin(),field.mods.end(),winner)!=field.mods.end()) return winner;
+    }
+    // Recompute after clearing a choice; the cached report may contain its old winner.
+    return field.mods.empty() ? field.winner : field.mods.back();
+}
+
+std::string App::modFieldValue(const ModConflict& conflict, const ModFieldConflict& field) const {
+    const auto winner = modFieldWinner(conflict, field);
+    if (winner == "vanilla") return field.baseline;
+    for (const auto& [mod, value] : field.values) if (mod == winner) return value;
+    return {};
+}
+
+bool App::modConflictMatches(const ModConflict& conflict) const {
+    if (modChoicesOnly_ && !modPicks_.contains(conflict.key) &&
+        std::none_of(conflict.fields.begin(),conflict.fields.end(),[&](const auto& field) {
+            return !field.choiceKey.empty() && modPicks_.contains(field.choiceKey);
+        })) return false;
+    const std::string_view needle(modConflictSearch_);
+    if (needle.empty()) return true;
+    auto contains = [&](std::string_view text) {
+        return std::search(text.begin(), text.end(), needle.begin(), needle.end(),
+            [](unsigned char a, unsigned char b) { return std::tolower(a) == std::tolower(b); }) != text.end();
+    };
+    if (contains(conflict.key) || contains(conflict.label) || contains(conflict.kind)) return true;
+    if (const auto pick = modPicks_.find(conflict.key); pick != modPicks_.end() && contains(pick->second)) return true;
+    for (const auto& mod : conflict.mods) if (contains(mod)) return true;
+    for (const auto& mod : conflict.removalMods) if (contains(mod)) return true;
+    for (const auto& field : conflict.fields) {
+        if (contains(field.field)) return true;
+        if (const auto pick=modPicks_.find(field.choiceKey); pick!=modPicks_.end() && contains(pick->second)) return true;
+    }
+    return false;
+}
+
+std::vector<std::pair<std::string, std::string>> App::modUnreportedChoices() const {
+    std::vector<std::pair<std::string, std::string>> choices;
+    if (!modReportLoaded_) return choices;
+    std::set<std::string> reported;
+    for (const auto& conflict : modConflicts_) {
+        reported.insert(conflict.key);
+        for (const auto& field : conflict.fields) if (!field.choiceKey.empty()) reported.insert(field.choiceKey);
+    }
+    for (const auto& choice : modPicks_)
+        if (!reported.contains(choice.first)) choices.push_back(choice);
+    return choices;
+}
+
+std::map<std::string, App::ModOutcomes> App::modConflictOutcomes() const {
+    std::map<std::string, ModOutcomes> outcomes;
+    if (!modReportLoaded_) return outcomes;
+    for (const auto& conflict : modConflicts_) {
+        if (conflict.key.empty()) continue;
+        if (conflict.fieldMerged) {
+            for (const auto& field : conflict.fields) {
+                const auto winner = modFieldWinner(conflict, field);
+                const auto label = conflict.label + " / " + field.field;
+                for (const auto& mod : field.mods)
+                    (mod == winner ? outcomes[mod].won : outcomes[mod].lost).push_back(label);
+            }
+        } else {
+            const auto winner = modConflictWinner(conflict);
+            for (const auto& mod : conflict.mods)
+                if (std::find(conflict.removalMods.begin(), conflict.removalMods.end(), mod) == conflict.removalMods.end())
+                    (mod == winner ? outcomes[mod].won : outcomes[mod].lost).push_back(conflict.label);
+            for (const auto& mod : conflict.removalMods) outcomes[mod].won.push_back(conflict.label);
+        }
+    }
+    return outcomes;
+}
+
+// Conflict rows retain contributors in load order and the reported winner.
 static void collectConflicts(const nlohmann::json& rep, std::vector<App::ModConflict>& rows) {
     using nlohmann::json;
     auto mods = [](const json& arr) { std::vector<std::string> v; for (const auto& m : arr) v.push_back(m.get<std::string>()); return v; };
     if (rep.contains("defs"))
-        for (const auto& c : rep["defs"].value("conflicts", json::array()))
-            rows.push_back({"record", c.value("record", ""), c.value("record", ""), mods(c["mods"]), c.value("winner", ""), c.value("overridden", false), true, c.value("field_merged", false)});
+        for (const auto& c : rep["defs"].value("conflicts", json::array())) {
+            const std::string key = c.value("record", "");
+            std::string label = key;
+            if (key.starts_with("@unnamed:") && c.contains("index") && c["index"].is_number_unsigned())
+                label = "Unnamed " + c.value("definition", std::string("definition")) +
+                        " (game.bin #" + std::to_string(c["index"].get<size_t>()) + ")";
+            rows.push_back({"record", key, label, mods(c["mods"]), c.value("winner", ""), c.value("overridden", false), true, c.value("field_merged", false)});
+            if (rows.back().fieldMerged)
+                for (const auto& field : c.value("field_conflicts",json::array())) {
+                    rows.back().fields.push_back({field.value("field",""),mods(field["mods"]),field.value("winner","")});
+                    auto& detail = rows.back().fields.back();
+                    detail.hasValues = field.contains("base_value");
+                    detail.type = field.value("type", "");
+                    detail.choiceKey = field.value("choice_key", "");
+                    detail.baseline = field.value("base_value", "");
+                    for (const auto& value : field.value("values", json::array()))
+                        detail.values.emplace_back(value.value("mod", ""), value.value("value", ""));
+                }
+        }
     if (rep.contains("tng"))
         for (const auto& l : rep["tng"].value("levels", json::array()))
             for (const auto& c : l.value("conflicts", json::array())) {
                 const std::string level = l.value("level", ""), thing = c.value("thing", "");
                 rows.push_back({"thing", "tng:" + level + "|" + thing, level + "  " + thing, mods(c["mods"]), c.value("winner", ""), c.value("overridden", false)});
+                rows.back().key = forge::modchoices::canonicalKey(rows.back().key);
+                rows.back().removalMods = mods(c.value("removal_mods", json::array()));
+                const auto mode = l.value("mode", "");
+                if ((mode == "new-level" || mode == "replaced" || mode == "single-editor") &&
+                    !l.value("mods", json::array()).empty())
+                    rows.back().wholeFileWinner = l["mods"].back().get<std::string>();
             }
     if (rep.contains("qst"))
         for (const auto& f : rep["qst"].value("files", json::array()))
@@ -373,6 +583,9 @@ static void collectConflicts(const nlohmann::json& rep, std::vector<App::ModConf
                 std::vector<std::string> m;
                 for (const auto& w : c.value("wanted", json::array())) m.push_back(w.value("mod", ""));
                 rows.push_back({"quest", "qst:" + file + "|" + quest, file + "  " + quest, m, c.value("winner", ""), c.value("overridden", false)});
+                rows.back().key = forge::modchoices::canonicalKey(rows.back().key);
+                if (f.value("mode", "") == "single-editor" && !f.value("mods", json::array()).empty())
+                    rows.back().wholeFileWinner = f["mods"].back().get<std::string>();
             }
     if (rep.contains("text"))
         for (const auto& c : rep["text"].value("contested", json::array())) {
@@ -386,8 +599,29 @@ static void collectConflicts(const nlohmann::json& rep, std::vector<App::ModConf
             rows.push_back({"fse id", "", "id " + std::to_string(c.value("id", 0LL)) + ": " + c.value("quest", "") + " (" + c.value("mod", "") + ") also " + c.value("also", ""), {}, "", false});
     }
     if (rep.contains("files"))
-        for (const auto& c : rep["files"].value("contested", json::array()))
+        for (const auto& c : rep["files"].value("contested", json::array())) {
             rows.push_back({"file", "file:" + c.value("path", ""), c.value("path", ""), mods(c["mods"]), c.value("winner", ""), c.value("overridden", false)});
+            if (c.contains("file_content")) {
+                const auto& content=c["file_content"];
+                auto read=[](const json& value) -> App::ModFileContent {
+                    return {value.value("mod",""),value.value("present",false),
+                            value.value("bytes",uint64_t(0)),value.value("sha256","")};
+                };
+                auto& row=rows.back();row.hasFileContent=true;
+                row.fileBaseline=read(content.at("baseline"));
+                for (const auto& version:content.at("versions")) row.fileVersions.push_back(read(version));
+            }
+        }
+    if (rep.contains("maintextures"))
+        for (const auto& c : rep["maintextures"].value("conflicts", json::array()))
+            rows.push_back({"texture", "texture:" + c.value("entry", ""),
+                            c.value("entry", ""), mods(c["mods"]),
+                            c.value("winner", ""), c.value("overridden", false), true});
+    if (rep.contains("graphics"))
+        for (const auto& c : rep["graphics"].value("conflicts", json::array()))
+            rows.push_back({"mesh", "mesh:" + c.value("entry", ""),
+                            c.value("entry", ""), mods(c["mods"]),
+                            c.value("winner", ""), c.value("overridden", false), true});
     if (rep.contains("lip_sync"))
         for (const auto& c : rep["lip_sync"].value("contested", json::array())) {
             const std::string language=c.value("language",""),bank=c.value("bank","");
@@ -407,7 +641,7 @@ void App::pollModsTool() {
     if (!modsQueuedVerb_.empty()) {
         if (modReadersBusy()) return;
         stopWorldTiles();
-        foliageexport::closeMeshBank(); thumbBankOpen_ = false;
+        foliageexport::closeMeshBank();
         const std::string cmd = std::move(modsQueuedCommand_);
         modsVerb_ = std::move(modsQueuedVerb_);
         modsQueuedVerb_.clear();
@@ -415,13 +649,36 @@ void App::pollModsTool() {
     }
     if (!modsFuture_.valid() || modsFuture_.wait_for(std::chrono::seconds(0)) != std::future_status::ready) return;
     const ModsToolResult r = modsFuture_.get();
+    bool invalidReport = false;
     if (modsVerb_ == "conflicts" && r.rc == 0) {
         std::string text;
         for (const auto& l : r.lines) { text += l; text += '\n'; }
         try {
-            const auto rep = nlohmann::json::parse(text.substr(text.find('{')));
+            const auto start = text.find('{');
+            if (start == std::string::npos) throw std::runtime_error("no JSON conflict report returned");
+            const auto rep = nlohmann::json::parse(text.substr(start));
+            if (!rep.is_object() || !rep.contains("summary") || !rep["summary"].is_object())
+                throw std::runtime_error("conflict report is missing its summary");
             modConflicts_.clear();
             collectConflicts(rep, modConflicts_);
+            modInstallSummary_.clear();
+            if (const auto complete = rep.find("complete_data"); complete != rep.end())
+                modInstallSummary_ = "Forge installs " + complete->value("label", "the overhaul") +
+                    " first, then applies the following mods.";
+            if (rep.contains("runtime_plan") && !rep["runtime_plan"].empty())
+                modInstallSummary_ += " Controller runtime: DLL only; the FMP supplies its game data.";
+            if (rep.contains("maintextures")) {
+                const auto masked = rep["maintextures"].value("masked", nlohmann::json::array());
+                if (!masked.empty())
+                    modInstallSummary_ += " " + std::to_string(masked.size()) +
+                        " FMP texture pack(s) load before a later whole texture bank; those texture entries are masked.";
+            }
+            if (rep.contains("graphics")) {
+                const auto masked = rep["graphics"].value("masked", nlohmann::json::array());
+                if (!masked.empty())
+                    modInstallSummary_ += " " + std::to_string(masked.size()) +
+                        " FMP mesh pack(s) load before a later whole graphics bank; those mesh entries are masked.";
+            }
             modNewMissingMeshes_.clear();
             modMissingMeshTotal_ = modMissingMeshBaseline_ = modAssetUnparsed_ = 0;
             modAssetStatus_.clear(); modAssetError_.clear();
@@ -439,14 +696,18 @@ void App::pollModsTool() {
             modReportLoaded_ = true;
             const auto& sm = rep.value("summary", nlohmann::json::object());
             char buf[256];
-            std::snprintf(buf, sizeof buf, "%zu conflict(s) across %zu mod(s): %zu record, %zu thing, %zu quest, %zu string, %zu file, %zu lip sync",
+            std::snprintf(buf, sizeof buf, "%zu conflict(s) across %zu mod(s): %zu record, %zu thing, %zu quest, %zu string, %zu file, %zu texture, %zu mesh, %zu lip sync",
                           modConflicts_.size(), size_t(sm.value("sources", 0)), size_t(sm.value("defs_conflicts", 0)), size_t(sm.value("tng_conflicts", 0)),
                           size_t(sm.value("qst_conflicts", 0)), size_t(sm.value("text_contested", 0)), size_t(sm.value("files_contested", 0)),
+                          size_t(sm.value("maintextures_conflicts", 0)),
+                          size_t(sm.value("graphics_conflicts", 0)),
                           size_t(sm.value("lip_sync_contested", 0)));
             modReportSummary_ = buf;
             pushLog("mods conflicts: " + modReportSummary_, modConflicts_.empty() ? 0 : 1);
             return;
         } catch (const std::exception& e) {
+            invalidReport = true;
+            modsActionError_ = "Checking conflicts failed: the tool did not return a valid report. See Activity for details.";
             pushLog(std::string("mods conflicts: report not readable: ") + e.what(), 2);
         }
     }
@@ -454,7 +715,20 @@ void App::pollModsTool() {
         const bool warn = l.find("warning") != std::string::npos || l.find("conflict") != std::string::npos;
         pushLog("mods " + modsVerb_ + ": " + l, warn ? 1 : 0);
     }
-    pushLog("mods " + modsVerb_ + (r.rc == 0 ? ": done" : ": FAILED (rc " + std::to_string(r.rc) + ")"), r.rc == 0 ? 0 : 2);
+    const bool succeeded = r.rc == 0 && !invalidReport;
+    if (r.rc != 0) {
+        const std::string prefix = "mods " + modsVerb_ + ": ";
+        std::string reason = r.lines.empty() ? "No diagnostic returned; see Activity for details." : r.lines.front();
+        // stderr can precede buffered stdout. Select the action's diagnostic,
+        // rather than the last progress line from a failed build.
+        for (const auto& line : r.lines) {
+            if (line.rfind(prefix, 0) == 0) { reason = line.substr(prefix.size()); break; }
+            if (line.rfind("error: ", 0) == 0) { reason = line.substr(7); break; }
+        }
+        const char* action = modsVerb_ == "deploy" ? "Build and deploy" : modsVerb_ == "undeploy" ? "Undeploy" : "Checking conflicts";
+        modsActionError_ = std::string(action) + " failed: " + reason;
+    }
+    pushLog("mods " + modsVerb_ + (succeeded ? ": done" : invalidReport ? ": FAILED (invalid report)" : ": FAILED (rc " + std::to_string(r.rc) + ")"), succeeded ? 0 : 2);
     if (modsVerb_ == "deploy" || modsVerb_ == "undeploy") backupsScannedAt_ = 0;   // the Setup card re-scans
     refreshModOrder();
     if (modsVerb_ == "deploy" || modsVerb_ == "undeploy") {
@@ -469,7 +743,7 @@ void App::pollModsTool() {
 }
 
 bool App::modReadersBusy() const {
-    if (ctxFuture_.valid() || previewFuture_.valid() || foliageFuture_.valid() ||
+    if (definitionsBusy() || textFuture_.valid() || ctxFuture_.valid() || previewFuture_.valid() || foliageFuture_.valid() ||
         neighbourFuture_.valid() || exportFuture_.valid() || fitFuture_.valid() ||
         worldDetailFuture_.valid() || !worldScenery_.settled) return true;
     for (const auto& worker : worldTileWorkers_)
@@ -483,7 +757,9 @@ void App::refreshAfterMods() {
     stopWorldTiles();
     modsRefreshPending_ = false;
     foliageexport::closeMeshBank();
-    thumbBankOpen_ = false; defThumbs_.clear(); defList_.clear(); themeGroupOf_.clear();
+    invalidateTextureViews();
+    textLoaded_=false;definitionLoaded_=false;
+    defThumbs_.clear(); defList_.clear(); themeGroupOf_.clear();
     envDefs_.clear(); soundDefs_.clear(); familyNames_.clear(); issuesRev_ = ~0ull;
     newLevelDonor_.clear();
     dialogueAudio_.reset(); dialogueLoaded_ = false;
@@ -544,14 +820,9 @@ void App::drawModsPanel(float pad, float inner, float cardInner) {
     int enableIndex = -1;
     bool enableValue = false, requireValue = false;
     std::string requireMod, requireMaster;
-    // the last conflict report per mod: rows it wins, rows it loses
-    std::map<std::string, std::pair<std::vector<std::string>, std::vector<std::string>>> wl;
-    if (modReportLoaded_)
-        for (const auto& c : modConflicts_) {
-            if (c.key.empty()) continue;
-            const std::string win = modConflictWinner(c);
-            for (const auto& m : c.mods) (m == win ? wl[m].first : wl[m].second).push_back(c.label);
-        }
+    // Count each contested field separately; an auto-merged record has no
+    // single winning mod. Non-field families retain their row-based counts.
+    const auto wl = modConflictOutcomes();
     auto listTip = [](const char* head, const std::vector<std::string>& v) {
         std::string t = head;
         for (size_t k = 0; k < v.size() && k < 12; ++k) t += "\n  " + v[k];
@@ -641,16 +912,22 @@ void App::drawModsPanel(float pad, float inner, float cardInner) {
         ImGui::PushFont(fontSmall_);
         ImGui::PushStyleColor(ImGuiCol_Text, theme::vec(theme::Muted));
         ImGui::TextWrapped("%s%s%s", mo::kindName(e.kind), e.note.empty() ? "" : "  ", e.note.c_str());
+        if (e.installData) {
+            ImGui::TextWrapped("Installs complete Data files first; later mods apply over this overhaul.");
+            auto_.registerWidget(("mod_complete_data_" + std::to_string(i)).c_str());
+        }
         ImGui::PopStyleColor();
         if (const auto it = wl.find(e.name); it != wl.end()) {
-            if (!it->second.first.empty()) {
-                ImGui::TextColored(theme::vec(theme::Success), "wins %zu", it->second.first.size());
-                if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", listTip("Wins over the other mods on:", it->second.first).c_str());
+            if (!it->second.won.empty()) {
+                ImGui::TextColored(theme::vec(theme::Success), "wins %zu", it->second.won.size());
+                auto_.registerWidget(("mod_wins_"+std::to_string(i)).c_str());
+                if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", listTip("Conflicts won (records or fields):", it->second.won).c_str());
             }
-            if (!it->second.second.empty()) {
-                if (!it->second.first.empty()) ImGui::SameLine(0, S(6));
-                ImGui::TextColored(theme::vec(theme::Warn), "loses %zu", it->second.second.size());
-                if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", listTip("Overridden by a later mod (or a pick) on:", it->second.second).c_str());
+            if (!it->second.lost.empty()) {
+                if (!it->second.won.empty()) ImGui::SameLine(0, S(6));
+                ImGui::TextColored(theme::vec(theme::Warn), "loses %zu", it->second.lost.size());
+                auto_.registerWidget(("mod_losses_"+std::to_string(i)).c_str());
+                if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", listTip("Conflicts lost (records or fields):", it->second.lost).c_str());
             }
         }
         for (const auto& pr : info.problems) {
@@ -673,13 +950,33 @@ void App::drawModsPanel(float pad, float inner, float cardInner) {
     theme::endCard();
     ImGui::Dummy(ImVec2(0, S(8)));
 
-    if (modReportLoaded_) {
+    if (!modsChoiceError_.empty()) {
         ImGui::SetCursorPosX(pad);
-        theme::beginCard("##modconflicts", inner);
+        theme::beginCard("##modchoiceerror", inner);
+        ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + cardInner);
+        ImGui::BeginGroup();
+        ImGui::TextColored(theme::vec(theme::Error), "%s", modsChoiceError_.c_str());
+        ImGui::TextWrapped("The attempted choice was not saved. Resolve the error, then retry the choice.");
+        ImGui::EndGroup();
+        ImGui::PopTextWrapPos();
+        auto_.registerWidget("mods_choice_error");
+        theme::endCard();
+        ImGui::Dummy(ImVec2(0, S(8)));
+    }
+    if (modReportLoaded_) {
+        const auto unreportedChoices = modUnreportedChoices();
+        ImGui::SetCursorPosX(pad);
+        // Expanded version comparisons and changing review warnings must keep
+        // contributing their full height to the surrounding scrolling panel.
+        theme::beginCard("##modconflicts", inner, true);
         theme::label("Conflicts");
         ImGui::PushFont(fontSmall_);
         theme::hint(modReportSummary_.c_str());
         ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + cardInner);
+        if (!modInstallSummary_.empty()) {
+            ImGui::TextWrapped("%s", modInstallSummary_.c_str());
+            auto_.registerWidget("mod_install_summary");
+        }
         if (modAssetStatus_ == "checked") {
             if (modNewMissingMeshes_.empty())
                 ImGui::TextColored(theme::vec(theme::Faint), "Models: no new missing mesh references (%zu in build, %zu in base)", modMissingMeshTotal_, modMissingMeshBaseline_);
@@ -698,7 +995,28 @@ void App::drawModsPanel(float pad, float inner, float cardInner) {
         auto_.registerWidget("mods_asset_status");
         if (!modConflicts_.empty()) theme::hintMore("Things several mods change differently: the load order decides unless you pick.", "Each row is one thing several mods want differently. Reorder packs to choose a lip sync winner. Other winner picks are kept in forge_mods_picks.txt and applied by Build and deploy.");
         ImGui::PopFont();
-        if (modConflicts_.empty()) ImGui::TextColored(theme::vec(theme::Faint), "the enabled mods do not contest anything");
+        if (modConflicts_.empty()) {
+            ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + cardInner);
+            ImGui::TextColored(theme::vec(theme::Faint), "The enabled mods do not contest anything.");
+            ImGui::PopTextWrapPos();
+        }
+        if (!modConflicts_.empty() || !unreportedChoices.empty()) {
+            ImGui::SetNextItemWidth(cardInner);
+            ImGui::InputTextWithHint("##conflictsearch", "Search name, mod or field", modConflictSearch_, sizeof modConflictSearch_);
+            auto_.registerWidget("input_mod_conflict_search");
+            ImGui::Checkbox("Saved choices only", &modChoicesOnly_);
+            auto_.registerWidget("mods_choices_only");
+            if (theme::ghostButton("Show all conflicts", ImVec2(cardInner, S(28)))) {
+                modConflictSearch_[0] = 0; modChoicesOnly_ = false;
+            }
+            auto_.registerWidget("mods_show_all_conflicts");
+        }
+        const size_t matches = std::count_if(modConflicts_.begin(), modConflicts_.end(),
+            [&](const ModConflict& conflict) { return modConflictMatches(conflict); });
+        if (!modConflicts_.empty()) {
+            ImGui::TextWrapped("%zu of %zu conflicts", matches, modConflicts_.size());
+            if (!matches) theme::hint("No conflicts match these filters.");
+        }
         // one row = the kind and the label (ellipsised to the card), then the winner combo
         auto fit = [](const std::string& text, float width) {
             if (ImGui::CalcTextSize(text.c_str()).x <= width) return text;
@@ -707,8 +1025,11 @@ void App::drawModsPanel(float pad, float inner, float cardInner) {
             return t + "...";
         };
         const float comboW = std::min(S(170), cardInner);
-        for (size_t i = 0; i < modConflicts_.size() && i < 400; ++i) {
+        size_t shownRows = 0;
+        for (size_t i = 0; i < modConflicts_.size() && shownRows < 400; ++i) {
             const auto& c = modConflicts_[i];
+            if (!modConflictMatches(c)) continue;
+            ++shownRows;
             ImGui::PushID(int(i));
             if (i) ImGui::Dummy(ImVec2(0, S(2)));
             ImGui::PushFont(fontSmall_);
@@ -721,29 +1042,198 @@ void App::drawModsPanel(float pad, float inner, float cardInner) {
             if (!c.pickable) {
                 ImGui::SetCursorPosX(ImGui::GetCursorPosX() + cardInner - comboW);
                 ImGui::TextUnformatted(fit(c.winner, comboW).c_str());
-                if(ImGui::IsItemHovered()) ImGui::SetTooltip("%s\nReorder packs to change this lip sync winner", c.winner.c_str());
+                if(ImGui::IsItemHovered()) ImGui::SetTooltip("%s\nReorder packs to change this %s winner", c.winner.c_str(), c.kind.c_str());
                 ImGui::PopID();
                 continue;
             }
             ImGui::SetCursorPosX(ImGui::GetCursorPosX() + cardInner - comboW);
             const bool picked = modPicks_.contains(c.key);
+            const bool unavailable = modChoiceUnavailable(c) || modFileChoiceStale(c);
             const std::string current = modConflictWinner(c);
-            const std::string shown = (picked ? "* " : "") + current;
+            const std::string shown = (unavailable ? "! " : picked ? "* " : "") + current;
             ImGui::SetNextItemWidth(comboW);
             if (ImGui::BeginCombo("##winner", shown.c_str())) {
                 if (ImGui::Selectable("load order", !picked)) modPick(c.key, "-");
                 auto_.registerWidget(("mod_load_order_" + std::to_string(i)).c_str());
-                for (const auto& m : c.mods) if (ImGui::Selectable(m.c_str(), current == m && picked)) modPick(c.key, m);
-                if (ImGui::Selectable("vanilla (retail)", current == "vanilla")) modPick(c.key, "vanilla");
+                if (c.removalMods.empty())
+                    for (const auto& m : c.mods) if (ImGui::Selectable(m.c_str(), current == m && picked)) modPick(c.key, m);
+                const char* baselineLabel = c.kind == "texture" || c.kind == "mesh" ? "install baseline" :
+                    c.fieldMerged ? "vanilla for conflicting fields" : "vanilla (retail)";
+                if (c.removalMods.empty()) {
+                    if (ImGui::Selectable(baselineLabel, current == "vanilla")) modPick(c.key, "vanilla");
+                    auto_.registerWidget(("mod_vanilla_"+std::to_string(i)).c_str());
+                }
                 ImGui::EndCombo();
             }
             auto_.registerWidget(("mod_winner_" + std::to_string(i)).c_str());
             if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", shown.c_str());
+            // A combo action may have just removed or replaced the saved choice.
+            if (modChoiceUnavailable(c) || modFileChoiceStale(c)) {
+                ImGui::PushFont(fontSmall_);
+                const bool strictChoice = c.kind == "record" || c.kind == "file" || c.kind == "texture" ||
+                                          c.kind == "mesh" || c.kind == "fse" || c.kind == "string" ||
+                                          c.kind == "thing" || c.kind == "quest";
+                const auto message = !c.removalMods.empty() ?
+                    "Saved choice cannot restore this thing while DeleteUIDs applies; clear the choice or disable the removal before building." :
+                    modFileChoiceStale(c) ?
+                    "File contents changed since this choice was reviewed; choose again or clear it before building." :
+                    "Saved choice " + modPicks_.at(c.key) +
+                        (strictChoice ? " has no contribution here; review or clear it before building."
+                                      : " has no contribution here; load order applies.");
+                ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + cardInner);
+                ImGui::TextColored(theme::vec(theme::Warn), "%s", message.c_str());
+                ImGui::PopTextWrapPos();
+                auto_.registerWidget(("mod_unavailable_choice_"+std::to_string(i)).c_str());
+                ImGui::PopFont();
+            }
+            if (!c.removalMods.empty()) {
+                std::string sources;
+                for (const auto& mod : c.removalMods) sources += (sources.empty() ? "" : ", ") + mod;
+                ImGui::PushFont(fontSmall_);
+                ImGui::TextWrapped("Removed by DeleteUIDs: %s", sources.c_str());
+                auto_.registerWidget(("mod_removal_"+std::to_string(i)).c_str());
+                ImGui::PopFont();
+            }
+            if (c.fieldMerged) {
+                ImGui::PushFont(fontSmall_);
+                theme::hint("This choice resolves conflicting fields. Individual field choices take precedence. Other edits still merge.");
+                ImGui::PopFont();
+                if (!c.fields.empty()) {
+                    const float wrapRight=ImGui::GetCursorPosX()+cardInner;
+                    const bool open=ImGui::TreeNodeEx("##fields",0,
+                        "Conflicting fields (%zu)",c.fields.size());
+                    auto_.registerWidget(("mod_fields_"+std::to_string(i)).c_str());
+                    if (open) {
+                        ImGui::PushFont(fontSmall_);
+                        ImGui::PushTextWrapPos(wrapRight);
+                        for (size_t fieldIndex=0;fieldIndex<c.fields.size();++fieldIndex) {
+                            const auto& field=c.fields[fieldIndex];
+                            ImGui::BeginGroup();
+                            ImGui::TextWrapped("%s",field.field.c_str());
+                            if (!field.choiceKey.empty()) {
+                                ImGui::PushID(int(fieldIndex));
+                                const bool picked=modPicks_.contains(field.choiceKey);
+                                const auto current=modFieldWinner(c,field);
+                                const auto shown=(picked ? "* " : "")+current;
+                                ImGui::SetNextItemWidth(std::max(S(40),wrapRight-ImGui::GetCursorPosX()));
+                                if (ImGui::BeginCombo("##fieldwinner",shown.c_str())) {
+                                    if (ImGui::Selectable("record / load order",!picked)) modPick(field.choiceKey,"-");
+                                    auto_.registerWidget(("mod_field_reset_"+std::to_string(i)+"_"+std::to_string(fieldIndex)).c_str());
+                                    for (size_t source=0;source<field.mods.size();++source) {
+                                        const auto& mod=field.mods[source];
+                                        if (ImGui::Selectable(mod.c_str(),picked && current==mod)) modPick(field.choiceKey,mod);
+                                        auto_.registerWidget(("mod_field_pick_"+std::to_string(i)+"_"+std::to_string(fieldIndex)+"_"+std::to_string(source)).c_str());
+                                    }
+                                    if (ImGui::Selectable("current baseline",picked && current=="vanilla")) modPick(field.choiceKey,"vanilla");
+                                    auto_.registerWidget(("mod_field_baseline_"+std::to_string(i)+"_"+std::to_string(fieldIndex)).c_str());
+                                    ImGui::EndCombo();
+                                }
+                                auto_.registerWidget(("mod_field_winner_"+std::to_string(i)+"_"+std::to_string(fieldIndex)).c_str());
+                                ImGui::PopID();
+                                if (modFieldChoiceUnavailable(c,field)) {
+                                    ImGui::PushStyleColor(ImGuiCol_Text,theme::vec(theme::Warn));
+                                    ImGui::TextWrapped("Saved field choice unavailable. Review or clear it before building.");
+                                    auto_.registerWidget(("mod_field_unavailable_"+std::to_string(i)+"_"+std::to_string(fieldIndex)).c_str());
+                                    ImGui::PopStyleColor();
+                                }
+                            }
+                            const std::string winner=modFieldWinner(c,field);
+                            ImGui::TextWrapped("Winner: %s",winner.c_str());
+                            if (field.hasValues) {
+                                ImGui::TextWrapped("Value: %s",modFieldValue(c,field).c_str());
+                                auto_.registerWidget(("mod_field_value_"+std::to_string(i)+"_"+std::to_string(fieldIndex)).c_str());
+                                ImGui::TextColored(theme::vec(theme::Faint),"Type: %s",field.type.c_str());
+                                ImGui::TextWrapped("Baseline: %s",field.baseline.c_str());
+                                auto_.registerWidget(("mod_field_base_"+std::to_string(i)+"_"+std::to_string(fieldIndex)).c_str());
+                                for (size_t sourceIndex=0;sourceIndex<field.values.size();++sourceIndex) {
+                                    const auto& [mod,value]=field.values[sourceIndex];
+                                    ImGui::TextWrapped("%s: %s",mod.c_str(),value.c_str());
+                                    auto_.registerWidget(("mod_field_source_"+std::to_string(i)+"_"+
+                                        std::to_string(fieldIndex)+"_"+std::to_string(sourceIndex)).c_str());
+                                }
+                            }
+                            std::string contributors;
+                            for (const auto& mod : field.mods) contributors+=(contributors.empty()?"":", ")+mod;
+                            ImGui::TextColored(theme::vec(theme::Faint),"Changed by: %s",contributors.c_str());
+                            const auto pick=modPicks_.find(c.key);
+                            if (pick!=modPicks_.end() && winner!="vanilla" && winner!=pick->second)
+                                if (field.choiceKey.empty() || !modPicks_.contains(field.choiceKey))
+                                    ImGui::TextColored(theme::vec(theme::Faint),"The selected mod has no changed value for this field; load order applies.");
+                            ImGui::EndGroup();
+                            auto_.registerWidget(("mod_field_"+std::to_string(i)+"_"+std::to_string(fieldIndex)).c_str());
+                            ImGui::Spacing();
+                        }
+                        ImGui::PopTextWrapPos();ImGui::PopFont();
+                        ImGui::TreePop();
+                    }
+                }
+            }
+            if (c.hasFileContent) {
+                const float wrapRight=ImGui::GetCursorPosX()+cardInner;
+                const bool open=ImGui::TreeNodeEx("##filecontent",0,"File versions");
+                auto_.registerWidget(("mod_file_content_"+std::to_string(i)).c_str());
+                if (open) {
+                    ImGui::PushFont(fontSmall_);
+                    ImGui::PushTextWrapPos(wrapRight);
+                    ImGui::TextColored(theme::vec(theme::Faint),"Source bytes from the last check. Other edits can still change the built file.");
+                    auto draw=[&](const ModFileContent& version,const std::string& label,const std::string& widget) {
+                        ImGui::BeginGroup();
+                        ImGui::TextWrapped("%s",label.c_str());
+                        if (version.present) {
+                            ImGui::TextWrapped("%llu bytes",static_cast<unsigned long long>(version.bytes));
+                            ImGui::TextWrapped("SHA256: %s",version.sha256.c_str());
+                        } else ImGui::TextColored(theme::vec(theme::Faint),"File absent from the current baseline.");
+                        ImGui::EndGroup();auto_.registerWidget(widget.c_str());
+                    };
+                    const auto winner=modConflictWinner(c);
+                    draw(c.fileBaseline,"Current baseline"+(winner=="vanilla" ? std::string(" (selected)") : std::string()),
+                         "mod_file_base_"+std::to_string(i));
+                    for (size_t si=0;si<c.fileVersions.size();++si) {
+                        const auto& version=c.fileVersions[si];
+                        draw(version,version.mod+(winner==version.mod ? " (selected)" : ""),
+                             "mod_file_source_"+std::to_string(i)+"_"+std::to_string(si));
+                    }
+                    ImGui::PopTextWrapPos();ImGui::PopFont();ImGui::TreePop();
+                }
+            }
             ImGui::PopID();
         }
-        if (modConflicts_.size() > 400) ImGui::TextColored(theme::vec(theme::Faint), "... %zu more (forge-tools mods conflicts --json lists them all)", modConflicts_.size() - 400);
+        if (matches > shownRows) theme::hint("Showing the first 400 matches. Narrow the search to see other conflicts.");
         theme::endCard();
         ImGui::Dummy(ImVec2(0, S(8)));
+        if (!unreportedChoices.empty()) {
+            ImGui::SetCursorPosX(pad);
+            theme::beginCard("##modotherchoices", inner);
+            theme::label("Other saved choices");
+            ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + cardInner);
+            ImGui::TextWrapped("These choices are absent from the latest conflict check. They may be inactive or no longer contested. A choice can still affect builds without a conflict. They stay saved until you clear them.");
+            auto_.registerWidget("mods_unreported_help");
+            size_t shown = 0, matching = 0;
+            for (size_t i = 0; i < unreportedChoices.size(); ++i) {
+                const auto& [key, winner] = unreportedChoices[i];
+                ModConflict choice;
+                choice.kind = "saved choice"; choice.key = key; choice.label = modSavedChoiceLabel(key);
+                if (!modConflictMatches(choice)) continue;
+                ++matching;
+                if (shown++ >= 400) continue;
+                ImGui::PushID(key.c_str());
+                ImGui::TextWrapped("%s", choice.label.c_str());
+                if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s",key.c_str());
+                ImGui::TextWrapped("Saved choice: %s", winner.c_str());
+                auto_.registerWidget(("mod_unreported_choice_"+std::to_string(i)).c_str());
+                if (theme::ghostButton("Clear choice", ImVec2(cardInner, S(28)))) {
+                    if (setModPick(key, "-")) pushLog("mods: cleared saved choice for " + key, 0);
+                }
+                auto_.registerWidget(("mod_clear_unreported_"+std::to_string(i)).c_str());
+                ImGui::PopID();
+                ImGui::Spacing();
+            }
+            if (!matching) theme::hint("No other saved choices match the search.");
+            if (matching > 400) theme::hint("Showing the first 400 matches. Narrow the search to see other choices.");
+            ImGui::PopTextWrapPos();
+            theme::endCard();
+            ImGui::Dummy(ImVec2(0, S(8)));
+        }
     }
 
     ImGui::SetCursorPosX(pad);
@@ -772,12 +1262,19 @@ void App::drawModsPanel(float pad, float inner, float cardInner) {
     const bool busy = modsFuture_.valid();
     if (theme::ghostButton(busy && modsVerb_ == "conflicts" ? "Checking..." : "Check conflicts", ImVec2(cardInner, S(28))) && !busy) runModsTool("conflicts");
     auto_.registerWidget("btn_mods_conflicts");
-    if (theme::primaryButton(busy && modsVerb_ == "deploy" ? "Deploying..." : "Build and deploy into the game", ImVec2(cardInner, S(32)), !busy && !modOrder_.mods.empty())) runModsTool("deploy");
+    if (theme::primaryButton(busy && modsVerb_ == "deploy" ? "Deploying..." : "Build and deploy", ImVec2(cardInner, S(32)), !busy && !modOrder_.mods.empty())) runModsTool("deploy");
     auto_.registerWidget("btn_mods_deploy");
-    if (theme::dangerButton(busy && modsVerb_ == "undeploy" ? "Undeploying..." : "Undeploy (back to the retail files)", ImVec2(cardInner, S(28))) && !busy) runModsTool("undeploy");
+    if (theme::dangerButton(busy && modsVerb_ == "undeploy" ? "Undeploying..." : "Undeploy", ImVec2(cardInner, S(28))) && !busy) runModsTool("undeploy");
     auto_.registerWidget("btn_mods_undeploy");
     ImGui::PushFont(fontSmall_);
-    theme::hintMore("Deploy builds the whole list into the game; Undeploy puts the originals back.", "Deploy reverts the previous deploy first, builds the whole order with your picks and stages it (originals kept as .forgebak; Undeploy puts them back). Refused while Fable runs, and on an install EgoCore has deployed to (restore vanilla there first).");
+    theme::hintMore("Deploy builds the list into the save folder; Undeploy restores its originals.", "Deploy first reverts the save folder's previous deployment, builds the whole order with your picks and stages it while keeping originals. Undeploy restores those originals. Refused while Fable runs from the destination, and on an install EgoCore has deployed to (restore vanilla there first).");
+    if (!modsActionError_.empty()) {
+        ImGui::Spacing();
+        ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + cardInner);
+        ImGui::TextColored(theme::vec(theme::Error), "%s", modsActionError_.c_str());
+        auto_.registerWidget("mods_action_error");
+        ImGui::PopTextWrapPos();
+    }
     ImGui::PopFont();
     theme::endCard();
 }

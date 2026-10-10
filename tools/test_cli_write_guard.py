@@ -42,7 +42,7 @@ def main():
     source = work / 'hold.cpp'
     source.write_text('#include <windows.h>\n#include <cstdio>\nint main() { puts("ready"); fflush(stdout); Sleep(180000); }\n')
     cache = (repo / 'build/CMakeCache.txt').read_text()
-    compiler = re.search(r'^CMAKE_CXX_COMPILER:FILEPATH=(.+)$', cache, re.MULTILINE).group(1)
+    compiler = re.search(r'^CMAKE_CXX_COMPILER:(?:FILEPATH|STRING)=(.+)$', cache, re.MULTILINE).group(1)
     helper = root / 'Fable.exe'
     subprocess.run([compiler, str(source), '-o', str(helper)], check=True, capture_output=True, timeout=60)
     def run(label, *command):

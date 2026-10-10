@@ -1,7 +1,10 @@
 #include "forge/defdecode.hpp"
+#include "forge/unicode.hpp"
 
+#include <algorithm>
 #include <array>
 #include <cctype>
+#include <charconv>
 #include <cstdio>
 #include <cstring>
 #include <stdexcept>
@@ -162,8 +165,11 @@ Decoded decode(const bin::Entry& entry, const defschema::Schema& schema) {
 FieldMerge mergeFields(
     const Decoded& base,
     const std::vector<std::pair<std::string, Decoded>>& versions,
-    const std::string& pick) {
+    const std::string& pick,
+    const std::map<size_t, std::string>& partPicks) {
     FieldMerge r;
+    for (const auto& [index, winner] : partPicks)
+        if (index > base.fields.size()) throw std::invalid_argument("field choice part is outside the decoded record");
     if (!base.clean()) return r;
     for (const auto& [name, d] : versions) {
         if (!d.clean() || d.fields.size() != base.fields.size()) return r;
@@ -172,49 +178,74 @@ FieldMerge mergeFields(
         }
     }
 
-    const bool keepBase = pick == "vanilla" || pick == "base" ||
-                          pick == "none" || pick == "-";
+    auto isBaseline = [](const std::string& winner) {
+        return winner == "vanilla" || winner == "base" || winner == "none" || winner == "-";
+    };
 
     Decoded merged = base;  // tags + shape from base; values overwritten below
+    r.sourceVersions.resize(base.fields.size() + 1);
 
     // Merge one part given its base value and each version's value for it.
     // Applies the result into `dst`; records auto-merge / conflict in `r`.
-    auto mergePart = [&](const std::string& partName,
+    auto mergePart = [&](size_t partIndex, const std::string& partName,
                          const std::vector<uint8_t>& baseVal,
                          const std::vector<std::vector<uint8_t>>& modVals,
                          std::vector<uint8_t>& dst) {
         std::vector<std::string> changers;   // mods that differ from base
         std::vector<const std::vector<uint8_t>*> changerVals;
+        std::vector<size_t> changerIndices;
         for (size_t m = 0; m < versions.size(); ++m) {
             if (modVals[m] != baseVal) {
                 changers.push_back(versions[m].first);
                 changerVals.push_back(&modVals[m]);
+                changerIndices.push_back(m);
             }
         }
-        if (changers.empty()) { dst = baseVal; return; }
+        const bool hasPartPick = partPicks.contains(partIndex);
+        if (changers.empty()) {
+            dst = baseVal;
+            if (hasPartPick) {
+                FieldMerge::Conflict c;
+                c.part = partName;
+                c.partIndex = partIndex;
+                c.winner = "vanilla";
+                r.conflicts.push_back(std::move(c));
+            }
+            return;
+        }
 
         bool allSame = true;
         for (size_t k = 1; k < changerVals.size(); ++k) {
             if (*changerVals[k] != *changerVals[0]) { allSame = false; break; }
         }
-        if (changers.size() == 1 || allSame) {
+        if (!hasPartPick && (changers.size() == 1 || allSame)) {
             dst = *changerVals[0];
             r.autoMerged.push_back(partName);
+            r.sourceVersions[partIndex] = changerIndices.front();
             return;
         }
 
-        // True conflict: pick override, else load order (last changer wins).
+        // Conflicting values or a saved part choice: retain contributor evidence
+        // even after disabling sources leaves a single writer or agreeing values.
         FieldMerge::Conflict c;
         c.part = partName;
+        c.partIndex = partIndex;
         c.mods = changers;
-        if (!pick.empty()) {
-            if (keepBase) { dst = baseVal; c.winner = "vanilla"; }
+        std::string effectivePick = pick;
+        if (const auto selectedPick = partPicks.find(partIndex); selectedPick != partPicks.end()) {
+            const auto& candidate = selectedPick->second;
+            if (isBaseline(candidate) || std::find(changers.begin(), changers.end(), candidate) != changers.end())
+                effectivePick = candidate;
+        }
+        std::optional<size_t> selected = changerIndices.back();
+        if (!effectivePick.empty()) {
+            if (isBaseline(effectivePick)) { dst = baseVal; c.winner = "vanilla"; selected.reset(); }
             else {
                 dst = *changerVals.back();
                 c.winner = changers.back();
                 for (size_t m = 0; m < versions.size(); ++m) {
-                    if (versions[m].first == pick && modVals[m] != baseVal) {
-                        dst = modVals[m]; c.winner = pick; break;
+                    if (versions[m].first == effectivePick && modVals[m] != baseVal) {
+                        dst = modVals[m]; c.winner = effectivePick; selected = m; break;
                     }
                 }
             }
@@ -222,6 +253,7 @@ FieldMerge mergeFields(
             dst = *changerVals.back();
             c.winner = changers.back();
         }
+        r.sourceVersions[partIndex] = selected;
         r.conflicts.push_back(std::move(c));
     };
 
@@ -229,12 +261,12 @@ FieldMerge mergeFields(
     {
         std::vector<std::vector<uint8_t>> modVals;
         for (const auto& [n, d] : versions) modVals.push_back(d.prefix);
-        mergePart("<prefix>", base.prefix, modVals, merged.prefix);
+        mergePart(0, "<prefix>", base.prefix, modVals, merged.prefix);
     }
     for (size_t i = 0; i < base.fields.size(); ++i) {
         std::vector<std::vector<uint8_t>> modVals;
         for (const auto& [n, d] : versions) modVals.push_back(d.fields[i].value);
-        mergePart(base.fields[i].name.empty() ? "<unnamed>"
+        mergePart(i + 1, base.fields[i].name.empty() ? "<unnamed>"
                                               : base.fields[i].name,
                   base.fields[i].value, modVals, merged.fields[i].value);
     }
@@ -261,7 +293,9 @@ std::string formatValue(const DecodedField& f) {
         if (v.size() == 1) return v[0] ? "true" : "false";
         return hex();
     }
-    if (f.type == "int32" && v.size() == 4) {
+    // CDefString stores a signed name-table reference (including -1 for no
+    // string), not inline text. Resolution needs the owning names.bin table.
+    if ((f.type == "int32" || f.type == "CDefString") && v.size() == 4) {
         int32_t x;
         std::memcpy(&x, v.data(), 4);
         std::snprintf(buf, sizeof(buf), "%d", x);
@@ -278,14 +312,52 @@ std::string formatValue(const DecodedField& f) {
     if (f.type == "float" && v.size() == 4) {
         float x;
         std::memcpy(&x, v.data(), 4);
-        std::snprintf(buf, sizeof(buf), "%g", x);
-        return buf;
+        const auto formatted = std::to_chars(buf, buf + sizeof(buf), x);
+        if (formatted.ec == std::errc{}) return std::string(buf, formatted.ptr);
+        return hex();
     }
-    if (f.type == "CCharString" || f.type == "CDefString") {
+    if (f.type == "CWideString") {
+        if(v.size()<2 || v.size()%2) return hex();
+        try {
+            size_t cursor=0;const auto text=unicode::readUtf16z(v,cursor);
+            if(cursor!=v.size()) return hex(); // Preserve visible unsupported trailers.
+            std::string result="\"";
+            for(unsigned char byte:text) switch(byte) {
+            case '"': result+="\\\"";break;
+            case '\\': result+="\\\\";break;
+            case '\n': result+="\\n";break;
+            case '\r': result+="\\r";break;
+            case '\t': result+="\\t";break;
+            case '\b': result+="\\b";break;
+            case '\f': result+="\\f";break;
+            default:
+                if(byte<32 || byte==127) {std::snprintf(buf,sizeof buf,"\\u%04x",unsigned(byte));result+=buf;}
+                else result+=char(byte);
+            }
+            result+='"';return result;
+        } catch(const std::runtime_error&) {return hex();}
+    }
+    if (f.type == "CCharString") {
         std::string s = "\"";
         for (uint8_t b : v) {
             if (b == 0) break;
-            s += char(b);
+            // These are game bytes, without a guaranteed text encoding. Keep
+            // their display exact and JSON-safe rather than replacing invalid
+            // UTF-8 or interpreting high bytes as a guessed code page.
+            switch (b) {
+            case '"': s += "\\\""; break;
+            case '\\': s += "\\\\"; break;
+            case '\n': s += "\\n"; break;
+            case '\r': s += "\\r"; break;
+            case '\t': s += "\\t"; break;
+            default:
+                if (b < 0x20 || b >= 0x7f) {
+                    std::snprintf(buf, sizeof(buf), "\\x%02x", b);
+                    s += buf;
+                } else {
+                    s += char(b);
+                }
+            }
         }
         s += "\"";
         return s;

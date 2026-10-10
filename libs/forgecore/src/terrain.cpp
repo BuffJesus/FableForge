@@ -2,10 +2,82 @@
 
 #include <algorithm>
 #include <cmath>
+#include <climits>
+#include <map>
 #include <numeric>
 #include <stdexcept>
 
 namespace forge::terrain {
+
+std::vector<std::pair<int, int>> atmosSmearFootprint(int gw, int gh,
+    float x, float y, float radius, int worldX, int worldY) {
+    std::vector<std::pair<int, int>> cells;
+    if (gw <= 0 || gh <= 0 || !std::isfinite(x) || !std::isfinite(y) || !std::isfinite(radius)) return cells;
+    // The caller truncates its float world position before Blur's counter loop.
+    const double cx = std::trunc(double(float(float(worldX) + x)));
+    const double cy = std::trunc(double(float(float(worldY) + y)));
+    const float r = std::max(radius, 1.0f);
+    if (cx < INT_MIN || cx > INT_MAX || cy < INT_MIN || cy > INT_MAX || double(r) > double(INT_MAX) / 2) return cells;
+    const double bx = cx - r, by = cy - r, last = std::floor(2.0 * r);
+    // Clip the counters rather than looping across an arbitrarily large pen.
+    // The extra unit preserves truncation's two preimages at global zero.
+    const int64_t x0 = int64_t(std::max(0.0, std::ceil(double(worldX) - bx - 1)));
+    const int64_t x1 = int64_t(std::min(last, std::floor(double(worldX) + double(gw) * 4 - bx + 1)));
+    const int64_t y0 = int64_t(std::max(0.0, std::ceil(double(worldY) - by - 1)));
+    const int64_t y1 = int64_t(std::min(last, std::floor(double(worldY) + double(gh) * 4 - by + 1)));
+    for (int64_t i = y0; i <= y1; ++i) for (int64_t j = x0; j <= x1; ++j) {
+        const int64_t ax = int64_t(std::trunc(bx + j)), ay = int64_t(std::trunc(by + i));
+        if (ax % 4 || ay % 4 || ax < worldX || ay < worldY ||
+            double(ax) >= double(worldX) + double(gw) * 4 || double(ay) >= double(worldY) + double(gh) * 4) continue;
+        const double dx = double(r) - j, dy = double(r) - i;
+        // GFHypoteneuse rounds the squared sum to float before sqrtf.
+        if (std::sqrt(float(dx * dx + dy * dy)) <= r)
+            cells.emplace_back(int((ax - worldX) / 4), int((ay - worldY) / 4));
+    }
+    return cells;
+}
+
+size_t blurAtmos(std::vector<std::array<uint8_t, 3>>& indices,
+    std::vector<std::array<uint8_t, 3>>& strengths, int gw, int gh,
+    float x, float y, float radius, int worldX, int worldY) {
+    if (gw <= 0 || gh <= 0 || indices.size() != size_t(gw) * gh || strengths.size() != indices.size()) return 0;
+    size_t changed = 0;
+    for (const auto [gx, gy] : atmosSmearFootprint(gw, gh, x, y, radius, worldX, worldY)) {
+        std::map<uint8_t, int> weights;
+        for (int dy = -1; dy <= 1; ++dy) for (int dx = -1; dx <= 1; ++dx) {
+            const int nx = gx + dx, ny = gy + dy;
+            if (nx < 0 || ny < 0 || nx >= gw || ny >= gh) {
+                weights.try_emplace(0, 0); // native missing-world readers return theme/blend 0
+                continue;
+            }
+            const size_t n = size_t(ny) * gw + nx;
+            for (int k = 0; k < 3; ++k) weights[indices[n][k]] += strengths[n][k];
+        }
+        std::vector<std::pair<uint8_t, int>> ranked(weights.begin(), weights.end());
+        std::sort(ranked.begin(), ranked.end(), [](const auto& a, const auto& b) {
+            return a.second != b.second ? a.second > b.second : a.first > b.first;
+        });
+        if (ranked.size() > 3) ranked.resize(3);
+        int sum = 0;
+        for (const auto& entry : ranked) sum += entry.second;
+        if (!sum) continue; // malformed all-zero weights: avoid native's division by zero
+        const size_t n = size_t(gy) * gw + gx;
+        auto nextIndices = indices[n]; // native leaves unused indices untouched
+        std::array<int, 3> amounts{};
+        for (size_t k = 0; k < ranked.size(); ++k) {
+            nextIndices[k] = ranked[k].first;
+            amounts[k] = ranked[k].second;
+        }
+        // These small integer sums are exact in native float arithmetic.
+        std::array<uint8_t, 3> nextStrengths{uint8_t(amounts[0] * 255 / sum), uint8_t(amounts[1] * 255 / sum), 0};
+        nextStrengths[2] = uint8_t(255 - nextStrengths[0] - nextStrengths[1]);
+        if (nextIndices != indices[n] || nextStrengths != strengths[n]) {
+            indices[n] = nextIndices; strengths[n] = nextStrengths;
+            ++changed;
+        }
+    }
+    return changed;
+}
 
 ThemeBlend projectMaterialWeights(const std::vector<float>& weights,
                                   const std::vector<uint8_t>& themeIndices) {
@@ -53,6 +125,40 @@ ThemeBlend projectMaterialWeights(const std::vector<float>& weights,
     for (int i = assigned; i < 255; ++i)
         ++out.strengths[fractions[size_t(i - assigned) % fractions.size()].slot];
     return out;
+}
+
+size_t smearThemeBlends(std::vector<std::array<uint8_t, 3>>& indices,
+    std::vector<std::array<uint8_t, 3>>& strengths, int width, int height,
+    const std::vector<std::pair<int, int>>& footprint, const std::array<bool, 256>& allowedThemes) {
+    if (width<=0 || height<=0 || indices.size()!=size_t(width)*size_t(height) || strengths.size()!=indices.size())
+        throw std::invalid_argument("terrain: invalid theme smear grid");
+    if (footprint.empty()) return 0;
+    const auto beforeIndices=indices, beforeStrengths=strengths;
+    std::vector<float> weights(256);
+    std::vector<uint8_t> mapping(256);
+    std::iota(mapping.begin(),mapping.end(),uint8_t(0));
+    size_t changed=0;
+    for (const auto [x,y] : footprint) {
+        if (x<0 || y<0 || x>=width || y>=height) continue;
+        std::fill(weights.begin(),weights.end(),0.f);
+        bool any=false;
+        for (int ny=std::max(0,y-1); ny<=std::min(height-1,y+1); ++ny)
+            for (int nx=std::max(0,x-1); nx<=std::min(width-1,x+1); ++nx) {
+                const size_t neighbour=size_t(ny)*size_t(width)+nx;
+                for (size_t slot=0; slot<3; ++slot) {
+                    const auto theme=beforeIndices[neighbour][slot];
+                    const auto weight=beforeStrengths[neighbour][slot];
+                    if (!allowedThemes[theme] || !weight) continue;
+                    weights[theme]+=weight; any=true;
+                }
+            }
+        if (!any) continue;
+        const auto blend=projectMaterialWeights(weights,mapping);
+        const size_t vertex=size_t(y)*size_t(width)+x;
+        if (indices[vertex]==blend.indices && strengths[vertex]==blend.strengths) continue;
+        indices[vertex]=blend.indices; strengths[vertex]=blend.strengths; ++changed;
+    }
+    return changed;
 }
 
 float sampleMaterialWeight(const std::vector<float>& raster,

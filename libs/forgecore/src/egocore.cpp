@@ -1,11 +1,13 @@
 #include "forge/egocore.hpp"
 #include "forge/temporarydirectory.hpp"
+#include "windowsprocess.hpp"
 
 #include <algorithm>
 #include <cctype>
 #include <cstdlib>
 #include <cstring>
 #include <fstream>
+#include <limits>
 #include <map>
 #include <optional>
 #include <set>
@@ -27,6 +29,22 @@ namespace forge::egocore {
 namespace fs = std::filesystem;
 
 namespace {
+
+fs::path environmentPath(const char* name) {
+#ifdef _WIN32
+    const auto key = albion::process::wide(name);
+    const DWORD size = GetEnvironmentVariableW(key.c_str(), nullptr, 0);
+    if (!size) return {};
+    std::wstring value(size, L'\0');
+    const DWORD written = GetEnvironmentVariableW(key.c_str(), value.data(), size);
+    if (!written || written >= size) throw std::runtime_error("cannot read compiler path environment");
+    value.resize(written);
+    return fs::path(value);
+#else
+    if (const char* value = std::getenv(name); value && *value) return value;
+    return {};
+#endif
+}
 
 std::string readText(const fs::path& p) {
     std::ifstream in(p, std::ios::binary);
@@ -101,8 +119,72 @@ bool sameLine(const std::string& lineHeader, const std::string& type, const std:
 bool runDefc(const fs::path& defc, const fs::path& in, const fs::path& out, std::string& log) {
     fs::create_directories(out);
     const fs::path logFile = out / "defc.log";
-    const std::string cmd = "\"\"" + defc.string() + "\" -i \"" + in.string() + "\" -o \"" + out.string() + "\" > \"" + logFile.string() + "\" 2>&1\"";
-    const int rc = std::system(cmd.c_str());
+    int rc = 1;
+#ifdef _WIN32
+    std::string extension = defc.extension().string();
+    std::transform(extension.begin(), extension.end(), extension.begin(), ::tolower);
+    if (extension == ".exe") {
+        struct Handle {
+            HANDLE value = nullptr;
+            ~Handle() { close(); }
+            void close() { if (value && value != INVALID_HANDLE_VALUE) CloseHandle(value); value = nullptr; }
+        };
+        auto failed = [&](const char* operation) {
+            const DWORD error = GetLastError();
+            log = std::string(operation) + " (Windows error " + std::to_string(error) + ")";
+            return false;
+        };
+        SECURITY_ATTRIBUTES security{sizeof(SECURITY_ATTRIBUTES), nullptr, TRUE};
+        Handle output, input, process, thread;
+        output.value = CreateFileW(logFile.c_str(), GENERIC_WRITE, FILE_SHARE_READ,
+            &security, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+        if (output.value == INVALID_HANDLE_VALUE) return failed("cannot open compiler output");
+        input.value = CreateFileW(L"NUL", GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE,
+            &security, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+        if (input.value == INVALID_HANDLE_VALUE) return failed("cannot open compiler input");
+        SIZE_T bytes = 0;
+        InitializeProcThreadAttributeList(nullptr, 1, 0, &bytes);
+        std::vector<unsigned char> storage(bytes);
+        auto* attributes = reinterpret_cast<LPPROC_THREAD_ATTRIBUTE_LIST>(storage.data());
+        if (!InitializeProcThreadAttributeList(attributes, 1, 0, &bytes))
+            return failed("cannot prepare compiler process");
+        struct Attributes {
+            LPPROC_THREAD_ATTRIBUTE_LIST value;
+            ~Attributes() { DeleteProcThreadAttributeList(value); }
+        } attributeOwner{attributes};
+        HANDLE inherited[]{input.value, output.value};
+        if (!UpdateProcThreadAttribute(attributes, 0, PROC_THREAD_ATTRIBUTE_HANDLE_LIST,
+                inherited, sizeof(inherited), nullptr, nullptr))
+            return failed("cannot prepare compiler handles");
+        STARTUPINFOEXW startup{};
+        startup.StartupInfo.cb = sizeof(startup);
+        startup.StartupInfo.dwFlags = STARTF_USESTDHANDLES;
+        startup.StartupInfo.hStdInput = input.value;
+        startup.StartupInfo.hStdOutput = startup.StartupInfo.hStdError = output.value;
+        startup.lpAttributeList = attributes;
+        // Native filenames never enter a shell. These workspace directory names
+        // end in base/mod/out_base/out_mod and cannot contain quotes on Windows.
+        std::wstring command = L"\"" + defc.native() + L"\" -i \"" + in.native() +
+            L"\" -o \"" + out.native() + L"\"";
+        PROCESS_INFORMATION child{};
+        if (!CreateProcessW(nullptr, command.data(), nullptr, nullptr, TRUE,
+                CREATE_NO_WINDOW | EXTENDED_STARTUPINFO_PRESENT, nullptr, nullptr,
+                &startup.StartupInfo, &child))
+            return failed("cannot start definition compiler");
+        process.value = child.hProcess; thread.value = child.hThread;
+        input.close(); output.close();
+        if (WaitForSingleObject(process.value, INFINITE) != WAIT_OBJECT_0)
+            return failed("cannot wait for definition compiler");
+        DWORD code = 1;
+        if (!GetExitCodeProcess(process.value, &code)) return failed("cannot read compiler status");
+        rc = static_cast<int>(code);
+    } else
+#endif
+    {
+        // Preserve the existing script-compiler route used by failure probes.
+        const std::string cmd = "\"\"" + defc.string() + "\" -i \"" + in.string() + "\" -o \"" + out.string() + "\" > \"" + logFile.string() + "\" 2>&1\"";
+        rc = std::system(cmd.c_str());
+    }
     std::error_code ec;
     if (fs::exists(logFile, ec)) log = readText(logFile);
     return rc == 0 && fs::exists(out / "game.bin", ec) && fs::exists(out / "names.bin", ec);
@@ -149,15 +231,11 @@ std::string mergeDefText(const std::string& target, const std::string& mod, Repo
 fs::path findDefc(const Paths& paths) {
     std::error_code ec;
     if (!paths.defc.empty() && fs::exists(paths.defc, ec)) return paths.defc;
-    if (const char* env = std::getenv("FORGE_DEFC"); env && *env && fs::exists(env, ec)) return env;
+    if (const auto env = environmentPath("FORGE_DEFC"); !env.empty() && fs::exists(env, ec)) return env;
 #ifdef _WIN32
     {   // the release zip ships defc.exe next to forge-tools.exe / FableForge.exe
-        char buf[MAX_PATH];
-        const DWORD n = GetModuleFileNameA(nullptr, buf, MAX_PATH);
-        if (n > 0 && n < MAX_PATH) {
-            const fs::path beside = fs::path(std::string(buf, n)).parent_path() / "defc.exe";
-            if (fs::exists(beside, ec)) return beside;
-        }
+        const fs::path beside = albion::process::executableDirectory() / "defc.exe";
+        if (fs::exists(beside, ec)) return beside;
     }
 #endif
     return "defc.exe";   // PATH
@@ -170,7 +248,7 @@ bool normaliseDefs(const fs::path& modFolder, const fs::path& gameRoot, const fs
     if (!fs::is_directory(modDefs, ec)) modDefs = modFolder / "data" / "Defs";
     if (!fs::is_directory(modDefs, ec)) { report.notes.push_back("no Data/Defs in the mod folder"); return false; }
     fs::path text = paths.defsText;
-    if (text.empty()) if (const char* env = std::getenv("FORGE_DEFS_TEXT"); env && *env) text = env;
+    if (text.empty()) text = environmentPath("FORGE_DEFS_TEXT");
     if (text.empty()) text = gameRoot / "Data" / "Defs";
     if (!fs::is_directory(text, ec) || !fs::exists(text / "RetailHeaders", ec) && !fs::exists(text / "DevHeaders", ec) && fs::directory_iterator(text, ec) == fs::directory_iterator()) {
         report.notes.push_back("no text Data/Defs tree (set FORGE_DEFS_TEXT or put the retail text defs under <game root>/Data/Defs); the .def overrides cannot be compiled");
@@ -442,7 +520,10 @@ size_t applyResourceOverrides(const fs::path& modFolder, const fs::path& gameRoo
                 big::Entry e;
                 uint32_t maxId = 0;
                 for (const auto& x : bank->entries) maxId = std::max(maxId, x.id);
+                if (maxId == std::numeric_limits<uint32_t>::max())
+                    throw std::runtime_error("EgoCore resource: no free entry ID in " + bank->name);
                 if (!bank->entries.empty()) { const auto& model = bank->entries.back(); e.magic = model.magic; e.devFileType = model.devFileType; }
+                if (file.magic() == "BIGB") e.magic = 42;
                 e.id = maxId + 1;
                 e.type = graphics ? 1 : 0;
                 e.name = o.entry;

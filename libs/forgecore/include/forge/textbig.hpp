@@ -36,9 +36,20 @@ struct Entry {
 // Decode a payload given the entry Type. Throws std::runtime_error on truncation.
 Entry decode(const std::vector<uint8_t>& payload, int type);
 
+// Type-2 names live in the TOC subheader, not the payload. Strictly consume
+// its u32 count and NUL-terminated ASCII names; throws on malformed input.
+std::vector<std::string> decodeNarrators(const std::vector<uint8_t>& subHeader);
+
 // Encode a type-0 string or type-1 group payload in the retail/EgoCore format.
 // Type 2 narrator lists are intentionally not synthesized by this API.
 std::vector<uint8_t> encode(const Entry& entry);
+
+// Type-0 Info is a four-byte index into the bank's type-2 NarratorList.
+// A header can be copied unchanged when both lists agree and its index exists.
+// Preserve authored differences from the payload's separate speaker string.
+// Malformed/ambiguous lists return false.
+bool compatibleSpeakerHeader(const big::Bank& baseline, const big::Bank& source,
+                             const big::Entry& record, const Entry& value);
 
 struct UpsertResult {
     uint32_t id = 0;
@@ -54,6 +65,7 @@ struct UpsertResult {
 //
 // Existing entries are replaced by name and retain their ID unless requestedId
 // explicitly changes it. Duplicate names/IDs and invalid donor choices throw.
+// An explicit donor name must match exactly one record when adding a string.
 UpsertResult upsertString(
     big::File& file, const std::string& name, Entry value,
     std::optional<uint32_t> requestedId = std::nullopt,

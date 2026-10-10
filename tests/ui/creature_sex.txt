@@ -7,6 +7,10 @@ set saveroot build/ui_creature_sex
 edit 1
 place CREATURE_OAKVALE_VILLAGER_MALE_UNEMPLOYED SexProbeMale
 assert_state selected_creature_sex 1
+wait_foliage
+assert_state selected_mesh_instances 1
 place CREATURE_OAKVALE_VILLAGER_FEMALE_UNEMPLOYED SexProbeFemale
 assert_state selected_creature_sex 2
+wait_foliage
+assert_state selected_mesh_instances 1
 quit

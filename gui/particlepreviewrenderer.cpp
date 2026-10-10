@@ -81,11 +81,11 @@ struct ParticlePreviewRenderer::Impl {
     ID3D11DepthStencilView* depthView = nullptr;
     int width = 0, height = 0;
     struct Texture { ID3D11ShaderResourceView* view; uint32_t width, height, frames; size_t bytes; };
-    std::map<int32_t, Texture> textures;
+    std::map<uint32_t, Texture> textures;
     size_t textureBytes = 0, drawn = 0, missing = 0, dropped = 0;
     struct Mesh {
         ID3D11Buffer *vertices=nullptr,*indices=nullptr;
-        struct Part { int32_t texture; UINT first,count; };
+        struct Part { uint32_t texture; UINT first,count; };
         std::vector<Part> parts;
         float centre[3]={}, radius=1;
         float lo[3]={},hi[3]={};
@@ -208,12 +208,12 @@ bool ParticlePreviewRenderer::init(ID3D11Device* device, ID3D11DeviceContext* co
         if(!p.check(device->CreateBlendState(&blend,&p.blends[m][op]),"Create particle blend state")) return false;
     }
     terrainexport::Image white; white.width=white.height=1; white.rgba={255,255,255,255};
-    if(!setTexture(-1,white,1)) return false;
-    p.white=p.textures.at(-1).view; p.textures.erase(-1); p.textureBytes=0;
+    if(!setTexture(UINT32_MAX,white,1)) return false;
+    p.white=p.textures.at(UINT32_MAX).view; p.textures.erase(UINT32_MAX); p.textureBytes=0;
     p.ready=true; return true;
 }
 
-bool ParticlePreviewRenderer::setTexture(int32_t id,const terrainexport::Image& image,uint32_t frames) {
+bool ParticlePreviewRenderer::setTexture(uint32_t id,const terrainexport::Image& image,uint32_t frames) {
     auto& p=*p_; const size_t bytes=size_t(image.width)*image.height*4;
     if(!p.device || !image.width || !image.height || image.width>8192 || image.height>8192 ||
        !frames || image.height%frames || frames>image.height || image.rgba.size()!=bytes) {
@@ -291,10 +291,10 @@ bool ParticlePreviewRenderer::setMesh(int32_t id,const forge::meshpreview::Geome
             mesh.radius=sphere.radius;mesh.authoredBounds=true;
         }
     }
-    std::map<int32_t,std::vector<uint32_t>> groups;
+    std::map<uint32_t,std::vector<uint32_t>> groups;
     for(const auto& t:geometry.triangles) {
         if(t.a>=vertices.size() || t.b>=vertices.size() || t.c>=vertices.size()) {p.error="Invalid particle mesh triangle index";return false;}
-        int32_t texture=-1;
+        uint32_t texture=0;
         if(t.material>=0 && size_t(t.material)<geometry.materials.size() && geometry.materials[t.material].diffuseTexture>0)texture=geometry.materials[t.material].diffuseTexture;
         auto& indices=groups[texture];indices.insert(indices.end(),{t.a,t.b,t.c});
     }

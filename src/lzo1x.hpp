@@ -22,8 +22,8 @@ Status decompress(const uint8_t* in, size_t inLen, uint8_t* out, size_t* outLen)
 
 const char* statusName(Status s);
 
-// Encodes `in[0..inLen)` as an LZO1X stream (greedy single-slot hash matcher,
-// LZO1X-1 class ratio, ending with the end marker). Any decoder that accepts
+// Encodes `in[0..inLen)` as an LZO1X stream using hash-chain matches and a
+// cost-based parse, ending with the end marker. Any decoder that accepts
 // the LZO1X grammar -- the retail engine's included -- decodes it; it does not
 // reproduce minilzo's exact byte choices.
 std::vector<uint8_t> compress(const uint8_t* in, size_t inLen);

@@ -2,9 +2,11 @@
 
 #include <algorithm>
 #include <cctype>
+#include <charconv>
 #include <cstdlib>
 #include <fstream>
 #include <numeric>
+#include <stdexcept>
 
 #include "backups.hpp"
 #include "pendingbanks.hpp"
@@ -39,14 +41,29 @@ std::string entryLabel(const std::string& symbol) {
     return stem.empty() ? symbol : stem;
 }
 
-// by the label the list prints, the raw symbol, or the numeric id
-const forge::big::Entry* findEntry(const forge::big::File& file, const std::string& name, std::string* bank = nullptr) {
-    uint32_t id = 0; bool byId = !name.empty() && std::all_of(name.begin(), name.end(), [](unsigned char c) { return std::isdigit(c) != 0; });
-    if (byId) id = uint32_t(std::strtoul(name.c_str(), nullptr, 10));
-    for (const auto& b : file.banks())
-        for (const auto& e : b.entries)
-            if (e.name == name || entryLabel(e.name) == name || (byId && e.id == id)) { if (bank) *bank = b.name; return &e; }
-    return nullptr;
+// One identity rule for browser rows and archive reads/writes.
+template<class Entry, class Visit>
+const Entry* findTextureMatch(const std::string& name, Visit visit) {
+    auto unique = [&](auto matches) {
+        const Entry* found = nullptr;
+        visit([&](const Entry& e) {
+            if (!matches(e)) return;
+            if (found) throw std::runtime_error("ambiguous texture name, label or ID: " + name);
+            found = &e;
+        });
+        return found;
+    };
+    if (const auto* exact = unique([&](const auto& e) { return e.name == name; })) return exact;
+    uint32_t id = 0;
+    const auto parsed = std::from_chars(name.data(), name.data()+name.size(), id);
+    const bool byId = parsed.ec == std::errc{} && parsed.ptr == name.data()+name.size();
+    return unique([&](const auto& e) { return entryLabel(e.name) == name || (byId && e.id == id); });
+}
+
+const forge::big::Entry* findEntry(const forge::big::File& file, const std::string& name) {
+    return findTextureMatch<forge::big::Entry>(name,[&](auto visit) {
+        for (const auto& bank : file.banks()) for (const auto& entry : bank.entries) visit(entry);
+    });
 }
 
 // Prepare and validate an owned output before backing up and replacing the bank.
@@ -87,6 +104,33 @@ bool runImport(const fs::path& gameRoot, forge::terraintex::ImportRequest ir, ui
     } catch (const std::exception& e) { error = e.what(); return false; }
 }
 }  // namespace
+
+const TextureRow* findTextureRow(const std::vector<TextureRow>& rows, const std::string& name, std::string& error) {
+    error.clear();
+    try {
+        const auto* found=findTextureMatch<TextureRow>(name,[&](auto visit) {
+            for (const auto& row : rows) visit(row);
+        });
+        if (!found) error="no texture named " + name;
+        return found;
+    } catch (const std::exception& e) { error=e.what(); return nullptr; }
+}
+
+const TextureRow* findTextureRowById(const std::vector<TextureRow>& rows, const std::string& bank,
+                                     uint32_t id, std::string& error) {
+    error.clear();
+    const TextureRow* found = nullptr;
+    for (const auto& row : rows) {
+        if (row.bank != bank || row.id != id) continue;
+        if (found) {
+            error = "texture id " + std::to_string(id) + " is ambiguous in " + bank;
+            return nullptr;
+        }
+        found = &row;
+    }
+    if (!found) error = "texture id " + std::to_string(id) + " is not in " + bank;
+    return found;
+}
 
 std::vector<TextureRow> listTextures(const fs::path& texturesBig, std::string& error) {
     std::vector<TextureRow> out;

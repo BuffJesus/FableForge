@@ -138,6 +138,10 @@ float constantPlacementHeight(float height, float groundZ) {
     return height < groundZ ? groundZ : height;
 }
 
+Vec3 snapToCellCentre(float x, float y) {
+    return {std::trunc(x) + 0.5f, std::trunc(y) + 0.5f, 0.0f};
+}
+
 float terrainHeightAt(const lev::File& level, float localX, float localY) {
     const int maxX = level.cellsX() - 1;
     const int maxY = level.cellsY() - 1;
@@ -195,6 +199,8 @@ RoutedPosition routeWorldPosition(const Vec3& world,
 }
 
 std::string serialize(const Placement& p, const std::string& eol) {
+    if (!p.scriptName.empty() && !tng::isScriptName(p.scriptName))
+        throw std::invalid_argument("thingplacer: ScriptName must be an unquoted identifier");
     if (p.thingType.empty()) {
         throw std::runtime_error("thingplacer: thingType is required");
     }

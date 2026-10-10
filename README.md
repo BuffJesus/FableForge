@@ -5,6 +5,10 @@ a speaker tree and inline lip-sync editor with Undo/Redo, native Browse controls
 a stable camera compass, terrain props that follow slopes, and clearer effect previews.
 See the [release notes](docs/releases/0.18.0.md) for changes and validation limits.
 
+**Editor milestone preview:** [0.18.1-rc.2](https://github.com/BuffJesus/FableForge/releases/tag/v0.18.1-rc.2) adds definition/text authoring and stronger bank recovery checks. See the [candidate notes](docs/releases/0.18.1-rc.2.md).
+
+**Aeon Edition + Controller Support preview:** [0.18.1-rc.1](https://github.com/BuffJesus/FableForge/releases/tag/v0.18.1-rc.1) fixes complete Data installation. See the [candidate notes](docs/releases/0.18.1-rc.1.md) and [illustrated guide](docs/walkthrough/aeon-controller/index.html).
+
 *Until 0.16 this was **Albion Atlas**; same tool, new name (the old FableForge's core
 library lives on inside it as `libs/forgecore`). Settings and presets carry over.*
 
@@ -276,14 +280,48 @@ game-root folders, bsdiff `.patch` files, `.qst` edits, EgoCore `Mods/<Name>/` f
 (DLL + text `.def` + `.resource` bank overrides + partial TNGs) and whole-file packs like
 Project Seasons. Mods merge record by record (a `game.bin` field, a thing by UID, a
 `.qst` statement, a `text.big` key, an `FSE/quests.lua` entry) and later mods win.
+For a complete extracted overhaul such as Aeon Edition, add the folder containing
+`Data` first (selecting `Data` itself also works). Forge installs that complete
+tree before composing later mods. The [Aeon + Controller guide](docs/walkthrough/aeon-controller/index.html)
+shows the three-source setup and its file-level validation.
 *Check conflicts* lists every contested record in one report where you pick the winner.
-*Build and deploy* rebuilds the whole order onto the retail files; *Undeploy* puts them
-back. Things a mod placed are badged in the editor with the mod's name. Shell:
+*Build and deploy* rebuilds the whole order onto the selected installation;
+*Undeploy* restores its previous files. Things a mod placed are badged in the
+editor with the mod's name. Shell:
 `forge-tools mods list/add/remove/move/enable/disable/build/deploy/undeploy/conflicts`.
 These commands reject unknown or incomplete options before editing the order or
 reverting a stage. Reorder indices must be complete signed decimal integers.
 Missing or unreadable conflict-choice files are errors; deploy reads the order
 and choices and validates enabled source paths before reverting the previous stage.
+
+Read-only diagnostics are also available:
+
+* `forge-tools defs review-namespace <baseline-root> <source-root>... [--json]`
+  plans game-definition IDs and reports name-CRC ambiguities, candidate changes,
+  and changed startup selections at class ordinal 1 of GLOBAL, ENGINE, ENVIRONMENT
+  and HERO_STATS. Missing startup selections are reported as coverage gaps and
+  do not by themselves change the exit status.
+  Exit 0 means analysis completed without those findings; 1 means findings or a
+  refusal, and 2 means invalid arguments. JSON distinguishes a completed analysis
+  with findings from a refusal. It does not relocate payloads or approve a merge.
+* `forge-tools world review-storage <file> [--json]` checks supported
+  LEV/STB/WLD/BWD/TNG/GTG/WAD storage and reports per-entry WAD refusals.
+  BIGB review checks the supported PC graphics/texture and English text archive
+  envelopes, then reports individual payload refusals. Unknown bank versions,
+  nonstandard entry markers and unexplained container bytes remain refused.
+  Ogg review checks single-stream page framing, checksums and packet completion;
+  codec packets and playback remain unchecked. Chained/multiplexed streams and
+  empty pages are outside the supported diagnostic subset.
+  Lighting-table TGA review supports the observed uncompressed 24-bit layout
+  with a standard footer; environment filenames and pixel coordinates require
+  separate resolution.
+  Exit 0 means supported storage, 1 means a refusal, and 2 means invalid arguments.
+  Known symbolic fields remain unresolved in the report; storage acceptance
+  does not certify world behavior or admit a source for composition.
+  JSON lists WLD initial quests separately as unresolved script references.
+* `forge-tools defs decode <root> <schema.json> <name-or-slot> [--json]`
+  includes `prefix_hex` and per-field `raw_hex` in JSON, alongside formatted
+  values, so audits can inspect arrays and reconstruct clean records exactly.
 
 ## Building
 

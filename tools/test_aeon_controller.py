@@ -1,156 +1,138 @@
-#!/usr/bin/env python3
-"""Compose Aeon Edition, Controller Support.fmp, and its EgoCore DLL on a scratch retail root.
+﻿#!/usr/bin/env python3
+"""Preserve intact Aeon banks while adding Controller FMP and EgoCore DLL.
 
-Uses locally extracted mod corpus; never deploys to the game install.
-Run: python tools/test_aeon_controller.py [--keep]
+Uses a synthetic extracted-level scratch installation. Never runs the game or
+certifies the author's manual installation procedure. Retail + Aeon must refuse.
 """
 import argparse
+import hashlib
 import json
 from pathlib import Path
 import re
 import shutil
 import subprocess
 import tempfile
+from test_fmp_links import audit, package_records, read_bank
 
+REPO = Path(__file__).resolve().parents[1]
 
-REPO = Path(__file__).resolve().parent.parent
-CORPUS = REPO / "work" / "nexus_mods" / "_peek"
-RETAIL = Path(r"C:\Programs\Steam\steamapps\common\Fable The Lost Chapters")
-TOOL = REPO / "build" / "forge-tools.exe"
-AEON = CORPUS / "AeonEdition"
-FMP = CORPUS / "ControllerSupportFMP" / "ControllerSupport.fmp"
-DLL = CORPUS / "ControllerSupportFMP" / "FableControllerSupport.dll"
-
+def inventory(root):
+    result = {}
+    for path in root.rglob('*'):
+        if not path.is_file(): continue
+        digest = hashlib.sha256()
+        with path.open('rb') as stream:
+            for block in iter(lambda: stream.read(1024 * 1024), b''):
+                digest.update(block)
+        result[path.relative_to(root).as_posix()] = digest.hexdigest()
+    return result
 
 def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--keep", action="store_true", help="keep the scratch input and output")
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--keep', action='store_true')
+    parser.add_argument('--corpus', type=Path, default=REPO/'work/nexus_mods/_peek')
+    parser.add_argument('--install', type=Path, default=Path('C:/Programs/Steam/steamapps/common/Fable The Lost Chapters'))
+    parser.add_argument('--tool', type=Path, default=REPO/'build/forge-tools.exe')
+    parser.add_argument('--cwd', type=Path, default=REPO)
+    parser.add_argument('--work-root', type=Path, default=REPO/'build')
     args = parser.parse_args()
-    required = [TOOL, AEON / "Data" / "CompiledDefs" / "game.bin",
-                AEON / "Data" / "graphics" / "graphics.big",
-                AEON / "Data" / "graphics" / "pc" / "textures.big",
-                AEON / "Data" / "Bones" / "bandit_short.bncfg",
-                AEON / "Data" / "Levels" / "FinalAlbion_RT.stb", FMP, DLL,
-                RETAIL / "data" / "CompiledDefs" / "game.bin",
-                RETAIL / "data" / "Levels" / "FinalAlbion.wad",
-                RETAIL / "data" / "graphics" / "graphics.big"]
-    missing = [str(p) for p in required if not p.exists()]
+    corpus, retail, tool = args.corpus.resolve(), args.install.resolve(), args.tool.resolve()
+    aeon = corpus/'AeonEdition'
+    fmp = corpus/'ControllerSupportFMP/ControllerSupport.fmp'
+    dll = corpus/'ControllerSupportFMP/FableControllerSupport.dll'
+    schema = tool.parent/'docs/re_reference/def_schema.json'
+    if not schema.exists(): schema = REPO/'docs/re_reference/def_schema.json'
+    required = [tool, aeon/'Data/CompiledDefs/game.bin', aeon/'Data/CompiledDefs/names.bin',
+                aeon/'Data/graphics/graphics.big', aeon/'Data/Levels/FinalAlbion_RT.stb',
+                retail/'data/Levels/FinalAlbion.wad', retail/'data/CompiledDefs/game.bin', fmp, dll]
+    missing = [str(path) for path in required if not path.exists()]
     if missing:
-        print("Aeon/controller corpus or retail install missing; skipped:", *missing, sep="\n  ")
+        print('Aeon/controller check skipped: missing inputs', *missing, sep='\n  ')
         return 0
-
-    work = Path(tempfile.mkdtemp(prefix="aeon_controller_", dir=REPO / "build"))
-    root, out = work / "retail", work / "merged"
+    work_root = args.work_root.resolve()
+    work_root.mkdir(parents=True, exist_ok=True)
+    work = Path(tempfile.mkdtemp(prefix='aeon_controller_', dir=work_root)).resolve()
+    print('Evidence retained at', work, flush=True)
+    command_index = 0
+    def run(*argv, refuse=False):
+        nonlocal command_index
+        command_index += 1
+        proc = subprocess.run([str(tool), *map(str, argv)], cwd=args.cwd.resolve(),
+                              capture_output=True, text=True, timeout=300)
+        (work/f'command-{command_index:02d}.json').write_text(json.dumps(
+            {'args': list(map(str, argv)), 'returncode': proc.returncode}, indent=2), encoding='utf-8')
+        (work/f'command-{command_index:02d}.log').write_text(proc.stdout+proc.stderr, encoding='utf-8')
+        if refuse:
+            assert proc.returncode != 0 and 'changed or new unnamed definition entries' in proc.stderr, proc.stderr
+        else:
+            assert proc.returncode == 0, proc.stdout[-1200:]+proc.stderr[-1200:]
+        return proc.stdout
     try:
-        defs = root / "data" / "CompiledDefs"
-        defs.mkdir(parents=True)
-        for name in ("game.bin", "names.bin", "script.bin", "frontend.bin"):
-            src = RETAIL / "data" / "CompiledDefs" / name
-            if src.exists():
-                shutil.copyfile(src, defs / name)
-        levels = root / "data" / "Levels"
-        levels.mkdir(parents=True)
-        shutil.copyfile(RETAIL / "data" / "Levels" / "FinalAlbion.wad",
-                        levels / "FinalAlbion.wad")
-        controller = work / "source" / "FableControllerSupport"
+        source_before = inventory(aeon)
+        root, out = work/'aeon-baseline', work/'merged'
+        run('wad', 'extract', retail/'data/Levels/FinalAlbion.wad', root)
+        shutil.copytree(aeon/'Data', root/'Data', dirs_exist_ok=True)
+        levels = root/'data/Levels'
+        shutil.copyfile(retail/'data/Levels/FinalAlbion.wad', levels/'_FinalAlbion.wad')
+        assert not (levels/'FinalAlbion.wad').exists()
+        baseline_before = inventory(root)
+        (work/'baseline-inventory.json').write_text(json.dumps(baseline_before, indent=2), encoding='utf-8')
+        intact = read_bank(root)
+        assert intact == read_bank(aeon)
+        rejected = work/'rejected'
+        rejected.mkdir(); (rejected/'prior.txt').write_bytes(b'keep prior output')
+        rejected_before = inventory(rejected)
+        run('mods', 'merge', retail, rejected, '--with', aeon, refuse=True)
+        assert inventory(rejected) == rejected_before
+        controller = work/'source/FableControllerSupport'
         controller.mkdir(parents=True)
-        shutil.copyfile(DLL, controller / DLL.name)
-
-        def run(*argv):
-            proc = subprocess.run([str(TOOL), *map(str, argv)], cwd=REPO,
-                                  capture_output=True, text=True)
-            if proc.returncode:
-                raise AssertionError(f"{' '.join(map(str, argv))}\n{proc.stdout[-1200:]}\n{proc.stderr[-1200:]}")
-            return proc.stdout
-
-        run("mods", "add", root, AEON, "--name", "Aeon Edition")
-        aeon_out = work / "aeon_only"
-        run("mods", "build", root, aeon_out)
-        aeon_decoded = run("defs", "decode", aeon_out, "docs/re_reference/def_schema.json",
-                           "FABLE_XBOX_CONTROL_SCHEME_BASE")
-        aeon_count = int(re.search(r"Controls\s+Vector_VCActionInputControl__ count=(\d+)", aeon_decoded).group(1))
-        run("mods", "add", root, FMP, "--name", "Controller Support FMP")
-        run("mods", "add", root, controller, "--name", "Controller Support DLL")
-        order = json.loads(run("mods", "list", root, "--json"))["mods"]
-        assert [m["kind"] for m in order] == ["tree", "fmp", "egocore"], order
-        result = run("mods", "build", root, out)
-        built_dll = out / "Mods" / "FableControllerSupport" / DLL.name
-        assert built_dll.read_bytes() == DLL.read_bytes()
-        assert not (built_dll.parent / "Data").exists(), "DLL-only handoff must not recompile EgoCore text defs"
-        ini = (out / "Mods.ini").read_text(encoding="utf-8")
-        assert "FableControllerSupport\\FableControllerSupport.dll=1" in ini, ini
-        assert (out / "data" / "CompiledDefs" / "game.bin").is_file()
-        wad = out / "data" / "Levels" / "FinalAlbion.wad"
-        assert wad.is_file() and wad.stat().st_size > 100_000_000
-        wad_listing = run("wad", "list", wad)
-        assert "BarrowFields.tng" in wad_listing
-        wad_files = work / "wad_extracted"
-        extracted = run("wad", "extract", wad, wad_files)
-        extracted_count = re.search(r"extracted (\d+) of (\d+) entries", extracted)
-        assert extracted_count and int(extracted_count.group(1)) == int(extracted_count.group(2)), extracted
-        base_wad_listing = run("wad", "list", root / "data" / "Levels" / "FinalAlbion.wad")
-        base_count = int(re.search(r": (\d+) entries", base_wad_listing).group(1))
-        assert int(extracted_count.group(1)) == base_count + 47, extracted
-        loose = out / "data" / "Levels" / "FinalAlbion"
-        aeon_loose = AEON / "Data" / "Levels" / "FinalAlbion"
-        bundled = wad_files / "Data" / "Levels" / "FinalAlbion"
-        aeon_levels = sorted(p for p in aeon_loose.iterdir() if p.suffix.lower() in (".lev", ".tng"))
-        root_levels = sorted(p for p in (AEON / "Data" / "Levels").iterdir()
-                             if p.is_file() and p.suffix.lower() in (".lev", ".tng"))
-        assert len(aeon_levels) == 841, len(aeon_levels)
-        assert {p.name for p in root_levels} == {"creature_hub.lev", "creature_hub.tng"}
-        source_differences = []
-        loose_overrides = 0
-        for src in aeon_levels + root_levels:
-            merged = (loose if src in aeon_levels else out / "data" / "Levels") / src.name
-            packed = (bundled if src in aeon_levels else wad_files / "Data" / "Levels") / src.name
-            assert packed.is_file(), src.name
-            merged_bytes = merged.read_bytes() if merged.is_file() else src.read_bytes()
-            if merged.is_file():
-                loose_overrides += 1
-            assert packed.read_bytes() == merged_bytes, f"WAD and expected build differ: {src.name}"
-            if src in root_levels:
-                assert merged_bytes == src.read_bytes(), f"root level changed unexpectedly: {src.name}"
-            if merged_bytes != src.read_bytes():
-                source_differences.append(src.name)
-        graphics = out / "data" / "graphics" / "graphics.big"
-        assert graphics.is_file() and graphics.stat().st_size > 200_000_000
-        assert (out / "data" / "Levels" / "FinalAlbion_RT.stb").is_file()
-        assert (out / "data" / "Bones" / "bandit_short.bncfg").read_bytes() == (AEON / "Data" / "Bones" / "bandit_short.bncfg").read_bytes()
-        decoded = run("defs", "decode", out, "docs/re_reference/def_schema.json",
-                      "FABLE_XBOX_CONTROL_SCHEME_BASE")
-        merged_count = int(re.search(r"Controls\s+Vector_VCActionInputControl__ count=(\d+)", decoded).group(1))
-        # Controller Support's FMP ships a full 141-entry keyboard/pad scheme.
-        # Aeon's replacement has 70; the FMP intentionally wins this field.
-        assert (aeon_count, merged_count) == (70, 141), (aeon_count, merged_count)
-        assert "0 field conflicts, 0 whole-record conflicts" in result, result[-1200:]
-        wad_summary = re.search(r"FinalAlbion\.wad rebuilt: (\d+) level file\(s\) repacked, 47 new level file\(s\) appended", result)
-        assert wad_summary and int(wad_summary.group(1)) == loose_overrides - 47, result[-1200:]
-        mesh_audit = json.loads(run("assets", "missing-mesh", out,
-                                    "docs/re_reference/def_schema.json", "--json"))
-        assert mesh_audit["unparsed_defs"] == 0, mesh_audit["unparsed_defs"]
-        assert not mesh_audit["missing"], mesh_audit["missing"][:12]
-        print("PASS: Aeon Edition -> Controller Support FMP -> EgoCore DLL")
-        print("  order:", ", ".join(m["kind"] for m in order))
-        print(f"  controller binding count: Aeon {aeon_count} -> merged {merged_count}; DLL registered in Mods.ini")
-        print(f"  FinalAlbion.wad: all {len(aeon_levels) + len(root_levels)} Aeon level payloads match the effective build ({loose_overrides} loose overrides); {len(source_differences)} differ from the source")
-        for name in source_differences[:8]:
-            print("    source delta:", name)
-        print(f"  missing model references against Aeon graphics.big: {len(mesh_audit['missing'])}")
-        for row in mesh_audit["missing"][:8]:
-            print(f"    {row['definition']} -> mesh {row['mesh_id']}")
-        for line in result.splitlines():
-            if "changes applied" in line or "conflict" in line or "FinalAlbion.wad" in line:
-                print(" ", line[:200])
+        shutil.copyfile(dll, controller/dll.name)
+        decoded = run('defs', 'decode', root, schema, 'FABLE_XBOX_CONTROL_SCHEME_BASE')
+        aeon_count = int(re.search(r'Controls\s+Vector_VCActionInputControl__ count=(\d+)', decoded).group(1))
+        run('mods', 'add', root, fmp, '--name', 'Controller Support FMP')
+        run('mods', 'add', root, controller, '--name', 'Controller Support DLL')
+        order = json.loads(run('mods', 'list', root, '--json'))['mods']
+        assert [entry['kind'] for entry in order] == ['fmp', 'egocore'], order
+        run('mods', 'build', root, out)
+        imported = package_records(fmp)['GameBINEntries']
+        composed = read_bank(out)
+        preserved = 0
+        for index, entry in enumerate(intact):
+            if entry['name'] not in imported:
+                assert composed[index] == entry, (index, entry['name'], entry['definition'])
+                preserved += 1
+        links = audit(out)
+        assert links['checked'] == 14 and not links['errors'], links
+        decoded = run('defs', 'decode', out, schema, 'FABLE_XBOX_CONTROL_SCHEME_BASE')
+        count = int(re.search(r'Controls\s+Vector_VCActionInputControl__ count=(\d+)', decoded).group(1))
+        assert (aeon_count, count) == (70, 141)
+        assert (out/'Mods/FableControllerSupport'/dll.name).read_bytes() == dll.read_bytes()
+        assert not (out/'Mods/FableControllerSupport/Data').exists()
+        assert 'FableControllerSupport\\FableControllerSupport.dll=1' in (out/'Mods.ini').read_text(encoding='utf-8')
+        # Output is an overlay; preserve all baseline levels and assets.
+        built_files = inventory(out)
+        for relative, digest in baseline_before.items():
+            if relative.lower().startswith('data/compileddefs/'): continue
+            assert relative not in built_files or built_files[relative] == digest, relative
+        current = inventory(root)
+        assert all(current.get(relative) == digest for relative, digest in baseline_before.items())
+        assert inventory(aeon) == source_before
+        result = {'passed': True, 'baseline': 'synthetic extracted-level intact Aeon',
+                  'preserved_existing_records': preserved,
+                  'preserved_unnamed_records': sum(not e['name'] for e in intact),
+                  'preserved_baseline_files': len(baseline_before), 'controller_bindings': [aeon_count, count],
+                  'links': links, 'obsolete_overhaul_route_refused': True, 'gameplay_tested': False}
+        (work/'result.json').write_text(json.dumps(result, indent=2), encoding='utf-8')
+        print(f'PASS: intact Aeon -> Controller FMP -> DLL; {preserved} records preserved '
+              f'({result["preserved_unnamed_records"]} unnamed), 14 links, 70 -> 141 bindings', flush=True)
+        print('Baseline levels/assets unchanged; partial-overhaul route refused; no game execution.')
         return 0
     finally:
         if args.keep:
-            print("scratch:", work)
+            print('scratch:', work)
         else:
-            # The only recursive deletion is the temp directory we created under build/.
-            assert work.resolve().is_relative_to((REPO / "build").resolve())
+            assert work.parent == work_root and work.name.startswith('aeon_controller_')
             shutil.rmtree(work)
 
-
-if __name__ == "__main__":
+if __name__ == '__main__':
     raise SystemExit(main())

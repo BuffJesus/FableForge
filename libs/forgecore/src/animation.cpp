@@ -97,19 +97,8 @@ Track parseTrack(const std::vector<uint8_t>& image,size_t start,size_t end) {
 
 bool signature(const uint8_t* p,const char* s) {return std::memcmp(p,s,4)==0;}
 
-size_t findChild(const std::vector<uint8_t>& image,size_t from,size_t end,bool object) {
-    for(size_t p=from;p+8<=end;++p) {
-        const uint8_t* at=image.data()+p;
-        const bool known=object ?
-            (signature(at,"XSEQ")||signature(at,"SEQ0")||signature(at,"AMSK")) :
-            (signature(at,"HLPR")||signature(at,"AOBJ")||signature(at,"XALO"));
-        if(known && u32(at+4)<=end-(p+8)) return p;
-    }
-    return end;
-}
-
 void chunks(const std::vector<uint8_t>& image,size_t start,size_t end,
-            Animation& animation,bool helper,int depth) {
+            Animation& animation,bool helper,int depth,bool complete) {
     if(depth>16) throw std::runtime_error("animation: excessive chunk nesting");
     size_t cursor=start;
     while(cursor+8<=end) {
@@ -118,7 +107,7 @@ void chunks(const std::vector<uint8_t>& image,size_t start,size_t end,
         if(size>end-(cursor+8)) {
             // Retail images have a short raw footer; a recognized chunk with
             // a bad size is corrupt, while other tail bytes are not chunks.
-            if(signature(at,"ANRT")||signature(at,"AOBJ")||signature(at,"XSEQ")||
+            if(complete||signature(at,"ANRT")||signature(at,"AOBJ")||signature(at,"XSEQ")||
                signature(at,"SEQ0")||signature(at,"HLPR")||signature(at,"MVEC"))
                 throw std::runtime_error("animation: chunk exceeds parent");
             break;
@@ -126,26 +115,51 @@ void chunks(const std::vector<uint8_t>& image,size_t start,size_t end,
         const size_t body=cursor+8,next=body+size;
         if(signature(at,"ANRT")) {
             if(size<5) throw std::runtime_error("animation: short ANRT");
+            if(complete && image[body]>1) throw std::runtime_error("animation: invalid cyclic flag");
             animation.cyclic=image[body]!=0;
             animation.duration=std::bit_cast<float>(u32(image.data()+body+1));
-            const size_t child=findChild(image,body+5,next,false);
-            if(child<next) chunks(image,child,next,animation,helper,depth+1);
+            // Native RootChunk::ReadFromFile (03205B00) consumes an EBOOL
+            // and float, then reads children immediately at that boundary.
+            chunks(image,body+5,next,animation,helper,depth+1,complete);
         } else if(signature(at,"AOBJ")) {
             Cursor c{image,body,next};
             animation.rigName=c.string();
-            const size_t child=findChild(image,c.p,next,true);
-            if(child<next) chunks(image,child,next,animation,false,depth+1);
+            // ObjectChunk::ReadFromFile (03208430): ASCIIZ name, SLONG
+            // NextSiblingIndex, then children. Never search payload bytes
+            // for a signature that could belong to an opaque child.
+            c.dword();
+            chunks(image,c.p,next,animation,false,depth+1,complete);
         } else if(signature(at,"HLPR")) {
-            chunks(image,body,next,animation,true,depth+1);
+            chunks(image,body,next,animation,true,depth+1,complete);
         } else if(signature(at,"MVEC")) {
             if(size<12) throw std::runtime_error("animation: short MVEC");
-            chunks(image,body+12,next,animation,helper,depth+1);
+            chunks(image,body+12,next,animation,helper,depth+1,complete);
         } else if(signature(at,"XSEQ")||signature(at,"SEQ0")) {
             auto track=parseTrack(image,body,next);
             (helper?animation.helperTracks:animation.tracks).push_back(std::move(track));
+        } else if(complete) {
+            Cursor c{image,body,next};
+            if(signature(at,"AMSK")) {
+                // Native 03208750: ULONG count followed by count EBOOL bytes.
+                const auto count=c.dword();
+                if(count!=next-c.p) throw std::runtime_error("animation: bone mask size mismatch");
+                for(uint32_t i=0;i<count;++i)
+                    if(c.byte()>1) throw std::runtime_error("animation: invalid bone mask boolean");
+            } else if(signature(at,"XALO")) {
+                // Native 0340DF60: version one and an allocation byte count.
+                if(size!=8 || c.dword()!=1)
+                    throw std::runtime_error("animation: unsupported allocation hint");
+                c.dword();
+            } else if(signature(at,"TMEV")) {
+                // Native 0347A720: event name and float time.
+                c.string();c.real();
+            } else throw std::runtime_error("animation: unknown storage chunk " +
+                std::string(reinterpret_cast<const char*>(at),4));
+            if(c.p!=next) throw std::runtime_error("animation: trailing chunk data");
         }
         cursor=next;
     }
+    if(complete && cursor!=end) throw std::runtime_error("animation: short parent tail");
 }
 
 template<class Pool>
@@ -156,7 +170,7 @@ size_t poolIndex(const Pool& pool,const std::vector<uint16_t>& palette,size_t fr
 
 } // namespace
 
-Animation decode(std::span<const uint8_t> payload) {
+static Animation decodeImpl(std::span<const uint8_t> payload,bool complete) {
     if(payload.size()<8) throw std::runtime_error("animation: short payload");
     std::vector<uint8_t> image;
     const uint32_t first=u32(payload.data());
@@ -172,12 +186,29 @@ Animation decode(std::span<const uint8_t> payload) {
     size_t cursor=12;
     while(cursor<image.size() && image[cursor]) ++cursor;
     if(cursor==image.size()) throw std::runtime_error("animation: unterminated copyright");
+    const size_t commentEnd=cursor+1;
     cursor=(cursor+4)&~size_t(3); // NUL plus 4-byte alignment
     if(cursor>image.size()) throw std::runtime_error("animation: short header padding");
+    size_t end=image.size();
+    if(complete) {
+        for(size_t p=commentEnd;p<cursor;++p)
+            if(image[p]!=0) throw std::runtime_error("animation: unsupported header padding");
+        if(end-cursor<8 || !signature(image.data()+cursor,"ANRT"))
+            throw std::runtime_error("animation: missing root chunk");
+        const auto rootSize=u32(image.data()+cursor+4);
+        if(rootSize>end-cursor-8) throw std::runtime_error("animation: root exceeds image");
+        const auto rootEnd=cursor+8+rootSize;
+        if(rootEnd!=end && (end-rootEnd!=4 || u32(image.data()+rootEnd)!=0))
+            throw std::runtime_error("animation: unsupported image footer");
+        end=rootEnd;
+    }
     Animation animation;
-    chunks(image,cursor,image.size(),animation,false,0);
+    chunks(image,cursor,end,animation,false,0,complete);
     return animation;
 }
+
+Animation decode(std::span<const uint8_t> payload) {return decodeImpl(payload,false);}
+void validateStorage(std::span<const uint8_t> payload) {(void)decodeImpl(payload,true);}
 
 Transform evaluate(const Track& track,double seconds) {
     Transform out;

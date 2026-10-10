@@ -299,6 +299,28 @@ void File::addQuest(std::string_view name, bool active) {
               {std::string(name), active ? "TRUE" : "FALSE"});
 }
 
+size_t File::removeQuest(std::string_view name) {
+    size_t removed = 0;
+    for (const auto& statement : statements_)
+        if (statement.isQuest() && statement.name() == name) ++removed;
+    if (!removed) return 0;
+    std::vector<ptrdiff_t> indices(statements_.size(), -1);
+    std::vector<Statement> kept;
+    kept.reserve(statements_.size() - removed);
+    for (size_t i = 0; i < statements_.size(); ++i) {
+        if (statements_[i].isQuest() && statements_[i].name() == name) continue;
+        indices[i] = static_cast<ptrdiff_t>(kept.size());
+        kept.push_back(std::move(statements_[i]));
+    }
+    std::erase_if(elements_, [&](const Element& element) {
+        return element.stmt >= 0 && indices[static_cast<size_t>(element.stmt)] < 0;
+    });
+    for (auto& element : elements_)
+        if (element.stmt >= 0) element.stmt = indices[static_cast<size_t>(element.stmt)];
+    statements_ = std::move(kept);
+    return removed;
+}
+
 void File::appendStatement(std::string rawStatement) {
     const File parsed = parseText(std::move(rawStatement));
     if (parsed.statements_.size() != 1)
@@ -378,8 +400,8 @@ MergeResult merge(const File& base, const std::vector<MergeInput>& mods,
 
     for (const std::string& name : nameOrder) {
         const auto& vers = byName[name];
-        // Single mod touches it: apply as-is (no conflict).
-        if (vers.size() == 1) {
+        // Single unpicked contributor: apply as-is (no choice row needed).
+        if (vers.size() == 1 && !picks.contains(name)) {
             apply(name, vers.front());
             continue;
         }
@@ -395,8 +417,13 @@ MergeResult merge(const File& base, const std::vector<MergeInput>& mods,
             if (pick->second == "vanilla") {
                 keepVanilla = true;
             } else {
+                bool found = false;
                 for (const Version& v : vers)
-                    if (v.mod == pick->second) winner = &v;
+                    if (v.mod == pick->second) { winner = &v; found = true; }
+                if (!found) {
+                    c.choiceUnavailable = true;
+                    c.overridden = false;
+                }
             }
         }
         c.winner = keepVanilla ? "vanilla" : winner->mod;

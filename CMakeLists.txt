@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(FableForge VERSION 0.18.0 LANGUAGES C CXX)
+project(FableForge VERSION 0.18.1 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -55,7 +55,7 @@ target_include_directories(forgecore_slice PUBLIC
 )
 
 # "-dev" until the release is tagged (docs/RELEASE.md step 5 clears it)
-set(FORGE_VERSION_SUFFIX "-dev")
+set(FORGE_VERSION_SUFFIX "-rc.2")
 add_compile_definitions(ALBION_VERSION="${PROJECT_VERSION}${FORGE_VERSION_SUFFIX}")
 add_library(fableforge STATIC src/terrainexport.cpp src/foliageexport.cpp src/thingsexport.cpp src/stbterrain.cpp src/effects.cpp src/leveledit.cpp src/vanilla_props.cpp src/worldedit.cpp src/overworld.cpp src/stbrelocate.cpp src/lodbake.cpp src/stitch.cpp src/livelink.cpp src/backups.cpp src/navlines.cpp src/worldtiles.cpp
     src/stbcompact.cpp src/presets.cpp src/gtg.cpp src/texturebrowse.cpp src/meshimport.cpp src/modpack.cpp)
@@ -68,6 +68,55 @@ add_executable(forge src/main.cpp ${CLI_SOURCES})
 target_link_libraries(forge PRIVATE fableforge)
 
 enable_testing()
+add_executable(fableforge_stbstorage_tests tests/test_stbstorage.cpp)
+target_link_libraries(fableforge_stbstorage_tests PRIVATE forgecore_slice)
+add_test(NAME fableforge_stbstorage_tests COMMAND fableforge_stbstorage_tests)
+
+add_executable(fableforge_navstorage_tests tests/test_navstorage.cpp)
+target_link_libraries(fableforge_navstorage_tests PRIVATE forgecore_slice)
+add_test(NAME fableforge_navstorage_tests COMMAND fableforge_navstorage_tests)
+
+add_executable(fableforge_levstorage_tests tests/test_levstorage.cpp)
+target_link_libraries(fableforge_levstorage_tests PRIVATE forgecore_slice)
+add_test(NAME fableforge_levstorage_tests COMMAND fableforge_levstorage_tests)
+
+add_executable(fableforge_wadsparse_tests tests/test_wadsparse.cpp)
+target_link_libraries(fableforge_wadsparse_tests PRIVATE forgecore_slice)
+add_test(NAME fableforge_wadsparse_tests COMMAND fableforge_wadsparse_tests)
+
+add_executable(fableforge_defexternal_tests tests/test_defexternal.cpp)
+target_link_libraries(fableforge_defexternal_tests PRIVATE forgecore_slice)
+add_test(NAME fableforge_defexternal_tests COMMAND fableforge_defexternal_tests)
+add_executable(fableforge_terraintex_tests tests/test_terraintex.cpp)
+target_link_libraries(fableforge_terraintex_tests PRIVATE forgecore_slice)
+add_test(NAME fableforge_terraintex_tests COMMAND fableforge_terraintex_tests)
+add_executable(fableforge_stbquaddir_tests tests/test_stbquaddir.cpp)
+target_link_libraries(fableforge_stbquaddir_tests PRIVATE forgecore_slice)
+add_test(NAME fableforge_stbquaddir_tests COMMAND fableforge_stbquaddir_tests)
+add_executable(fableforge_defdecode_tests tests/test_defdecode.cpp)
+target_link_libraries(fableforge_defdecode_tests PRIVATE forgecore_slice)
+add_test(NAME fableforge_defdecode_tests COMMAND fableforge_defdecode_tests)
+add_executable(fableforge_fmplinks_tests tests/test_fmplinks.cpp)
+target_link_libraries(fableforge_fmplinks_tests PRIVATE forgecore_slice)
+add_test(NAME fableforge_fmplinks_tests COMMAND fableforge_fmplinks_tests)
+add_executable(fableforge_defrelocate_tests tests/test_defrelocate.cpp)
+target_link_libraries(fableforge_defrelocate_tests PRIVATE forgecore_slice)
+add_test(NAME fableforge_defrelocate_tests COMMAND fableforge_defrelocate_tests)
+add_executable(fableforge_defnamespace_tests tests/test_defnamespace.cpp)
+target_link_libraries(fableforge_defnamespace_tests PRIVATE forgecore_slice)
+add_test(NAME fableforge_defnamespace_tests COMMAND fableforge_defnamespace_tests)
+add_executable(fableforge_binclone_tests tests/test_binclone.cpp)
+target_link_libraries(fableforge_binclone_tests PRIVATE forgecore_slice)
+add_test(NAME fableforge_binclone_tests COMMAND fableforge_binclone_tests)
+add_executable(fableforge_binwrite_tests tests/test_binwrite.cpp)
+target_link_libraries(fableforge_binwrite_tests PRIVATE forgecore_slice)
+add_test(NAME fableforge_binwrite_tests COMMAND fableforge_binwrite_tests)
+add_executable(fableforge_bigwrite_tests tests/test_bigwrite.cpp)
+target_link_libraries(fableforge_bigwrite_tests PRIVATE forgecore_slice)
+add_test(NAME fableforge_bigwrite_tests COMMAND fableforge_bigwrite_tests)
+add_executable(fableforge_oggstorage_tests tests/test_oggstorage.cpp)
+target_link_libraries(fableforge_oggstorage_tests PRIVATE forgecore_slice)
+add_test(NAME fableforge_oggstorage_tests COMMAND fableforge_oggstorage_tests)
 add_executable(fableforge_meshbounds_tests tests/test_meshbounds.cpp)
 target_link_libraries(fableforge_meshbounds_tests PRIVATE forgecore_slice)
 add_test(NAME fableforge_meshbounds_tests COMMAND fableforge_meshbounds_tests)
@@ -109,6 +158,12 @@ add_test(NAME fableforge_stage_tests COMMAND fableforge_stage_tests)
 add_executable(fableforge_temporarydirectory_tests tests/test_temporarydirectory.cpp)
 target_link_libraries(fableforge_temporarydirectory_tests PRIVATE forgecore_slice)
 add_test(NAME fableforge_temporarydirectory_tests COMMAND fableforge_temporarydirectory_tests)
+add_executable(fableforge_modchoices_tests tests/test_modchoices.cpp)
+target_link_libraries(fableforge_modchoices_tests PRIVATE forgecore_slice)
+add_test(NAME fableforge_modchoices_tests COMMAND fableforge_modchoices_tests)
+add_executable(fableforge_qst_tests tests/test_qst.cpp)
+target_link_libraries(fableforge_qst_tests PRIVATE forgecore_slice)
+add_test(NAME fableforge_qst_tests COMMAND fableforge_qst_tests)
 add_executable(fableforge_egocore_io_tests tests/test_egocore_io.cpp)
 target_link_libraries(fableforge_egocore_io_tests PRIVATE forgecore_slice)
 add_test(NAME fableforge_egocore_io_tests COMMAND fableforge_egocore_io_tests)
@@ -142,6 +197,10 @@ add_test(NAME fableforge_lipsync_pack_tests COMMAND fableforge_lipsync_pack_test
 add_executable(fableforge_lut_tests tests/test_lut.cpp)
 target_link_libraries(fableforge_lut_tests PRIVATE forgecore_slice)
 add_test(NAME fableforge_lut_tests COMMAND fableforge_lut_tests)
+add_executable(fableforge_unicode_tests tests/test_unicode.cpp)
+target_link_libraries(fableforge_unicode_tests PRIVATE forgecore_slice)
+add_test(NAME fableforge_unicode_tests COMMAND fableforge_unicode_tests)
+
 add_executable(fableforge_dialoguetext_tests tests/test_dialoguetext.cpp)
 target_link_libraries(fableforge_dialoguetext_tests PRIVATE forgecore_slice)
 add_test(NAME fableforge_dialoguetext_tests COMMAND fableforge_dialoguetext_tests)
@@ -182,6 +241,8 @@ if(WIN32)
     gui/app.cpp
     gui/editor.cpp
     gui/textures.cpp
+    gui/textbrowser.cpp
+    gui/definitionbrowser.cpp
     gui/effectbrowser.cpp
     gui/dialoguebrowser.cpp
     gui/dialogueaudio.cpp
@@ -238,9 +299,14 @@ add_custom_command(TARGET FableForge POST_BUILD
 # The legacy forge CLI (quests, mods, saves, defs, scripts, UI, stb tooling...) from the
 # old FableForge repo, kept alive here as forge-tools until its command families are folded
 # into forge one by one. Same forgecore.
-add_executable(forge-tools tools/forge-cli/main.cpp)
+add_executable(forge-tools tools/forge-cli/main.cpp tools/forge-cli/worldreview.cpp
+    tools/forge-cli/namespacereview.cpp)
 # fableforge too: the mod composer re-runs FableForge packs' recipes (src/modpack: model / theme imports)
 target_link_libraries(forge-tools PRIVATE fableforge)
+if(WIN32)
+    target_link_libraries(forge PRIVATE shell32)
+    target_link_libraries(forge-tools PRIVATE shell32)
+endif()
 
 add_executable(fableforge_containerlist_tests tests/test_containerlists.cpp)
 target_link_libraries(fableforge_containerlist_tests PRIVATE fableforge)

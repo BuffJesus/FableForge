@@ -12,10 +12,15 @@
 // Geometry is in Fable space (Z up, 1 unit = 1 world unit), faces CCW as our decoder yields them.
 #include <array>
 #include <cstdint>
+#include <cstddef>
 #include <string>
+#include <optional>
 #include <vector>
 
 namespace forge::meshcompose {
+
+// Current static writer capacity per primitive.
+inline constexpr size_t maxPrimitiveVertices = 65535;
 
 struct Vec3 { float x = 0, y = 0, z = 0; };
 struct Vec2 { float u = 0, v = 0; };
@@ -30,10 +35,17 @@ struct Primitive {
 
 struct Material {
     std::string name;                        // empty = <mesh>_mat<slot>
-    int32_t diffuseId = 0;                   // textures.big entry ids (0 = none)
-    int32_t bumpId = 0, reflectId = 0, illumId = 0, decalId = 0;
+    uint32_t diffuseId = 0;                  // textures.big entry ids (0 = none)
+    uint32_t bumpId = 0, reflectId = 0, illumId = 0;
+    int32_t decalId = 0;
     int32_t selfIllum = 0;
     bool twoSided = false, transparent = false, booleanAlpha = false;
+    // Existing static material records can retain their native IDs, map flags,
+    // five raw boolean bytes and optional filenames during geometry replacement.
+    std::optional<int32_t> originalId;
+    std::optional<uint32_t> originalMapFlags;
+    std::optional<std::array<uint8_t,5>> nativeFlags;
+    std::array<std::string,4> filenames{};
 };
 
 struct Composed {
@@ -45,21 +57,33 @@ struct Composed {
 };
 
 // `name` must start with "MESH_" (the payload classifier). Throws std::invalid_argument on bad input
-// (no prims / materials, > 65535 vertices in one primitive, a face index out of range).
+// (no prims / materials, > 65535 primitives or vertices in one primitive, a face index out of range,
+// or embedded NUL in a serialized mesh/material name).
+// physicsIndex is an unsigned bank ID: 0 means no hull; UINT32_MAX is reserved
+// by the native runtime's HasPhysicsMesh sentinel and is rejected.
+// appendDegenerateMaterial=false requires an existing final degenerate material
+// in materials, preserving its record instead of generating another sentinel.
 Composed composeStatic(const std::string& name, const std::vector<Primitive>& prims,
-                       const std::vector<Material>& materials, bool compress = true, int physicsIndex = 0);
+                       const std::vector<Material>& materials, bool compress = true, uint32_t physicsIndex = 0,
+                       bool appendDegenerateMaterial = true);
 
 // The physics (collision) mesh a prop needs to be solid: a type-3 MBANK_ALLMESHES entry (no Info
 // blob) whose id the render mesh's Info names as PhysicsIndex. EgoCore MeshCompiler::CompilePhysics:
 // a `3DMF` chunk tree (MTLS with the default material, one SUBM "collision" with an identity TRFM
 // and a PRIM of TRIS + SMTH + VERT{pos, normal, uv} + UNIV, retail's chunk set) as [u32 size][raw LZO1X]. The hull is
 // the geometry itself (every primitive's triangles); normals/uvs ride along as EgoCore writes them.
+// The combined hull supports at most 65536 vertices; invalid local indices, overflow,
+// or embedded NUL in the sub-mesh name throw.
 std::vector<uint8_t> composePhysics(const std::vector<Primitive>& prims, const std::string& subMeshName = "");
 // the same payload before compression (for tests)
 std::vector<uint8_t> composePhysicsUncompressed(const std::vector<Primitive>& prims, const std::string& subMeshName = "");
 
 // EgoCore GltfMeshImporter.h PackNormal / CompressUV, exposed for tests.
 uint32_t packNormal(Vec3 n);
+// Saturate finite coordinates before integer conversion; non-finite input throws.
 int16_t compressUv(float v);
+// True when packing must saturate beyond ordinary 1/2048 quantization.
+// Non-finite input throws, as in compressUv. Call with the stored V (1-v).
+bool uvNeedsClamping(float v);
 
 } // namespace forge::meshcompose

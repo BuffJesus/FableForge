@@ -47,11 +47,14 @@ listed in that plan are eligible. If preparation fails, the stage manifest and
 originals remain for retry.
 `src/backups.{hpp,cpp}` scans the
 install for both (root BWD, data/Levels, the loose FinalAlbion folder,
-CompiledDefs, graphics and graphics/pc, FSE) and puts things back: originals are copied over
+CompiledDefs, graphics and graphics/pc, Misc/pc, each immediate data/lang language
+folder, FSE) and puts things back: originals are copied over
 the live file (the backup stays as the baseline), created files are deleted.
 Refused while Fable.exe runs *from this install* (`backups::gameRunningIn`: the process's image path under the root; a scratch tree or another copy is not blocked; every GUI writer shares the check in `App::gameWriteBlocked`, plus the live-link heartbeat). CLI `forge backups` (list, which differ) and
 `restore [--forget]`; GUI: the Setup panel lists them with *Restore the retail
 files* (confirm). Scripts: `restore_all`, state `backups_differ`.
+Restore waits for active text-bank loads. After files are restored, the Text
+browser reloads its index so it displays the restored content.
 
 Later edits to a file marked as created retain that marker as their baseline; they
 do not create an original backup. This includes repeated terrain writes and WAD
@@ -209,6 +212,16 @@ item and info display components; absent components are not added.
   file's `0xFFFFFE00` namespace, `thingplacer` blocks in retail field order
   (`Object` for `OBJECT_*`, `Building` for `BUILDING_*`). Placement lands on
   the LEV terrain height (bilinear, like the retail placer).
+* **Snap to cell centres** (placement options): place, paste and carry on the
+  centres of the 1 m grid cells. Ground height is sampled at the snapped point;
+  Fixed height still clamps to terrain and carry keeps its height above ground.
+  Pasted groups retain their spacing around the snapped anchor. This option is
+  saved between sessions. The gizmo's Snap toggle, terrain pens and track-node
+  placement keep their existing rules.
+* **Whole-map Raise** (Terrain > Whole-map heights): with Move objects too,
+  physics positions and camera spline keys rise by the chosen amount. Camera
+  coordinate bases follow their relative-coordinate flags, including the saved
+  offset from the moving parent. Camera directions and timing stay unchanged.
 * **Multi-select**: Ctrl+click adds/removes (viewport or list); the gizmo, nudges,
   Del, Ctrl+D, Ctrl+C/V act on the set as one undo step (`Document::beginBatch`).
   Copy/paste carries a *fragment* (blocks + positions relative to the centroid),
@@ -260,6 +273,45 @@ item and info display components; absent components are not added.
   sizes; `[` and `]` step by a factor of square-root-two. An exact-step height
   brush at 0.25 or 0.5 cells edits one vertex at the rounded pointer location.
   Hover the sculpting instructions for the object-following and undo rules.
+  In Raise, Lower, Flatten, Smooth, Noise and Paths, Ctrl+drag samples the ground
+  height continuously without editing it. Each tool shows **Paint height**;
+  Flatten uses that sampled target instead of the stroke's starting height.
+  Hold `-` or `=` to lower or raise the point where the key press started;
+  moving the pointer keeps that point fixed. Release finishes one undo step.
+  These keys work in sculpt tools, including Paths.
+  Each sculpt tool exposes **Speed**; hover it for the height-key step in metres.
+  Exact-step Raise/Lower and Flatten show their rounded vertex centre and
+  affected vertex dots at radii up to 4 cells, including a single vertex at 0.25.
+  Smooth shows its strict integer-radius disc: radius is clamped to at least 1
+  then truncated, so a radius below 2 considers only the centre vertex.
+  Noise outlines its possible random poke area as a square around the rounded
+  centre. It considers random vertices there, rather than editing every vertex.
+  While a height key is held, small brushes show that key pen's distinct vertices.
+  Its fractional-radius footprint differs from the mouse pens: at 0.25 or 0.5
+  it reaches none, and the cursor asks you to increase Radius.
+  Sound paints each 4x4 game cell touched by its rounded height-vertex disc.
+  Small Sound brushes outline those cells, including a 0.25-cell single-vertex
+  brush that paints its containing sound cell. Larger cursors show the pen disc.
+  Replace uses a truncated vertex centre and a strict radius: vertices exactly
+  on the radius stay unchanged. Small cursors show considered vertices; only
+  matching themes change. Radius 1 considers just the centre vertex.
+  Ground's **Full stamp** option uses the same strict truncated disc and sets
+  every considered vertex fully to the theme in one application. Small cursors
+  show the vertices. Strength is hidden; switch Full stamp off for soft blending.
+  Ground's **Smear** blends existing themes from a frozen 3x3 neighbourhood at
+  each considered vertex. It keeps the three strongest distinct themes and
+  normalizes their strengths. No target theme is needed. Radius rounds down to
+  a whole cell, with a minimum of 1; small cursors show the strict-disc vertices.
+  Each click applies once; **Repeat while held** keeps blending. Ctrl+Z undoes
+  the whole stroke. Smear works within the current map.
+  Environ. maps that strict truncated vertex pen to 4x4 game cells and sets each
+  touched cell fully to the chosen environment; Strength and time do not scale
+  it. Small cursors outline the cells. Picking no environment clears them.
+  Sound's colour overlay can show all sounds, just the selected sound, or be
+  switched off. Environ. shows blended editor colours with its own toggle.
+  Both update while painting and on undo. Colour chips in the theme pickers
+  select that theme. These colours identify regions; they preview neither
+  audible sound nor the game's atmosphere lighting.
 * File operations run one at a time in the editor. Competing saves/imports,
   mod-order edits and save-folder changes ask you to wait for the named job;
   the draft remains editable while it runs.
@@ -622,18 +674,136 @@ and triangle counts, primitives, bones, helper points, and the object/creature/
 building definitions that reference the mesh. Material texture buttons open the
 corresponding entry in **Textures**. **Refresh** reloads the graphics-bank index.
 Browsing does not write game files. Skinned meshes show a static pose; animation
-playback, collision previews and mesh replacement are not part of this browser.
+playback and collision previews are not part of this browser.
 
 ![Models browser with barrel preview](walkthrough/w11_models.png)
 
 Use **Import model...** on this page for the existing import workflow below.
 
+Use **Replace geometry...** on a selected static model to replace its geometry
+from a GLB, glTF or OBJ file. The source must have the same material slot count
+and order. glTF slots follow first use in the imported primitives; different
+material indices remain separate even when display names match. Existing
+material records, texture references, mesh identity and
+collision shape are retained; definitions that reference that identity stay
+linked. Bounds and geometry counts are updated, and the preview refreshes.
+The save root receives the graphics bank; a separate output folder leaves the
+base installation unchanged. In-place replacement creates the usual backup.
+Replacement currently requires one LOD, canonical material slots/root matrix, no helpers,
+bones, cloth or animated blocks, and no safe-radius override. Unsupported donors
+are refused before writing. Collision rebuilding and modpack recipe integration
+remain pending; this workflow has not been verified in-game.
+
+The equivalent command is `forge mesh-replace <model.glb|.gltf|.obj>
+<MESH_NAME|id> [--stored] [--install <root>]`.
+
+## Browse text
+
+Open **Assets > Text** to search a language's text bank by name, numeric ID or
+content. Select a string to read and copy its content; the detail card shows its
+speaker, speech-bank reference, identifier and tags. Select a group to follow
+its member links. Missing or ambiguous members remain visible without a link.
+Malformed entries show their decode error. Narrator lists display the indexed
+speaker names from the bank header. Browsing is read-only.
+
+**Edit selected string** opens a content draft in the viewport. **Save text**
+asks for confirmation and writes to the bank in the destination folder. If that
+folder has no bank, Forge copies the loaded bank there and tracks the new file;
+Restore on that folder removes the created bank. The source bank stays intact.
+The **Speaker** picker lists existing narrators, including the empty speaker.
+Changing it updates both the speaker name and its narrator index. Otherwise the
+speaker stays intact. **Speech bank** and **Identifier** edit the existing string's
+references; new values must be ASCII and shorter than 4096 bytes. Empty references
+are allowed. Unsupported original byte values remain read-only. Tags and their
+positions, record ID and other archive metadata stay intact. **Cancel edit** discards the draft. An open text draft holds the window close prompt: **Review text** returns here,
+**Cancel** keeps the draft, and **Discard** closes without saving it. Original
+backups are retained once through the normal backup manager. If the bank changed
+on disk, refresh and start the edit again. Noncanonical payloads are refused so
+unknown bytes cannot be lost. Drafts are limited to 1 MiB; groups and narrators
+remain read-only. Use **Goes into** to choose a FableForge mod pack; **Save text**
+writes its language bank, and **Mods > Deploy** composes changed strings with
+other mods. Reads prefer the chosen pack, then the save folder, then the base.
+The first save copies the loaded bank; records differing from the composition
+baseline become this pack's changes. Switching destination requires a fresh draft.
+To undo saved bank edits, use `forge restore --install <pack-folder>`: a created
+bank is removed, while an existing bank returns to its one-time original.
+Existing recovery records for an absent destination must be resolved first.
+
+**Dialogue tags** selects the ordered instructions attached to the string. Edit
+a tag's ASCII name and stored position, use **Add tag** to append one, or
+**Remove selected tag** to remove it. Positions are signed character indices;
+changing content does not automatically move tags. Original unsupported names
+remain read-only and survive other edits. These controls edit stored metadata;
+they do not verify whether an animation or camera cue exists in the game.
+
+**New string from donor** starts a draft from the selected string. Enter a new
+name and content, then use **Save text** and its confirmation. The donor stays
+intact; the new record copies its metadata, receives a free ID, and uses the new
+name as its identifier. You can choose another existing speaker or speech-bank reference for the new line.
+Empty or existing names, exhausted IDs, and stale or
+unsupported donors refuse before publication. Choose a donor whose speaker,
+speech-bank reference and tags suit the new string.
+
+The CLI equivalent, `forge-tools text show <text.big> <name-or-id> --json`,
+uses exact names before complete decimal IDs and refuses ambiguous matches.
+Narrator-list output includes the indexed names from its header.
+
+CLI `text set` and `text import` verify a prepared bank before replacing the
+destination. In-place edits retain the original as `.forge-orig` and standard
+installed text-bank writes refuse while Fable runs from that installation.
+For banks with narrator headers, speaker names must already exist in that bank's
+narrator list. CLI set/import update the associated index with the speaker text;
+unknown or ambiguous names and malformed narrator records refuse before writing.
+
+Object properties offer **View text** for readable-object text and information
+display front/back text. This opens the referenced entry in the current language
+without changing the object. Missing or ambiguous references show an error.
+
+The browser reads the chosen pack's bank first, then the save folder, then
+from the selected installation. Change language or save folder to reload that
+bank; **Refresh** rereads the current bank. **Export all entries** saves the whole
+loaded bank to a new UTF-8 TSV, including entries hidden by search. Choose an
+existing output folder and a new `.tsv` filename; existing files are preserved.
+The export includes metadata, tags, groups, narrator names and entry errors.
+Stored single-byte metadata and tag names map to Latin-1 code points in UTF-8
+output; this leaves bank bytes unchanged. CLI `text show --json` uses the same
+conversion and reports `metadata_byte_encoding: "latin1"`. Groups and narrator
+lists remain read-only. The English retail bank's 28,913 entries load with
+no string/group decode errors, including 2,105 groups.
+
 ## Custom models (Import model)
 
 GLB files must use the version 2 container with complete, aligned chunks. The
-glTF reader checks declared buffer and accessor ranges, including interleaved
-vertex data. Sparse accessors are unsupported and report an error; export a
-model with ordinary buffer-backed attributes before importing it.
+glTF reader supports ordinary, interleaved and sparse vertex data, with embedded
+or external buffers. Triangle lists, strips and fans become static triangles;
+point and line geometry is skipped with a note. Unsupported required extensions
+produce an error naming the extension. Optional extensions use the basic geometry
+and report which features were ignored.
+Positions and normals use floating-point components. Texture coordinates also
+support normalized unsigned 8-bit or 16-bit components; other attribute encodings
+are rejected before import.
+If texture tiling exceeds the model writer's range, the direct-import card and
+import log identify the affected model part and vertex count. Reduce the tiling
+in the source model to avoid clipped texture coordinates.
+
+After a direct import, select `MESH_<NAME>` in Models and open its material's
+**Diffuse** button to inspect the imported image in Textures. A failed import
+shows its error in the import window and keeps the previous model preview.
+
+Each mesh part supports up to 65,535 vertices. With collision enabled, the combined
+hull supports up to 65,536 vertices across all parts; simplify the model or disable
+collision if it exceeds that limit. The workflow creates static props and does
+not import animation. If a glTF model uses an active morph shape, bake the desired
+shape into a static mesh before exporting; the importer refuses active morphs
+rather than importing their base geometry. A selected scene's active skin
+instance also requires a baked static posed mesh; skeletal deformation is not
+applied by this importer. Rotations and transforms are checked before use, and large
+geometry counts are checked before allocating the attribute/index arrays.
+
+OBJ faces can contain up to 1,024 corners. Simple planar concave faces are
+triangulated while retaining their winding and corner UVs/normals. For larger
+faces, self intersections or non-planar concave faces, export triangles from your
+modelling tool before importing.
 
 The *Assets* tab's *Models* page (the Objects tab links to it) takes a `.glb` / `.gltf` / `.obj` (Y up, 1 unit =
 1 metre; glTF node transforms are applied, OBJ `usemtl` groups become primitives), a NAME
@@ -649,7 +819,7 @@ decoded back through the preview reader before anything is written; one-time
 *Add an object* (the def/texture context reloads) and places like any prop. CLI:
 `forge mesh-import <model> <NAME> [--texture png | --texture-id n] [--donor OBJECT_...]`,
 `forge-tools mesh-info <graphics.big> <MESH_NAME|id|--max-id>` to inspect an entry.
-A collision hull is written too: `MESH_<NAME>_PHYSICS`, a type-3 entry in EgoCore's
+A collision hull is written too: `MESH_<NAME>[PHYSICS]`, a type-3 entry in EgoCore's
 `3DMF` form (the model's own triangles) that the render mesh's Info names as
 `PhysicsIndex` -- retail pairs every prop that way (`MESH_OBJECT_BARREL[PHYSICS]` id 168
 <- barrel Info physics 168); the hull carries retail's full chunk set (TRIS, SMTH, VERT,
@@ -667,7 +837,9 @@ is placed as the retail `AICreature` thing (`Document::placeCreature`: a
 `CTCPhysicsNavigator` frame, `CTCTargeted`/`CTCTalk`/`CTCEditor`, `VillageMember 0`
 for villager defs, the AI flags, and the world-space `InitialPos` the engine
 reads -- the map origin comes from FinalAlbion.wld at open), into the NULL
-section like everything else. **In-game verified**: a
+section like everything else. The editor viewport shows its skinned LOD0 mesh
+in bind pose, including creatures added by deployed mods; it does not play the
+game's creature animations. **In-game verified**: a
 `CREATURE_OAKVALE_VILLAGER_MALE_UNEMPLOYED` placed in Greatwood_1 (loose + WAD,
 fresh game) stands at the placed spot facing the camera (`--things AtlasNPC`
 finds it within 0.1). Saves cache a region's entities, so a new game (or a
@@ -914,10 +1086,23 @@ reopens the edit/save panel.
 The Assets panel holds *Textures* (below), *Models* (the browser and import above),
 *Effects* (inspection), *Dialogue* (preview and lip sync editing) and *Ground themes*
 (a PNG into `textures.big` + a new `ENGINE_THEME` copied from a donor theme; with a map
-open it joins that map's palette ready to paint). *Textures* browses `data/graphics/pc/textures.big` (every bank, search by
-name or id), previews an entry, exports it as PNG, replaces it from any image (the slot
-keeps its allocated size and pixel format, mips are rebuilt, the entry is validated
-against the retail contract) or adds a new entry to `GBANK_MAIN_PC`. With an object
+open it joins that map's palette ready to paint). *Textures* browses the save
+folder's `data/graphics/pc/textures.big` when present, otherwise the selected
+install's bank. Switching between banks refreshes its rows and clears the old
+selection and preview; destinations using the same bank retain them.
+It lists every bank, supports search by
+name or id, previews an entry, exports it as PNG, replaces it from any image (the slot
+keeps its allocated size, frame dimensions, pixel format and transparency mode; larger or smaller
+images are resized to the slot, mips are rebuilt, and the entry is validated
+against the retail contract) or adds a new entry to `GBANK_MAIN_PC`. Image replacement
+supports single-frame 2D textures; animated and volume entries are refused so their
+extra frames or slices are preserved. Existing DXT1 and DXT3 cutout textures keep
+their cutout setting. DXT1 uses one-bit alpha: image alpha below 128 becomes
+transparent, and 128 or above becomes opaque. Other unsupported transparency
+combinations and format conversions of cutout slots are refused. New DXT images
+use at least a 4x4 allocation; an explicitly smaller allocation or a compressed
+replacement slot below that size is refused. Compressed mip chains stop when
+the shorter side reaches four pixels. With an object
 selected in the editor its mesh's diffuse textures are listed on top, so retexturing a
 barrel is: select it, click its texture, *Replace from image*. One-time
 `textures.big.forge-orig` backup; refused while the game runs. Imports are prepared
@@ -926,6 +1111,17 @@ leave bank bytes and recovery metadata unchanged; unrelated temporary files are
 preserved, and locked replacement leaves the previous bank intact. CLI: `FableForge
 textures [filter]`, `texture-export`, `texture-replace`, `texture-add`.
 Texture commands reject unknown or incomplete options and extra arguments.
+Failed texture replacements keep the bank and recovery records unchanged and
+show a wrapped error below Replace. Fix or unlock the image and retry; changing
+the selected texture or destination clears the message. Closing and reopening
+the replacement form retains it.
+Failed Add imports also keep the bank and recovery records unchanged. The
+draft name and image stay in the form, with a wrapped error below Add. Fix the
+image or unlock it and retry. Editing the name, image or format, or changing
+destination, clears that error; browsing another texture retains the draft.
+Failed PNG exports keep the previous output and show a wrapped error next to
+Export PNG. The error identifies the output and a short reason; Activity keeps
+the complete diagnostic. Retry or changing the texture/bank clears the message.
 `--bank` applies to listing and adding; `--format` applies only to adding.
 Texture and minimap PNG exports prepare and close the new image before replacing
 an existing output; locked or invalid destinations report failure and preserve
@@ -942,14 +1138,65 @@ the same file `forge-tools mods list/add/...` edits). Each row is a mod: enable 
 move up/down, remove, the name and its kind (`.fmp`, bsdiff `.patch`, `.qst`, a folder with
 `Data/`, an EgoCore `Mods/<Name>/` folder). *Add a mod* takes a path (and an optional name)
 and hashes the source. Load-order edits prepare a complete JSON file before
-replacement; a failed save preserves the previous order. *Check conflicts* dry-runs the whole order and fills a Conflicts card:
-one row per record / thing / quest / string / file that several enabled mods want differently
+replacement; a failed save preserves the previous order. *Check conflicts* dry-runs the whole order.
+
+The mod list's wins/loses badges count contested fields separately when records
+merge per field; other conflict families count their rows. A mod may win some
+fields and lose others. Hover lists the affected records/fields. Independent
+edits and records without residual conflicts are outside these badge counts.
+The Conflicts card has one row per record / thing / quest / string / file that several enabled mods want differently
 (agreeing edits are not conflicts; records that differ in different fields merge per field),
 with the winner the load order gives it and a combo to pick another mod or *vanilla*; picks
 live in `forge_mods_picks.txt` next to the order and deploy applies them. Choices
-change in the UI only after the file is saved or removed successfully; a failed
-write preserves the previous choice and reports the error. A deploy also
-leaves `forge_mods_provenance.json` (which mod placed or last changed each thing, by UID):
+  change in the UI only after the file is saved or removed successfully; a failed
+  write preserves the previous choice and reports the error. Field-merged records
+  offer **Conflicting fields**, listing each field's type, baseline, contributor
+  values and current winning value. These reflect the last conflict check.
+  The choice resolves contested fields while independent edits keep merging.
+  A mod only wins fields it changed; otherwise the field retains its load-order
+  winner with an explanation. Vanilla restores contested fields in this mode.
+  An explicit scalar-field choice must select a contributor that changed that
+  currently contested field. An unavailable choice refuses builds; check conflicts
+  to review it, then choose a current contributor or clear it. Choices for a
+  different schema/layout remain saved and inactive.
+  A saved record choice also requires a changed version from that contributor.
+  If the winner was removed or now matches baseline, review or clear the choice
+  before building. Choices for records with no current contributions stay saved
+  and inactive.
+  Quest entries in `FSE/quests.lua` also require a changed version from the saved
+  contributor. Review or clear an unavailable choice before building; *vanilla*
+  restores the current baseline entry or leaves it absent.
+  Search conflicts by name, kind, mod or field; **Saved choices only** shows
+  explicit choices. Filtering precedes the 400-row display limit so later rows
+  remain reachable. **Show all conflicts** clears both filters without changing
+  choices. Filters reset when the install/save destination changes.
+  A saved contributor absent from the current conflict gets a **!** marker and
+  an explanation; the displayed winner follows load order. Its saved choice
+  remains available for review or clearing through the winner menu. Search
+  includes saved choice names. Definition baseline aliases display as vanilla;
+  other families reserve only vanilla, so a contributor named base remains a
+  normal source choice. Contributor availability uses the last report.
+  Whole-file, FMP texture and FMP mesh choices refuse a build
+  when the selected source no longer contributes the selected file or entry.
+  Conflict checks still return the current contributors and flag the unavailable
+  choice, so it can be reviewed or cleared before retrying. Choices with no current
+  contributions remain saved and inactive.
+  Partial TNG `DeleteUIDs` removals apply after the thing merge. If a removal
+  deletes an edited thing, its row shows **removed** and the mods that requested
+  it. A saved choice that would restore that thing blocks the build; clear the
+  choice or disable the removal before retrying. Vanilla for a newly added thing
+  still means absence. Removed things have no provenance badge.
+  Choosing a whole-file winner now records the baseline and all raw source
+  versions shown by the last check. If those contents change, builds refuse and
+  **Check conflicts** shows a **!** warning. Review the current file versions,
+  choose the winner again, or clear the choice. Refreshing alone preserves the
+  saved review. Reordering unchanged versions does not invalidate it. Existing
+  choices without a recorded review remain supported. These checks cover raw
+  file layers, not later recipe output, individual asset entries or an entire
+  baseline profile. On a staged install, review/build use copies of the recorded
+  originals without changing the deployed files.
+  A deploy also
+  leaves `forge_mods_provenance.json` (which mod placed or last changed each thing, by UID):
 the Edit tab badges those things in *Objects in this map*, *Placed by* filters the list
 (everyone / retail only / one mod) and *Back to retail* on a selected thing writes a vanilla
 pick for the next deploy. *Build and deploy*
@@ -966,6 +1213,9 @@ undone; applying that move is refused because the map is no longer installed.
 
 Refused while Fable runs, and on an install EgoCore has deployed to. The rules of the merge
 are in `docs/modding/MOD_PACKS.md`; CLI: `forge-tools mods ...`.
+Direct CLI `mods merge` and `mods build` also refuse an output folder containing
+a running Fable process, preserving any previous build. Quit that process and
+retry. This applies even when the output differs from the selected base install.
 
 ### Region entrance (FinalAlbion.gtg)
 
@@ -1000,7 +1250,8 @@ filler* (existing saves see it at once). CLI: `--own-region new`. The
 `region-props` command sets a region's RegionDef / minimap / display name /
 world-map flag in the WLD and all three BWD copies.
 Region text refuses unsupported quotes, newlines and NUL before writes; minimap
-names must be bare tokens without whitespace, quotes or semicolons. Apostrophes
+names must start with a letter or underscore and contain only letters, digits
+or underscores. Apostrophes
 and semicolons within quoted display names are preserved.
 
 **2026-09-17:** the minimap texture is now *appended* to `textures.big` under its own
@@ -1128,3 +1379,90 @@ Restart and Step control the same timeline. These are diagnostic volumes, not
 scene illumination. Runtime position parameters use the local origin in this preview.
 
 ![Particle light volumes](walkthrough/w22_light_volumes.png)
+
+## Recovering unsaved map edits
+
+File > Recovery snapshots controls automatic captures of the current map's
+unsaved objects and terrain. The default interval is five minutes; choose
+1, 5, 10 or 30 minutes, turn captures off, or use Snapshot now. Captures use
+app-data files separated by install and map, without changing game files or
+your saved draft.
+
+On reopening a map, Recover restores its snapshot as one undoable edit. You can
+also choose File > Recovery snapshots > Recover latest snapshot while the map
+is open. The prompt shows the capture time; undo returns to your later edits and
+redo restores the snapshot again. Save
+draft then keeps that work and removes the recovery archive. Discard removes
+the archive without changing the loaded map. Failed saves and failed recovery
+keep the archive. A snapshot holds completed edits; an active brush stroke
+waits until it finishes. It covers the current map's objects and terrain;
+pending World-tab, dialogue and asset edits use their existing save workflows.
+
+
+File > Recovery snapshots > Create dated snapshot, or Ctrl+B, keeps a separate
+restore point for the current map. Saved snapshots lists capture times with
+Restore and Delete. Restore supports undo/redo; Cancel leaves your edits and
+recovery archive intact. Delete asks for confirmation, and Escape cancels it.
+These saved points survive Save draft and app restarts until you delete them.
+They cover the current map's objects and terrain, alongside the rotating
+crash-recovery archive described above.
+
+
+The editor remembers the last map and its camera, View/Edit mode, editing tab
+and terrain tool on exit. Reopening the same install restores that session.
+If the map is missing or camera data is invalid, it uses the normal fallback.
+Each visited map also remembers its own camera and rendering mode when you
+switch away and return, including after restart. These views belong to the
+current install; changing installs starts a fresh set.
+This remembers your view; use Save draft or snapshots to keep edits.
+
+**View > Map camera** adjusts vertical field of view from 30 to 100 degrees.
+Drag the slider or Ctrl+click to type; Reset field of view restores the default.
+The view is remembered on exit and changing it does not edit the map.
+
+
+Hold Space over the terrain viewport to pin the brush at its last valid ground
+point. The cursor shows Pinned (Space); moving the pointer or camera keeps the
+pen there. Release Space to follow the pointer again. Shift keeps its existing
+Raise/Lower, Walkable/Blocked and Shore inversion. Escape, Ctrl/Alt, text entry,
+a popup, switching tools or maps clears the pin. Copy/Paste region tools use
+their existing drag controls.
+
+## Definitions browser
+
+Assets > Definitions inspects game.bin, frontend.bin and script.bin. Search by name, type or native entry index, and use the type filter to narrow the list. Unnamed records remain accessible by their index. Confirmed schema matches show typed fields; unsupported records show their complete raw payload. Right-click a field value to copy it. Refresh reloads the bank and clears the selection.
+
+Object properties offer **Open definition** to select the object's named game-bank definition. Browsing does not change the object or bank. Closing Forge offers **Review definition** for an open field draft and keeps other text/dialogue drafts. Saved fields preserve every other record payload. Existing banks retain their original backup; newly created output-folder or pack banks have creation markers for Restore. Setup Restore applies to its selected install; recover a separate folder with `forge restore --install <folder>`. The browser uses paired names.bin from the same output or install folder as the chosen bank; missing names are an error. Confirmed int32, uint32, float, bool, C2DVector, C3DVector, CRGBColour and supported CCharString/CWideString fields offer **Edit field**. Enter the value in the draft, use the checkbox for a boolean, or enter vector coordinates in the X/Y/Z boxes, or use the colour swatch and R/G/B/A channels, and use **Save field**, then confirm. **Cancel edit** discards it. Choose the output destination before opening the draft; changing it requires starting the edit again. Unsupported types and unexpected byte lengths remain read-only. Cloning is not implemented.
+
+The CLI `defs set-field` writer preserves its source name table when exporting a separate bank. It checks the prepared records and destination pool before publication. Outputs named game.bin, frontend.bin or script.bin retain recovery records for Restore, and refuse writes while the destination game runs.
+
+Fixed-size definition fields with unexpected payload lengths remain protected: `defs set-field` refuses the edit rather than discarding unknown trailing bytes. This applies even when all field tags are recognized.
+
+Game-bank records with a confirmed `GroupDef` reference offer **Open group**. It follows the native entry index and requires a group record in the same bank; unsupported or invalid references have no jump. Selecting a group shows its confirmed members; click a member to return to that definition. Membership is read from the current game bank in the background, and unsupported records are omitted. Open drafts keep this navigation disabled. An unchanged fixed-width draft retains the exact original representation, including existing noncanonical boolean bytes and floating-point NaN bits.
+
+Definition `CRGBColour` CLI input uses red, green, blue, alpha (0-255; omitted alpha defaults to 255). The writer converts to the native blue, green, red, alpha byte order. Existing unexpected lengths refuse.
+
+Inline CCharString and CWideString drafts accept up to 127 printable ASCII characters, including empty text. Unicode input is filtered. Existing non-ASCII, long, unterminated or opaque-tailed strings remain read-only and exact. The shared writer requires one complete NUL-terminated original string before replacement. Unsupported wide strings and name-table references remain inspectable.
+
+CWideString uses UTF-16LE with a final zero code unit, without a count prefix. The CLI writer currently accepts ASCII text for this type and refuses non-ASCII input; existing Unicode values remain intact until an explicit supported replacement. Odd lengths, missing or embedded terminators and opaque trailers refuse before writes.
+
+Definitions are grouped by type and confirmed game-bank group. Search includes group names and native indices. Opening a definition expands its tree and reveals the selected row.
+
+Confirmed object Graphic fields offer Open model by native ID. Missing or ambiguous IDs preserve the current preview. Definition drafts protect this navigation.
+
+Wide-string CLI edits accept valid UTF-8 and save native UTF-16LE. The GUI currently edits short printable ASCII wide strings; other originals remain inspectable.
+
+Terrain-theme texture fields offer Open texture for confirmed positive main-bank IDs. Unsupported and ambiguous targets preserve the current preview; definition drafts protect navigation.
+
+Definition groups sort by name and show native indices to distinguish duplicate or numeric names.
+
+Complete wide strings display as quoted UTF-8; malformed values and unsupported trailers display their complete raw bytes. Long previews end at a UTF-8 character boundary, and Copy full value retains the full string.
+
+
+Definition CDefString fields show a readable name when their byte offset identifies a complete string in the loaded bank's names pool. The raw offset stays visible. These labels identify names in the owning pool.
+
+
+Four-byte definition name references can now be edited with an existing-name chooser. Search finds names or byte offsets; duplicate names appear with distinct offsets. No name stores -1. Saving keeps the existing name pool and refuses stale references. Original unsupported offsets can remain unchanged.
+
+
+The CLI can clone a definition: `forge-tools defs clone <bank.bin> <donor-name-or-index> <new-name> --out <output-bank.bin>`. It copies the whole donor payload and saves the bank/name-pool pair with recovery records. Existing outputs must match the loaded bank and pool. GUI clone controls are still pending.

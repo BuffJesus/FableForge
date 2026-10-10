@@ -39,7 +39,7 @@ def main():
         wad.rename(renamed)
     source = work / 'hold.cpp'
     source.write_text('#include <windows.h>\n#include <cstdio>\nint main() { puts("ready"); fflush(stdout); Sleep(180000); }\n')
-    compiler = re.search(r'^CMAKE_CXX_COMPILER:FILEPATH=(.+)$', (repo / 'build/CMakeCache.txt').read_text(), re.MULTILINE).group(1)
+    compiler = re.search(r'^CMAKE_CXX_COMPILER:(?:FILEPATH|STRING)=(.+)$', (repo / 'build/CMakeCache.txt').read_text(), re.MULTILINE).group(1)
     helper = root / 'Fable.exe'
     subprocess.run([compiler, str(source), '-o', str(helper)], check=True, capture_output=True, timeout=60)
     def snapshot():
@@ -51,10 +51,12 @@ def main():
         return result
     original = snapshot()
     env = dict(os.environ, FABLEFORGE_AUTOMATION_HIDDEN='1')
-    def gui(label, save, dirty):
+    def gui(label, save, dirty, terrain=False, place=True):
         script = work / (label + '.txt')
         script.write_text('wait_maps\nwait_ready\nselect TeleporterGreatwood\nwait_loaded\nedit 1\n'
-            'place OBJECT_BARREL_BREAKABLE GuardProbe_' + label + '\n' + save + '\nassert_state doc_dirty ' + str(dirty) + '\ndump_log\nquit\n')
+            + ('place OBJECT_BARREL_BREAKABLE GuardProbe_' + label + '\n' if place else '')
+            + ('terrain_mode 17\nset shore_set 0\nbrush 1 0\nterrain_stroke 30 30 0\nset shore_set 1\nbrush .25 0\nterrain_stroke 30 30 0\n' if terrain else '')
+            + save + '\nassert_state doc_dirty ' + str(dirty) + '\ndump_log\nquit\n')
         result = subprocess.run([str(args.gui.resolve()), '--install', str(root), '--auto', str(script)],
             cwd=repo, env=env, capture_output=True, text=True, timeout=120)
         log = Path(str(script) + '.log').read_text()
@@ -72,6 +74,20 @@ def main():
             assert set(after) - set(original) == {'data/Levels/FinalAlbion/TeleporterGreatwood.tng', 'data/Levels/FinalAlbion/TeleporterGreatwood.tng.forge-created'}
         else:
             assert after == original, 'refused save changed install files'
+        before_joint = snapshot()
+        log = gui('joint_running', ('save_draft' if args.stock else 'save_draft_refused')
+            + '\nassert_state terrain_draft_dirty ' + ('0' if args.stock else '1'),
+            0 if args.stock else 1, terrain=True)
+        if not args.stock:
+            assert snapshot() == before_joint, 'joint running-game refusal published a terrain draft'
+        # A terrain-only draft is game-ignored and may save on either layout.
+        gui('terrain_only_running', 'save_draft\nassert_state terrain_draft_dirty 0', 0,
+            terrain=True, place=False)
+        draft = root / 'data/Levels/FinalAlbion/TeleporterGreatwood.lev.forge-draft'
+        assert draft.is_file() and Path(str(draft) + '.forge-created').is_file()
+        terrain_saved = snapshot()
+        assert all(terrain_saved[name] == value for name, value in original.items()), 'terrain draft changed an active game file'
+
     finally:
         process.terminate()
         process.communicate(timeout=10)
@@ -83,7 +99,7 @@ def main():
     (work / 'restore.log').write_text(result.stdout + result.stderr)
     assert result.returncode == 0 and snapshot() == original
     assert wad.exists() == args.stock, 'save changed the active layout'
-    print(('Stock draft allowed' if args.stock else 'Loose save refused') + ', deploy guard, exit retry and exact Restore: PASS')
+    print(('Stock draft allowed' if args.stock else 'Loose save refused') + ', joint/terrain-only draft guards, deploy guard, exit retry and exact Restore: PASS')
 
 
 if __name__ == '__main__':

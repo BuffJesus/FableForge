@@ -56,7 +56,7 @@ Archive Archive::open(const fs::path& path) {
         throw std::runtime_error("wad: cannot open " + path.string());
     }
 
-    file.seekg(20, std::ios::beg);
+    file.seekg(24, std::ios::beg);
     const uint32_t entryCount = readU32(file, "entry count");
 
     file.seekg(28, std::ios::beg);
@@ -212,7 +212,7 @@ size_t repack(const fs::path& srcPath,
         return value;
     };
 
-    const uint32_t entryCount = u32At(20);
+    const uint32_t entryCount = u32At(24);
     const uint32_t footerOffset = u32At(28);
     if (footerOffset > bytes.size()) {
         throw std::runtime_error("wad: footer offset out of range");
@@ -343,7 +343,7 @@ size_t appendEntriesImpl(const fs::path& srcPath,
         std::memcpy(&value, data.data() + at, 4);
         return value;
     };
-    const uint32_t entryCount = u32(bytes, 20, "entry count");
+    const uint32_t entryCount = u32(bytes, 24, "entry count");
     const uint32_t footerOffset = u32(bytes, 28, "footer offset");
     if (footerOffset > bytes.size())
         throw std::runtime_error("wad: footer offset out of range");
@@ -408,6 +408,8 @@ size_t appendEntriesImpl(const fs::path& srcPath,
         metadata.push_back(std::move(item));
     }
     const size_t entriesEnd = pos;
+    if(specs.size()>uint64_t(UINT32_MAX)-maxId || specs.size()>uint64_t(UINT32_MAX)-entryCount)
+        throw std::runtime_error("wad: appended entry IDs or count overflow");
 
     std::map<std::string, const Metadata*> byName;
     for (const auto& item : metadata) {
@@ -554,8 +556,10 @@ size_t appendEntriesImpl(const fs::path& srcPath,
     const uint32_t newCount =
         entryCount + static_cast<uint32_t>(specs.size());
     const uint32_t newFooterOffset = static_cast<uint32_t>(data.size());
-    // Offsets 20 and 24 are two counts that retail always keeps equal.
-    std::memcpy(data.data() + 20, &newCount, 4);
+    // CBankFile::WriteFileInformation 02F9ACC0: maximum initialized ID at
+    // +20, live entry count at +24. Dense retail banks happen to make them
+    // equal. Sparse banks need the actual maximum for native lookup capacity.
+    std::memcpy(data.data() + 20, &maxId, 4);
     std::memcpy(data.data() + 24, &newCount, 4);
     std::memcpy(data.data() + 28, &newFooterOffset, 4);
     if (!outPath.parent_path().empty()) fs::create_directories(outPath.parent_path());

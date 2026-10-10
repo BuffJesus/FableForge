@@ -1,5 +1,6 @@
 #include "forge/animation.hpp"
 #include "forge/big.hpp"
+#include "forge/lzo.hpp"
 #include "forge/lipsync_preset.hpp"
 
 #include <filesystem>
@@ -44,8 +45,78 @@ struct Crc {
     uint32_t finish() const {return ~value;}
 };
 
+using Bytes=std::vector<uint8_t>;
+static void word(Bytes& bytes,uint32_t value) {
+    for(unsigned i=0;i<4;++i) bytes.push_back(uint8_t(value>>(i*8)));
+}
+static void append(Bytes& bytes,const Bytes& more) {bytes.insert(bytes.end(),more.begin(),more.end());}
+static Bytes chunk(const char* tag,const Bytes& body) {
+    Bytes bytes(tag,tag+4);word(bytes,uint32_t(body.size()));append(bytes,body);return bytes;
+}
+static Bytes trackChunk(const char* name) {
+    Bytes bytes;word(bytes,0);word(bytes,UINT32_MAX);
+    while(*name)bytes.push_back(uint8_t(*name++));bytes.push_back(0);
+    bytes.push_back(0);word(bytes,std::bit_cast<uint32_t>(30.0f));
+    word(bytes,0);word(bytes,0);word(bytes,0);word(bytes,0);
+    return chunk("XSEQ",bytes);
+}
+static Bytes image(const Bytes& children) {
+    Bytes bytes;word(bytes,0x3e3e3e3e);append(bytes,Bytes{'3','D','A','F'});
+    word(bytes,0);word(bytes,0); // empty copyright and alignment
+    Bytes root{1};word(root,std::bit_cast<uint32_t>(1.0f));append(root,children);
+    append(bytes,chunk("ANRT",root));word(bytes,0);return bytes;
+}
+static void nativeBoundaries() {
+    Bytes object{'R','I','G',0};word(object,UINT32_MAX);
+    append(object,chunk("JUNK",trackChunk("DECOY")));
+    append(object,trackChunk("REAL"));
+    const auto bytes=image(chunk("AOBJ",object));
+    const auto parsed=forge::animation::decode(bytes);
+    require(parsed.rigName=="RIG" && parsed.tracks.size()==1 &&
+            parsed.tracks[0].boneName=="REAL","opaque child signature became a track");
+    Bytes children=chunk("JUNK",chunk("AOBJ",object));
+    append(children,chunk("AOBJ",object));
+    require(forge::animation::decode(image(children)).tracks.size()==1,
+            "opaque root child signature became an object");
+    bool rejected=false;
+    try {forge::animation::decode(image(chunk("AOBJ",Bytes{'R',0})));}
+    catch(const std::runtime_error&) {rejected=true;}
+    require(rejected,"missing native next-sibling word accepted");
+    auto refuses=[](const Bytes& candidate) {
+        try {forge::animation::validateStorage(candidate);return false;}
+        catch(const std::runtime_error&) {return true;}
+    };
+    require(refuses(bytes),"strict storage validation accepted opaque child");
+    Bytes validObject{'R',0};word(validObject,UINT32_MAX);append(validObject,trackChunk("REAL"));
+    Bytes mask;word(mask,2);mask.push_back(0);mask.push_back(1);
+    append(validObject,chunk("AMSK",mask));
+    Bytes hint;word(hint,1);word(hint,4096);
+    Bytes validChildren=chunk("AOBJ",validObject);append(validChildren,chunk("XALO",hint));
+    Bytes event{'E',0};word(event,std::bit_cast<uint32_t>(0.5f));
+    append(validChildren,chunk("HLPR",chunk("TMEV",event)));
+    auto valid=image(validChildren);const auto unchanged=valid;
+    forge::animation::validateStorage(valid);
+    require(valid==unchanged,"storage validation changed input");
+    Bytes compressed;word(compressed,uint32_t(valid.size()));
+    append(compressed,forge::lzo::compress(valid.data(),valid.size()));
+    forge::animation::validateStorage(compressed);
+    compressed.push_back(0);require(refuses(compressed),"compressed trailing data accepted");
+    auto noFooter=valid;noFooter.resize(noFooter.size()-4);
+    forge::animation::validateStorage(noFooter);
+    valid.back()=1;require(refuses(valid),"unknown image footer accepted");
+    valid=unchanged;valid.push_back(0);require(refuses(valid),"extra image byte accepted");
+    auto shortParent=validChildren;shortParent.push_back(0);
+    require(refuses(image(shortParent)),"short parent tail accepted");
+    mask.back()=2;require(refuses(image(chunk("AMSK",mask))),"invalid mask boolean accepted");
+    mask.pop_back();require(refuses(image(chunk("AMSK",mask))),"short mask accepted");
+    hint[0]=2;require(refuses(image(chunk("XALO",hint))),"unknown allocation version accepted");
+    event.push_back(0);require(refuses(image(chunk("TMEV",event))),"trailing event byte accepted");
+    valid=unchanged;valid[16]='J';require(refuses(valid),"unknown root accepted");
+}
+
 int main(int argc,char** argv) {
     try {
+        nativeBoundaries();
         bool rejected=false;
         try {forge::animation::decode({});}
         catch(const std::runtime_error&) {rejected=true;}

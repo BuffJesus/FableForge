@@ -83,6 +83,7 @@ std::map<uint32_t, MeshSphere> readMeshBoundingSpheres(
 
 struct FoliageType {
     int         paletteIndex = -1;
+    // Native palette wire order is mesh, shadow, z-sprite (Load 02E46970).
     uint32_t    meshIdx = 0;
     uint32_t    zspriteMeshIdx = 0;
     uint32_t    shadowMeshIdx = 0;

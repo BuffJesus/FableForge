@@ -4,11 +4,11 @@
 // @0x02d5c230 call sequence / WriteMapInfoBlock @0x02d67ea0 permutation, ported
 // from the proven stb_infoblock_baker.py (round-trips 398/398 donor records byte-exact).
 //
-// This is STEP 1 of the native terrain bake (docs/TERRAIN_NATIVE_BAKE.md): the header
-// forge::stb::save() rewrites when a re-laid chunk's landscape/local-detail body
-// pointers move. Pointer/size fields index into the compressed bodies (GATED) — only
-// rewrite them in lock-step with an emitChunk rebase; the placement/quality scalars
-// and CameraMapBounds are freely editable.
+// Landscape/local-detail/header-end pointers are common-entry offsets in the
+// retail layout. Edge-height, shoreline and dependency-checksum spans describe a
+// separate generation stream (UpdateStaticMapPass1 02D66C80); OpenRetailStaticMap
+// 02D5BC40 does not copy/load them. Preserve these legacy words when relocating
+// retail chunks; they are not bounds into the retail payload.
 
 #include <cstdint>
 #include <vector>
@@ -20,22 +20,22 @@ constexpr std::size_t kInfoBlockSize = 0x5C; // 92 bytes: 17 scalars + 6-float b
 struct StaticMapInfoBlock {
     std::int32_t  versionID = 0;
     std::int32_t  bankFileIndex = 0;
-    std::int32_t  edgeHeightFileSize = 0;
+    std::int32_t  edgeHeightFileSize = 0; // generation stream
     std::int32_t  mapWidth = 0;
     std::int32_t  mapHeight = 0;
     std::int32_t  worldX = 0;
     std::int32_t  worldY = 0;
-    std::int32_t  edgeHeightFilePtr = 0;   // GATED (body offset)
-    std::int32_t  landscapeMapPtr = 0;     // GATED (body offset) — moves on re-lay
-    std::int32_t  localDetailMapPtr = 0;   // GATED (body offset) — moves on re-lay
+    std::int32_t  edgeHeightFilePtr = 0;   // generation stream
+    std::int32_t  landscapeMapPtr = 0;     // retail common-entry offset
+    std::int32_t  localDetailMapPtr = 0;   // retail common-entry offset
     std::int32_t  quality = 0;
-    std::int32_t  shorePointArraySize = 0;
-    std::int32_t  shorePointArrayStart = 0;
+    std::int32_t  shorePointArraySize = 0; // generation stream
+    std::int32_t  shorePointArrayStart = 0; // generation stream
     std::uint32_t levelChecksum = 0;
-    std::int32_t  checksumBlockFilePtr = 0; // GATED
-    std::int32_t  checksumBlockFileSize = 0; // GATED
+    std::int32_t  checksumBlockFilePtr = 0; // generation stream
+    std::int32_t  checksumBlockFileSize = 0; // generation stream
     float         cameraMapBounds[6] = {0,0,0,0,0,0}; // minX,minY,minZ,maxX,maxY,maxZ
-    std::int32_t  headerEndPtr = 0;         // GATED
+    std::int32_t  headerEndPtr = 0;         // retail common-entry offset
 };
 
 // Read 0x5C bytes at `p` (caller ensures ≥0x5C readable) into the struct, in on-disk order.

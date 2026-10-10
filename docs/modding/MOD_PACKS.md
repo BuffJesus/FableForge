@@ -1,6 +1,150 @@
 > Based on FableForge-legacy `docs/MOD_PACKS.md`, ported on 2026-09-19 as the design reference for milestone 0.20 (Mod packs v1) in `docs/ROADMAP_1.0.md`. Current Forge additions are documented below. The commands live in `forge-tools.exe` (`tools/forge-cli/main.cpp`; spelled `forge-tools` below, while the legacy repo called that exe `forge`).
 
+The proposed successor package, with typed edits, baseline profiles and
+EgoCore runtime components, is in [Forge package v2 proposal](PACKAGE_V2_PROPOSAL.md).
+
+A content-only source containing `data/lang/<language>/text.big` now joins the
+text union even when it has no `game.bin`. Forge plans final TextIDs from the
+selected load order and text picks before relinking named FMP references. A
+selected definition link that resolves to different IDs across available
+languages refuses the build.
+
 # Mod packs, load order, and conflict resolution
+
+Mod names distinguish source choices from the reserved `vanilla` baseline choice.
+Names equal to `vanilla` (ignoring case), names with surrounding whitespace and
+names containing control characters refuse registration. Give such a source a
+different name with `mods add --name`. Existing orders remain readable so an
+invalid entry can be disabled or removed; enabled invalid names refuse builds,
+conflict checks and deploy before an existing stage is reverted. A bare merge
+also validates names inferred from its source paths.
+
+Windows loose-file paths and the path part of TNG/QST choices group Unicode
+aliases using Windows ordinal case comparison, preserving the first spelling.
+This includes Latin and Cyrillic aliases; supplementary characters and Greek
+final sigma remain distinct where Windows treats them as different files.
+Unicode filenames use native filesystem paths when reading and writing merges.
+These checks cover loose files, not Unicode names inside engine archives.
+
+Enabled source labels must also be distinct under the order's case comparison.
+For example, bare merge cannot distinguish `first/Pack` from `second/Pack` in a
+saved `Pack` choice. Register them with different `--name` values and use
+`mods build`. Duplicate labels in a manually edited legacy order refuse before
+composition or stage reversion; disable or remove an affected entry by index.
+
+Saved whole-file choices refuse if their named winner no longer contributes to
+that file; review or clear the choice before building. Choices for files with
+no current contributors stay inactive. Selecting vanilla emits the existing
+baseline file bytes so a reused direct output restores that file. A baseline
+that lacks the file now removes that selected addition from a reused direct
+output. Removals and replacements share one rollback transaction. Redirected
+child files/directories in the output refuse publication. Whole-file choices
+saved through the Mods UI record the reviewed baseline and contributor file
+identities. If those contents change, review and choose again or clear the choice
+before building. Legacy label-only choices remain supported without that review
+snapshot; a registration hash does not provide choose-time validation.
+
+Successful builds write `forge_mods_build.json` in the output root, recording
+generated file sizes and SHA256 identities. Reusing that output removes obsolete
+recorded files only while their bytes still match; edited obsolete files refuse
+the build so you can preserve or move your edits. Unlisted files, including files
+left by builds predating the receipt, remain. New files and replacements keep
+the existing overwrite behavior. Publication rolls back removals, replacements
+and the receipt together on failure. Use an output folder separate from the game
+installation and active sources.
+
+`mods build --stage` and `mods merge --stage` stage the newly composed files,
+excluding the root receipt and unrelated files in a reused output folder.
+Undeploy an existing stage first. A running target game or existing EgoCore
+deployment refuses before output publication. Output publication and installation
+are separate operations; an installation failure uses the usual stage recovery.
+
+Whole-bank sources with unnamed edits can compose when their shared record slots,
+definition ordinals and name-pool prefixes agree. Existing unnamed edits enter
+the same record/field conflict system as named edits. Appended slots and name
+offsets are reserved before FMP additions, retaining numeric references. Duplicate
+record names use distinct slot identities instead of overwriting another row.
+Incompatible slot assignments or diverging name pools refuse with a specific
+identity diagnostic; general reference relocation remains open. An intact overhaul
+installation can still serve as the baseline for compatible following mods.
+Shorter compatible source prefixes do not delete baseline additions. Sparse
+named-only sources also do not delete absent components, and this path does not
+validate arbitrary raw-ID references in those sources.
+
+Accepted whole-bank sources also compose `script.bin` and `frontend.bin` when
+their respective numeric namespaces agree. Those banks share the final name
+pool and retain independent granular choices. Their record keys are scoped as
+`script.bin:<record>` or `frontend.bin:<record>`; field keys already include the
+bank. A partial changed sibling bank outside this verified whole-bank path still
+refuses. Unchanged copies and semantic compression-only re-saves remain allowed.
+
+Whole-bank text additions reserve their numeric IDs before ordinary additions.
+Valid four-byte narrator indices can retain their source metadata when narrator
+lists agree; authored payload bytes, including empty identifiers, are preserved.
+Changing narrator lists or colliding numeric text IDs still requires further
+relocation support. A choice cannot remove a newly reserved definition/text slot
+while an active whole-bank source may reference it; choose a contributor or remove
+the owning source. World composition failures abort publication instead of silently
+skipping the failed layer.
+
+FMP application refuses nonempty unsupported banks before writing package content.
+Supported banks are GameBINEntries, supported GameBINLinkMetaData, Objects,
+Settings, ObjectLinks, Text/text, FinalAlbionWAD, maintextures, graphics and supported
+graphicsLinkMetaData; their existing format and link restrictions still apply.
+Texture and mesh replacements retain their baseline name, ID and type. New
+entries with IDs already owned by another symbol refuse; arbitrary asset-ID
+relocation remains open. Empty exporter bank placeholders are allowed. FMP export
+also refuses changed/new unnamed components and changed sibling banks, so it cannot
+report success after omitting those edits. FMP script/frontend import and general
+cross-bank relocation remain unsupported.
+
+A named FMP record can replace an existing symbol; new named records also need
+a definition type. An existing named record can still be replaced by a legacy
+untyped entry. A blank-name FMP record can replace only the exact numeric baseline
+index whose blank name and definition type match; it cannot create an anonymous
+identity or relocate one across overhauls. Its supported fields participate in
+load order and conflict selection. An explicit type that differs from the
+existing baseline type refuses. These identity failures abort the whole package
+before writes, including earlier valid contributions. This exception applies to
+FMP records with verified numeric identities; whole-bank trees use the namespace
+validation described above.
+
+Individual choices are available for contested unique named scalar fields in
+clean field-merged definitions: int32, uint32, float, bool, uint8, CDefIndex and
+CDefString with their expected byte widths. They override the record choice;
+clearing one restores its record/order default. Saved field choices stay active
+when contributors disappear or agree. An unavailable or unchanged selected source
+refuses a build and remains reviewable; the review reports the current fallback.
+Unselected independent and identical edits auto-merge. Arrays, prefixes and
+unnamed fields retain record-level selection in the GUI.
+
+The existing tab-separated choices file stores field keys as `field:` followed
+by a compact JSON array `[bank, record, definition, layoutSHA256, partIndex,
+fieldName]`; use the report's `choice_key` instead of constructing one. The layout
+digest hashes `[prefixByteCount, [[fieldName, fieldType, fieldTag], ...]]` in
+serialization order. Values and relocated IDs are excluded. A changed bank,
+record/type/layout cannot bind that key to a different field. Unreported keys
+stay saved and reviewable; this is layout identity, not choose-time source-content
+fingerprinting. `defs merge --picks` and order builds use the same canonical keys.
+
+If a conflict choice cannot be read or saved, Mods keeps a wrapped error beside
+the comparison area after toasts fade or the tab is reopened. A failed save
+retains the previous winner. Resolve the reported file/access problem and retry
+the choice; a successful choice clears the error. Changing the save destination
+clears feedback for the previous folder.
+
+Future investigation: [fine-grained content overrides](CONTENT_OVERRIDES.md)
+describes choosing contributions within FMPs and large overhauls, item/field
+comparison, persistent compatibility choices, and dependency validation.
+
+After **Check conflicts**, the Mods panel also lists **Other saved choices**:
+choices absent from that check's conflict report. They may belong to inactive
+mods, missing targets or edits that are no longer contested. A saved choice can
+still affect a build without a conflict. Search by the
+target or saved contributor, and use **Clear choice** to remove one saved
+selection. Viewing this list preserves the choices; clearing changes the saved
+selection for future builds without deploying anything. Run Check conflicts
+again after changing the enabled mods or their order to review the new report.
 
 EgoCore text compilation uses a separate temporary workspace per normalization,
 including concurrent builds of the same mod into different outputs. Workspaces
@@ -18,10 +162,15 @@ does not affect block boundaries. Valid replacements and templates retain their
 existing merge behavior.
 
 EgoCore file copies, resource/header reads and output writes report I/O failures.
-An unreadable existing source bank also fails the build. A failed explicit build
-may retain files emitted before the error; deploy does not stage that incomplete
-result. Missing target banks and unsupported resource locations still report
-skipped overrides.
+An unreadable existing source bank also fails the build. Direct `mods merge` and
+registered `mods build` prepare composition in an owned temporary directory before
+publishing to the requested output. Composition/read failures preserve existing
+output. Non-staged merge/build publication prepares files on the destination
+filesystem and rolls back earlier replacements if a later replacement fails.
+This handles reported file errors; crash recovery and staged publication have
+separate guarantees.
+Deploy does not stage an incomplete composition. Missing target banks and
+unsupported resource locations still report skipped overrides.
 
 ## Recipe asset storage and failed edits
 
@@ -179,6 +328,16 @@ For structured records (game.bin defs) the diff goes to the FIELD level using
 different *fields* of the same def are field-merged, with only same-field edits
 conflicting. See "Status" below.
 
+The Mods card expands residual field conflicts into the type, baseline value,
+each actual contributor's value and the value selected by the current record
+choice. These values come from the last conflict check. Choosing a mod resolves
+only contested fields that it changed; other contested fields follow load order.
+Vanilla restores contested fields while independent edits still merge. JSON
+reports include `part_index` (zero for the prefix, otherwise field index plus
+one), `type`, `base_value` and `values` alongside the existing field/winner data.
+String presentation escapes non-ASCII/control bytes without guessing an encoding.
+This does not add individual field picks or source fingerprint validation.
+
 ### 5. Compose / build
 Produce the final containers by applying, per record, the winning mod's version
 over the base — a merged `game.bin`, a repacked WAD, merged registries. Emit via
@@ -252,7 +411,7 @@ field-level pipeline:
   archive (`forge::big`); `fmp apply` turns it into a drop-in game-root.
 - bsdiff `.patch` (**done**): `forge-tools patch apply` (`forge::bunzip`+`forge::bspatch`)
   produces a modified game.bin from a `game.bin.patch`.
-- `forge-tools mods merge <base> <out> --with <dir/.fmp/.patch>... [--fields] [--stage]`
+- `forge-tools mods merge <base> <out> --with <dir/.fmp/.patch>... [--fields] [--picks file] [--stage]`
   (**done**): normalizes each source to a game-root, then in ONE pass runs the
   field-level game.bin merge **and** the loose level-TNG thing-merge (per level:
   1 editor → copy; ≥2 → thing-merge by UID). Proven: HalsSword.fmp + Unofficial
@@ -305,47 +464,61 @@ from the build; the editor's badges / filter / *Back to retail*). GB packs (Proj
 whole files identical to the install are skipped, and changed levels are repacked into the real WAD
 (423 entries, 75 changed TNGs with provenance in the current baseline-aware test),
 the new `ProjectAutumn/` folder and the whole STB / banks ride as
-whole-file layers; UFP's bsdiff underneath composes without a conflict. FSE packs: `FSE/quests.lua`
+whole-file layers. The historical UFP composition omitted unnamed edits and
+is now refused; those older counts are not complete-patch preservation proof. FSE packs: `FSE/quests.lua`
 is a key-level union (own bytes per entry, `fse:<key>` picks, id clashes reported); an FSE-only folder is a
 tree source. EgoCore partial TNG mods (`[Settings]` + `Replace=true` / `DeleteUIDs:`, TngMerger.h) merge by
 UID into the level, deletions applied, even as the only editor.
+FableForge applies those deletions after its multi-source thing union. Reports
+name the removal sources, count the resulting things and omit removed UIDs from
+provenance. Saved choices that would restore a deleted thing refuse a build and
+remain reviewable/clearable in the Mods tab. A vanilla choice for a newly added
+thing already means absence. `Replace=true` keeps the existing whole-file path.
 
 Stress case from the plan's matrix (2026-09-20): Ultimate Spell Pack (18 fmps) + mfvicli Mods (35 fmps)
 on the same spell defs, `mods build --fields`: 54 mods, 897 changes, 605 records composed per field,
 640 fields auto-merged, 35 same-field conflicts decided by load order, 177 whole-record (add-add of
 identical new records), 8.5 s. `mods deploy` / `mods undeploy` round-trip a scratch root byte-identical.
-GB-pack case: Unofficial Fable Patch (bsdiff) under Aeon Edition (a whole `Data/` tree: game.bin,
+Historical GB-pack case (now refused for unnamed edits): Unofficial Fable Patch (bsdiff) under Aeon Edition (a whole `Data/` tree: game.bin,
 text.big, 421 loose LEV/TNG, WLD/BWD): 1,391 record changes (853 new), 5 records both touch (Aeon wins
 by order), 791 strings, 392 levels, 436 whole-file layers, 3.6 s -- the bsdiff still lands underneath
 the whole-file game.bin instead of failing on it.
 
-Aeon Edition + Controller Support (2026-09-30): the author-provided install
-sequence is Aeon first, Controller Support `.fmp` through a legacy package
-editor, then only `FableControllerSupport.dll` in
-`Mods/FableControllerSupport/`, enabled through EgoCore. EgoCore's optional WAD
-decompile step should be skipped for this combination. Forge's equivalent
-scratch order is the Aeon tree, `ControllerSupport.fmp`, then a DLL-only EgoCore
-folder. `python tools/test_aeon_controller.py` builds this order over retail:
-1,392 definition changes (854 added), two records merged per field, zero field
-or whole-record conflicts; the controller scheme is Aeon's 70 bindings before
-the package and 141 after it. The DLL is byte-identical in output and registered
-in `Mods.ini`. With retail `FinalAlbion.wad` in the scratch input, Forge repacks
-547 changed level files and appends 47 new level files; the output WAD lists
-`BarrowFields.tng`. The two extra replacements are Aeon's root-level
-`Data/Levels/creature_hub.lev` and `.tng`: both are also present in retail's WAD,
-so Forge must repack them at that path. The test extracts the rebuilt WAD and
-compares all 843 Aeon level payloads against the effective build (594 loose
-overrides and the unchanged WAD entries). This proves
-the composed files and order, not runtime behavior on
-Retroid/Android or under EgoCore. The test never deploys to the real install.
-The test includes Aeon's `graphics.big`, `textures.big`, `FinalAlbion_RT.stb`
-and `Bones` files from the original 5.03 archive. A read-only
-`forge-tools assets missing-mesh <built-root> <schema.json>` audit finds zero
-missing `Graphic` model IDs against Aeon's output graphics bank. Auditing those
-same definitions against the retail graphics bank alone reports 243 absent IDs,
-which shows why checking an incomplete Aeon extraction gives a false alarm.
-This audit checks direct `Graphic` references in `game.bin`; it does not prove
-that map scenery, scripted visibility, meshes or textures render correctly.
+Aeon Edition + Controller Support (corrected 2026-10-03): in the updated Forge,
+select the extracted Aeon folder (or its `Data` folder) as the **first** mod,
+then `ControllerSupport.fmp`, then the original `FableControllerSupport` runtime
+folder. Forge installs Aeon's complete Data tree and composes the controller
+layers over it. When the controller FMP is present, Forge takes the DLL from the
+runtime folder and excludes that download's alternate Data overrides. The source
+folders stay outside the game installation and remain unchanged. The older rc.3
+build rejected this complete-Data selection; its guide and screenshots are
+superseded by `docs/walkthrough/aeon-controller/index.html`.
+
+The earlier retail-plus-Aeon *composition* recipe lost 766 changed unnamed
+components and omitted unnamed additions; named-link, binding, level and
+DirectGraphic checks did not establish complete overhaul preservation. That
+route was subsequently refused. The newer namespace-preserving path above now
+accepts UFP's unnamed edits and compatible whole banks, with independent
+preservation checks in [Controller stack coverage](../CONTROLLER_STACK_COVERAGE.md).
+The older Aeon composition counts remain historical container checks and do not
+establish preservation for that route.
+
+The three-source CLI fixture starts from a copied retail baseline, installs
+complete Aeon 5.03, and then adds the FMP and runtime. Every Aeon definition
+outside the five FMP imports is compared by index, type, name and payload:
+16362 records survive, including all 6625 unnamed entries. All 14 named
+controller references resolve; 942 other source files and 843 authored WAD level
+payloads match the prepared output. The runtime DLL is unchanged and enabled in
+`Mods.ini`, while its alternate Data is excluded. Packed and extracted-layout
+fixtures also check deploy and exact undeploy. These are file-level checks; no
+gameplay or Android compatibility is claimed.
+
+FMP support remains bounded. Supported scalar, flat reference-vector and CDef
+listing paths resolve by name; malformed, unsupported or selected missing links
+refuse before writing definition banks. F2 Melee's nested/multi-target asset
+metadata remains unsupported and its definition package is refused. The load
+order smoke explicitly verifies that refusal, then exercises its separate level
+tree as a merge/rollback fixture. That fixture is not a playable F2 installation.
 
 The Mods tab's **Check conflicts** dry run also checks these direct model
 references before deploy. Its report uses the composed definitions and the
@@ -396,7 +569,7 @@ Aeon's other edits to those LEVs, so do not stack it as a whole-file override.
 
 AlbionSecrets Modpack 492 is a close derivative of Project Seasons 122: their
 ZIP manifests share 915 file paths; CRCs differ for 22 shared files, and the
-Modpack adds one lighting file. Both pass `python tools/test_gbpack.py` on a
+Modpack adds one lighting file. Historical container checks passed `python tools/test_gbpack.py` on a
 scratch retail root under the Unofficial Fable Patch, as does their combined
 load order (`--pack seasons`, `--pack modpack`, `--pack both`). The current
 composer compares TNGs against the retail WAD baseline and omits unchanged
@@ -409,7 +582,7 @@ both visual overhauls' intended appearances survive their overlapping whole
 banks and maps.
 
 Expanded Chapters v1 needs both its content RAR and its separate graphics RAR.
-`python tools/test_expanded_chapters.py` builds the combined tree on scratch
+Historical `python tools/test_expanded_chapters.py` built the combined tree on scratch
 retail. All 798 source LEV/TNG payloads resolve to the expected WAD bytes,
 and all 583 built loose level payloads match WAD extraction. Forge replaces
 579 entries and appends four (`ArenaNew_Leadout_01` and
@@ -417,7 +590,7 @@ and all 583 built loose level payloads match WAD extraction. Forge replaces
 changes include 761 new records; zero direct Graphic mesh IDs are missing
 against its own graphics bank. In-game quests and visuals remain unverified.
 
-Fable: The Lost Content 0.7.5 has a current full-tree scratch build. Its
+Fable: The Lost Content 0.7.5 had a historical full-tree scratch build. Its 19 changed/new unnamed entries now cause refusal; the old counts below do not prove complete preservation. Its
 `python tools/test_lost_content.py` check finds 1,002 source LEV/TNG files;
 all match the effective rebuilt WAD bytes. Forge replaces 498 entries and
 appends 206, leaves the pack's parked `_FinalAlbion.wad` and `userst.ini` out

@@ -1,4 +1,6 @@
 #include "app.hpp"
+#include "definitionread.hpp"
+#include "forge/heightpen.hpp"
 #include "worlddemand.hpp"
 
 #include "ImGuizmo.h"
@@ -39,6 +41,26 @@ std::string lower(std::string s) {
     return s;
 }
 
+std::optional<Camera> readCamera(const nlohmann::json& c) {
+    try {
+        if (!c.is_object() || !c.contains("pos") || !c["pos"].is_array() || c["pos"].size()!=3) return {};
+        Camera view;
+        view.posX=c["pos"][0].get<float>(); view.posY=c["pos"][1].get<float>(); view.posZ=c["pos"][2].get<float>();
+        view.yaw=c.at("yaw").get<float>(); view.pitch=c.at("pitch").get<float>(); view.distance=c.at("distance").get<float>();
+        view.fovY=c.value("fov",view.fovY); view.flySpeed=c.value("speed",view.flySpeed);
+        if (std::isfinite(view.posX) && std::isfinite(view.posY) && std::isfinite(view.posZ) && std::isfinite(view.yaw) &&
+            std::isfinite(view.pitch) && std::isfinite(view.distance) && std::isfinite(view.fovY) && std::isfinite(view.flySpeed) &&
+            view.distance>0 && view.fovY>0 && view.fovY<3.14f && view.flySpeed>0 && std::fabs(view.pitch)<1.571f)
+            return view;
+    } catch (...) {}
+    return {};
+}
+
+nlohmann::json writeCamera(const Camera& camera) {
+    return {{"pos",{camera.posX,camera.posY,camera.posZ}}, {"yaw",camera.yaw}, {"pitch",camera.pitch},
+            {"distance",camera.distance}, {"fov",camera.fovY}, {"speed",camera.flySpeed}};
+}
+
 std::string groupOf(const std::string& name) {
     const size_t us = name.find('_');
     if (us == std::string::npos) {
@@ -61,7 +83,7 @@ std::string fmtBytes(uint64_t b) {
 }
 
 // A folder (types == nullptr) or a file of the given types, e.g. {L"Fable level", L"*.lev"}.
-std::string pickPath(HWND owner, const std::string& initial, const COMDLG_FILTERSPEC* types = nullptr, UINT typeCount = 0, bool save = false) {
+std::string pickPath(HWND owner, const std::string& initial, const COMDLG_FILTERSPEC* types = nullptr, UINT typeCount = 0, bool save = false, const wchar_t* extension = L"big") {
     std::string result;
     IFileDialog* dlg = nullptr;
     if (FAILED(CoCreateInstance(save ? CLSID_FileSaveDialog : CLSID_FileOpenDialog, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&dlg)))) return result;
@@ -69,7 +91,7 @@ std::string pickPath(HWND owner, const std::string& initial, const COMDLG_FILTER
     dlg->GetOptions(&opts);
     dlg->SetOptions(opts | (types ? 0 : FOS_PICKFOLDERS) | FOS_FORCEFILESYSTEM | FOS_PATHMUSTEXIST | (types && !save ? FOS_FILEMUSTEXIST : 0));
     if (types) dlg->SetFileTypes(typeCount, types);
-    if (save) dlg->SetDefaultExtension(L"big");
+    if (save) dlg->SetDefaultExtension(extension);
     if (!initial.empty()) {
         const int count = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, initial.data(), int(initial.size()), nullptr, 0);
         std::wstring w(size_t(std::max(count,0)),L'\0');
@@ -175,10 +197,12 @@ bool App::drawPathInput(const char* id,const char* hint,char* value,size_t capac
         static const COMDLG_FILTERSPEC png[]={{L"PNG image",L"*.png"},{L"All files",L"*.*"}};
         static const COMDLG_FILTERSPEC models[]={{L"3D models",L"*.glb;*.gltf;*.obj"},{L"All files",L"*.*"}};
         static const COMDLG_FILTERSPEC dialogue[]={{L"Dialogue archive",L"*.big"},{L"All files",L"*.*"}};
+        static const COMDLG_FILTERSPEC textExport[]={{L"Tab-separated text",L"*.tsv"},{L"All files",L"*.*"}};
         const auto* filter=kind==PathField::ModSource?mods:kind==PathField::Model?models:
-            kind==PathField::Image?images:kind==PathField::Png?png:dialogue;
+            kind==PathField::Image?images:kind==PathField::Png?png:kind==PathField::TextExport?textExport:dialogue;
         const std::string picked=pickPath(hwnd_,value,chooseFolder?nullptr:filter,
-                                         chooseFolder?0:2,kind==PathField::DialogueExport);
+                                         chooseFolder?0:2,kind==PathField::DialogueExport || kind==PathField::TextExport,
+                                         kind==PathField::TextExport?L"tsv":L"big");
         if(!picked.empty()) {
             if(picked.size()>=capacity) pushLog("The selected path is too long for this field.",2);
             else { std::memcpy(value,picked.c_str(),picked.size()+1);changed=true; }
@@ -208,7 +232,7 @@ bool App::init(ID3D11Device* device, ID3D11DeviceContext* context, HWND hwnd,
 
     settings_.outDir = (fs::path(std::getenv("USERPROFILE") ? std::getenv("USERPROFILE") : ".") / "Documents" / "FableForge").string();
     std::string savedInstall;
-    if (!auto_.active()) { firstRun_ = !fs::exists(settingsPath()); loadSettings(savedInstall); }   // scripted runs stay deterministic
+    if (settingsEnabled()) { firstRun_ = !auto_.active() && !fs::exists(settingsPath()); loadSettings(savedInstall); }   // scripted runs stay deterministic
     std::snprintf(outDirBuf_, sizeof outDirBuf_, "%s", settings_.outDir.c_str());
 
     std::string root = installOverride;
@@ -222,7 +246,16 @@ bool App::init(ID3D11Device* device, ID3D11DeviceContext* context, HWND hwnd,
             if (env.installValid) { root = env.installDir.string(); installSource_ = env.detectSource; }
         } catch (...) {}
     }
-    if (!root.empty()) scanInstall(root);
+    if (!root.empty()) {
+        scanInstall(root);
+        std::error_code ecA,ecB;
+        const auto active=fs::weakly_canonical(root,ecA), saved=fs::weakly_canonical(sessionInstall_,ecB);
+        if (sessionInstall_.empty() || ecA || ecB || lower(active.string())!=lower(saved.string())) mapViews_.clear();
+        if (!sessionMap_.empty() && !sessionInstall_.empty() && !ecA && !ecB && lower(active.string())==lower(saved.string()) && findEntry(sessionMap_)) {
+            selectMap(sessionMap_);
+            if (documentLoaded()) { setEditMode(sessionEdit_); setEditTab(editTab_); }
+        } else { sessionMap_.clear(); sessionCamera_.reset(); }
+    }
     else pushLog("No Fable install found. Point me at your 'Fable The Lost Chapters' folder.", 1);
     return true;
 }
@@ -325,31 +358,35 @@ void App::drawHelpOverlay() {
     struct Group { const char* title; std::vector<Row> rows; };
     const Group groups[] = {
         {"Camera (viewport)", {{"RMB drag + W A S D", "look and fly (Q / E down / up)"}, {"LMB drag", "dolly / turn"}, {"Alt + LMB drag", "orbit the focus"}, {"MMB drag", "pan"}, {"Wheel", "zoom"}, {"F", "frame the map, or the selected object"}}},
-        {"Edit: objects", {{"Q  W  E  R", "select / move / rotate / scale tool"}, {"Click", "select a thing or marker"}, {"Drag a thing", "carry it across the ground"}, {"Shift + click", "place the palette pick on the ground"}, {"Ctrl + Shift + drag", "clone and carry the selection"}, {"Ctrl + click", "add to / remove from the selection"}, {"Arrows / Shift + arrows", "nudge 0.05 / 0.5 units"}, {"Ctrl + arrows / A", "face a cardinal direction / pointer"}, {"[  ] / Shift / Alt", "rotate 2 degrees about Z / Y / X"}, {",  . / PgDn  PgUp", "lower / raise; Shift uses 0.01"}, {"Ctrl + D", "clone; click ground to drop"}, {"Ctrl + C  /  Ctrl + V", "copy / paste at the view centre"}, {"Del", "delete"}, {"End", "drop to the ground"}, {"Shift + scale drag", "five times finer scaling"}, {"Esc", "cancel a write confirmation, a carry or the selection"}, {"Ctrl + Z  /  Ctrl + Y", "undo / redo (also on the World tab)"}, {"Ctrl + S  or  F6", "save the draft (the loose .tng)"}, {"V", "show the first invalid thing"}}},
-        {"Edit: terrain", {{"T", "terrain tool (opens the Terrain tab)"}, {"LMB hold", "sculpt / paint"}, {"Shift", "swap raise / lower (including exact step); paint walkable"}, {"[  ]", "brush radius"}, {"Ctrl + click", "sample the theme to paint"}, {"Ctrl + Shift + click", "sample the theme to replace"}, {"LMB drag", "a path / a copy rectangle"}, {"R", "turn the paste 90 degrees"}}},
+        {"Edit: objects", {{"Q  W  E  R", "select / move / rotate / scale tool"}, {"Click", "select a thing or marker"}, {"Drag a thing", "carry it across the ground"}, {"Shift + click", "place the palette pick on the ground"}, {"Ctrl + Shift + drag", "clone and carry the selection"}, {"Ctrl + click", "add to / remove from the selection"}, {"Arrows / Shift + arrows", "nudge 0.05 / 0.5 units"}, {"Ctrl + arrows / A", "face a cardinal direction / pointer"}, {"[  ] / Shift / Alt", "rotate 2 degrees about Z / Y / X"}, {",  . / PgDn  PgUp", "lower / raise; Shift uses 0.01"}, {"Ctrl + D", "clone; click ground to drop"}, {"Ctrl + C  /  Ctrl + V", "copy / paste at the view centre"}, {"Del", "delete"}, {"End", "drop to the ground"}, {"Shift + scale drag", "five times finer scaling"}, {"Esc", "cancel a write confirmation, a carry or the selection"}, {"Ctrl + Z  /  Ctrl + Y", "undo / redo (also on the World tab)"}, {"Ctrl + S  or  F6", "save objects and terrain drafts"}, {"V", "show the first invalid thing"}}},
+        {"Edit: terrain", {{"T", "terrain tool (opens the Terrain tab)"}, {"LMB hold", "sculpt / paint"}, {"Space hold", "pin the brush to its last ground point"}, {"Ctrl + drag (sculpt)", "sample the target height"}, {"-  /  = (sculpt)", "lower / raise one fixed ground point"}, {"Shift", "swap raise / lower (including exact step); paint walkable"}, {"[  ]", "brush radius"}, {"Ctrl + click", "sample the theme to paint"}, {"Ctrl + Shift + click", "sample the theme to replace"}, {"LMB drag", "a path / a copy rectangle"}, {"R", "turn the paste 90 degrees"}}},
         {"World tab", {{"Drag a map", "move it (snaps to 32)"}, {"Arrow keys", "nudge the selected map by 32"}, {"Wheel / right drag", "zoom / pan"}, {"F  or  Home", "fit the world"}}},
-        {"Everywhere", {{"1  2  3  4", "objects / terrain / actors / level"}, {"Ctrl + F", "search the current browser"}, {"Ctrl + E", "export the selected map"}, {"Ctrl + O  /  Ctrl + Shift + O", "open a .lev / a world (.wld)"}, {"Ctrl + [  /  Ctrl + ]", "hide / show the side panels"}, {"Drop a .lev / .tng / .wld", "open a loose file or a world"}}},
+        {"Everywhere", {{"1  2  3  4", "objects / terrain / actors / level"}, {"Ctrl + F", "search the current browser"}, {"Ctrl + B", "save a dated snapshot of the current map"}, {"Ctrl + E", "export the selected map"}, {"Ctrl + O  /  Ctrl + Shift + O", "open a .lev / a world (.wld)"}, {"Ctrl + [  /  Ctrl + ]", "hide / show the side panels"}, {"Drop a .lev / .tng / .wld", "open a loose file or a world"}}},
     };
-    const float colW = S(190);
-    ImGui::Columns(2, "##helpcols", false);
-    ImGui::SetColumnWidth(0, std::min(S(720), vp->Size.x - S(40)) * 0.5f);
-    int i = 0;
     for (const Group& g : groups) {
-        if (i == 3) ImGui::NextColumn();
         ImGui::PushFont(fontBold_);
         ImGui::TextColored(theme::vec(theme::Accent), "%s", g.title);
         ImGui::PopFont();
         ImGui::PushFont(fontSmall_);
-        for (const Row& r : g.rows) {
-            ImGui::TextColored(theme::vec(theme::Text), "%s", r.keys);
-            ImGui::SameLine(colW);
-            ImGui::TextColored(theme::vec(theme::Muted), "%s", r.what);
+        if (ImGui::BeginTable(g.title, 2, ImGuiTableFlags_SizingStretchProp)) {
+            ImGui::TableSetupColumn("Keys", ImGuiTableColumnFlags_WidthFixed, std::min(S(220), ImGui::GetContentRegionAvail().x * 0.4f));
+            ImGui::TableSetupColumn("Action", ImGuiTableColumnFlags_WidthStretch);
+            for (const Row& r : g.rows) {
+                ImGui::TableNextRow();
+                ImGui::TableNextColumn();
+                ImGui::PushTextWrapPos(0);
+                ImGui::TextColored(theme::vec(theme::Text), "%s", r.keys);
+                ImGui::PopTextWrapPos();
+                ImGui::TableNextColumn();
+                ImGui::PushTextWrapPos(0);
+                ImGui::TextColored(theme::vec(theme::Muted), "%s", r.what);
+                ImGui::PopTextWrapPos();
+            }
+            ImGui::EndTable();
         }
         ImGui::PopFont();
         ImGui::Dummy(ImVec2(0, S(8)));
-        ++i;
     }
-    ImGui::Columns(1);
     ImGui::Dummy(ImVec2(0, S(4)));
     if (theme::ghostButton("Close", ImVec2(S(120), S(28)))) helpOpen_ = false;
     auto_.registerWidget("btn_help_close");
@@ -414,7 +451,7 @@ bool App::beginToolWindow(const char* id, const char* title, const char* subtitl
     const ImVec2 a = ImGui::GetCursorScreenPos();
     ImGui::GetWindowDrawList()->AddLine(ImVec2(a.x, a.y + S(4)), ImVec2(a.x + inner, a.y + S(4)), theme::col(theme::Border), 1.0f);
     ImGui::Dummy(ImVec2(0, S(10)));
-    if (ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) && ImGui::IsKeyPressed(ImGuiKey_Escape, false)) *open = false;
+    if (!confirmPending() && ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) && ImGui::IsKeyPressed(ImGuiKey_Escape, false)) *open = false;
     // Keep the title and Close reachable while the body scrolls on short screens.
     const float bodyMaxHeight = std::max(1.0f, toolMaxHeight - ImGui::GetCursorPosY() - ImGui::GetCurrentWindow()->WindowPadding.y);
     ImGui::SetNextWindowSizeConstraints(ImVec2(inner, 0), ImVec2(inner, bodyMaxHeight));
@@ -429,6 +466,7 @@ bool App::beginToolWindow(const char* id, const char* title, const char* subtitl
 void App::endToolWindow() { ImGui::EndChild(); ImGui::End(); }
 
 void App::drawToolWindows() {
+    drawSnapshotsWindow();
     if (!editMode_ || !documentLoaded() || texturesMode_ || worldMode_ || modsMode_) {
         selectionInspectorOpen_ = fitOpen_ = fractalOpen_ = budgetOpen_ = false;
         return;
@@ -446,7 +484,7 @@ void App::drawToolWindows() {
 }
 
 void App::drawSetupPanel() {
-    if (!setupOpen_) return;
+    if (!setupOpen_) { confirmRestore_ = false; return; }
     using theme::S;
     ImGui::OpenPopup("Setup");
     const ImGuiViewport* vp = ImGui::GetMainViewport();
@@ -494,10 +532,12 @@ void App::drawSetupPanel() {
         ImGui::PopTextWrapPos();
         ImGui::PopFont();
         // backups: everything FableForge has touched, and the way back
-        if (installValid_) {
+        if (!installPath_.empty() && fs::is_directory(installPath_)) {
             if (backupsScannedAt_ < 0 || ImGui::GetTime() - backupsScannedAt_ > 5.0) {
                 backupList_ = backups::scan(installPath_); backupsScannedAt_ = ImGui::GetTime();
-                try { bankReport_ = stbcompact::measure(installPath_); bankReportOk_ = true; } catch (const std::exception&) { bankReportOk_ = false; }
+                if (installValid_) {
+                    try { bankReport_ = stbcompact::measure(installPath_); bankReportOk_ = true; } catch (const std::exception&) { bankReportOk_ = false; }
+                }
             }
             size_t changed = 0; for (const auto& e : backupList_) changed += e.differs;
             ImGui::Dummy(ImVec2(0, S(10)));
@@ -515,6 +555,14 @@ void App::drawSetupPanel() {
                 }
                 ImGui::PopFont();
                 ImGui::EndChild();
+                if (!restoreError_.empty()) {
+                    ImGui::PushFont(fontSmall_);
+                    ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + contentWidth);
+                    ImGui::TextColored(theme::vec(theme::Error), "Restore did not finish: %s", restoreError_.c_str());
+                    auto_.registerWidget("setup_restore_error");
+                    ImGui::PopTextWrapPos();
+                    ImGui::PopFont();
+                }
                 if (!confirmRestore_) {
                     if (changed) {
                         if (theme::dangerButton("Restore backed-up files", ImVec2(contentWidth, S(28)))) confirmRestore_ = true;
@@ -569,13 +617,19 @@ bool App::compactBank() {
 }
 
 bool App::restoreAllBackups() {
-    if (!installValid_) return false;
+    restoreError_.clear();
+    if (installPath_.empty() || !fs::is_directory(installPath_) || backups::scan(installPath_).empty()) {
+        restoreError_ = "Choose a folder with tracked backups to restore.";
+        pushLog("restore: " + restoreError_, 2);
+        return false;
+    }
     if (previewFuture_.valid() || foliageFuture_.valid() || neighbourFuture_.valid() || ctxFuture_.valid() ||
         terrainDeployFuture_.valid() || worldFuture_.valid() || newLevelFuture_.valid() || compactFuture_.valid() ||
         meshImportFuture_.valid() || modsBusy() || exportFuture_.valid() || fitFuture_.valid() ||
-        worldDetailFuture_.valid() ||
+        worldDetailFuture_.valid() || textFuture_.valid() || definitionsBusy() ||
         std::any_of(worldTileWorkers_.begin(),worldTileWorkers_.end(),[](const auto& job){ return job.valid(); })) {
-        pushLog("restore: a load or write is still running; try again when it finishes", 1);
+        restoreError_ = "A load or write is still running; try again when it finishes.";
+        pushLog("restore: " + restoreError_, 1);
         return false;
     }
     std::vector<std::string> notes; std::string err;
@@ -594,6 +648,9 @@ bool App::restoreAllBackups() {
         dialogueTextIndex_.reset();dialogueTextRoot_.clear();dialogueTextError_.clear();
         dialogueSearchCacheKey_.clear();dialogueSearchResults_.clear();dialogueSearchGroups_.clear();
         dialogueScratchLanguage_.clear();setDialogueEditing(false);
+        definitionLoaded_=false;definitionSelected_.reset();definitionDecoded_.reset();
+        textLoaded_=false; textRows_.clear(); textById_.clear(); textFilteredRows_.clear();
+        textSelected_.reset(); textError_.clear(); textSelectionError_.clear(); textFilterDirty_=true;
         refreshModOrder();
         scanInstall(installPath_);
         selectedName_.clear(); docLoadedFor_.clear();
@@ -606,10 +663,30 @@ bool App::restoreAllBackups() {
         worldLoaded_ = false; worldLoadedFrom_.clear(); newLevelDonor_.clear();
         if (findEntry(selected)) selectMap(selected);
     }
-    return err.empty();
+    restoreError_ = err;
+    if (restoreError_.empty()) {
+        for (const auto& e : backups::scan(installPath_)) {
+            if (e.kind != backups::Kind::Staged || !e.differs) continue;
+            if (!restoreError_.empty()) restoreError_ += "\n";
+            restoreError_ += "Stage backup needs its deployment manifest: " +
+                fs::relative(e.backup, installPath_).string() +
+                ". Preserve it and recover the manifest before retrying.";
+        }
+    }
+    return restoreError_.empty();
+}
+
+bool App::settingsEnabled() const {
+    if (!auto_.active()) return true;
+    const char* owned=std::getenv("FABLEFORGE_TEST_SETTINGS");
+    return owned && fs::path(owned).is_absolute();
 }
 
 std::string App::settingsPath() const {
+    if (auto_.active()) {
+        const char* owned=std::getenv("FABLEFORGE_TEST_SETTINGS");
+        if (owned && fs::path(owned).is_absolute()) return owned;
+    }
     const char* appdata = std::getenv("APPDATA");
     const fs::path dir = fs::path(appdata ? appdata : ".") / "FableForge";
     // the app was Albion Atlas until 0.16: carry the old settings and presets over once
@@ -625,7 +702,26 @@ void App::loadSettings(std::string& savedInstall) {
     try {
         const auto j = nlohmann::json::parse(f);
         savedInstall = j.value("install", "");
+        sessionInstall_=savedInstall;
+        sessionMap_=j.value("lastMap","");
+        sessionEdit_=j.value("editMode",false);
+        terrainMode_=std::clamp(j.value("terrainMode",terrainMode_),0,18);
+        try {
+            if (j.contains("camera") && j["camera"].is_object() && j["camera"].value("map","")==sessionMap_)
+                sessionCamera_=readCamera(j["camera"]);
+        } catch (...) { sessionCamera_.reset(); }
+        if (j.contains("mapViews") && j["mapViews"].is_object()) {
+            for (const auto& [name,data] : j["mapViews"].items()) {
+                try {
+                    const auto view=readCamera(data);
+                    const int mode=data.value("mode",0);
+                    if (view && mode>=0 && mode<=int(ViewMode::Height)) mapViews_[name]={*view,ViewMode(mode)};
+                } catch (...) {} // One malformed view does not discard the others.
+            }
+        }
         settings_.outDir = j.value("out_dir", settings_.outDir);
+        settings_.autosave = j.value("autosave",settings_.autosave);
+        settings_.autosaveMinutes = std::clamp(j.value("autosaveMinutes",settings_.autosaveMinutes),1,30);
         settings_.format = j.value("format", settings_.format);
         settings_.up = j.value("up", settings_.up);
         settings_.textures = j.value("textures", settings_.textures);
@@ -645,6 +741,7 @@ void App::loadSettings(std::string& savedInstall) {
         settings_.showExplorer = j.value("showExplorer", settings_.showExplorer);
         settings_.showActions = j.value("showActions", settings_.showActions);
         moveOwned_ = j.value("moveOwned", moveOwned_);
+        placeSnapGrid_ = j.value("placeSnapGrid", placeSnapGrid_);
         if (j.contains("effectBackground") && j["effectBackground"].is_array() && j["effectBackground"].size()==3)
             for (size_t i=0;i<3;++i) {
                 const float colour=j["effectBackground"][i].get<float>();
@@ -655,20 +752,34 @@ void App::loadSettings(std::string& savedInstall) {
 }
 
 void App::saveSettings() const {
-    if (auto_.active()) return;
+    if (!settingsEnabled()) return;
     try {
         fs::create_directories(fs::path(settingsPath()).parent_path());
         nlohmann::json j = {
+            {"autosave",settings_.autosave}, {"autosaveMinutes",settings_.autosaveMinutes},
             {"install", installPath_}, {"out_dir", std::string(outDirBuf_)}, {"format", settings_.format},
             {"up", settings_.up}, {"textures", settings_.textures}, {"texels", settings_.texels},
             {"tile", settings_.tile}, {"gain", settings_.gain}, {"layers", settings_.layers}, {"walkable", settings_.walkable},
             {"foliage", settings_.foliage}, {"things", settings_.things}, {"water", settings_.water}, {"creatures", settings_.creatures}, {"texSize", settings_.texSize}, {"world", settings_.world},
             {"editTab", editTab_}, {"uiScale", settings_.uiScale},
+            {"lastMap",selectedName_}, {"editMode",editMode_}, {"terrainMode",terrainMode_},
             {"showExplorer", settings_.showExplorer}, {"showActions", settings_.showActions},
             {"moveOwned", moveOwned_},
+            {"placeSnapGrid", placeSnapGrid_},
             {"effectBackground", {effectBackground_[0],effectBackground_[1],effectBackground_[2]}},
             {"effectShowGrid", effectShowGrid_},
         };
+        auto views=mapViews_;
+        if (previewLoaded() && documentLoaded() && lastFramedFor_==selectedName_) {
+            views[selectedName_]={camera_,mode_};
+            j["camera"]=writeCamera(camera_);
+            j["camera"]["map"]=selectedName_;
+        }
+        j["mapViews"]=nlohmann::json::object();
+        for (const auto& [name,view] : views) {
+            j["mapViews"][name]=writeCamera(view.camera);
+            j["mapViews"][name]["mode"]=int(view.mode);
+        }
         std::ofstream(settingsPath()) << j.dump(2);
     } catch (...) {}
 }
@@ -679,7 +790,7 @@ void App::scanInstall(const std::string& picked) {
     {
         const fs::path p(picked);
         std::error_code ec;
-        if (!fs::exists(p / "data", ec) && fs::exists(p / "CompiledDefs" / "game.bin", ec) && p.has_parent_path()) {
+        if (!fs::exists(p / "data", ec) && fs::is_directory(p / "CompiledDefs", ec) && p.has_parent_path()) {
             root = p.parent_path().string();
             pushLog("that is the install's Data folder; using " + root, 1);
         }
@@ -687,7 +798,7 @@ void App::scanInstall(const std::string& picked) {
     const bool switching = !installPath_.empty() &&
         fs::path(installPath_).lexically_normal() != fs::path(root).lexically_normal();
     if (switching) {
-        if (hasUnsavedEdits() || worldPendingCount() || !dialogueStaged_.empty()) {
+        if (hasUnsavedEdits() || worldPendingCount() || !dialogueStaged_.empty() || textEditing_ || definitionEditing_) {
             pushLog("install: save or discard the current edits before changing folders", 1);
             return;
         }
@@ -701,6 +812,9 @@ void App::scanInstall(const std::string& picked) {
             pushLog("install: a load or write is still running; try again when it finishes", 1);
             return;
         }
+        mapViews_.clear(); sessionCamera_.reset(); sessionMap_.clear();
+        confirmRestore_ = false;
+        restoreError_.clear();
         selectedName_.clear(); docLoadedFor_.clear(); previewLoadedFor_.clear();
         foliageLoadedFor_.clear(); previewPendingName_.clear(); foliagePendingName_.clear();
         neighboursFor_.clear(); lastFramedFor_.clear();
@@ -729,8 +843,7 @@ void App::scanInstall(const std::string& picked) {
     effectBrowserThumbnails_.clear(); effectBrowserError_.clear();
     effectSimulation_.reset({}); effectRenderer_.clear(); effectTexturesReady_=false; effectMeshesReady_=false;
     effectTextureWarnings_.clear();
-    texturesLoaded_ = false; texRows_.clear(); texBanks_.clear(); texSelected_.clear();
-    texPreviewFor_.clear(); texPreview_ = nullptr;
+    invalidateTextureViews();
     levels_ = forge::levelstore::detect(root);
     const bool hasDefs = fs::exists(fs::path(root) / "data" / "CompiledDefs" / "game.bin");
     installValid_ = hasDefs && levels_.valid();
@@ -780,7 +893,7 @@ void App::startContextLoad(const std::string& fromRoot) {
     dialoguePresetChecked_=false;
     modelRoot_ = fromRoot.empty() ? installPath_ : fromRoot;
     ctxPending_ = std::make_shared<te::Context>();
-    const fs::path root = fromRoot.empty() ? fs::path(installPath_) : fs::path(fromRoot);
+    const fs::path root = fromRoot.empty() ? fs::u8path(installPath_) : fs::u8path(fromRoot);
     auto ctx = ctxPending_;
     ctxFuture_ = std::async(std::launch::async, [ctx, root]() {
         std::string err;
@@ -919,12 +1032,12 @@ bool App::openLooseLev(const std::string& path) {
 }
 
 void App::requestClose() {
-    if (hasUnsavedEdits() || worldPendingCount() > 0 || worldFuture_.valid() ||
-        !dialogueStaged_.empty()) {
+    if (recoveryFuture_.valid() || hasUnsavedEdits() || worldPendingCount() > 0 || worldFuture_.valid() ||
+        !dialogueStaged_.empty() || textEditing_ || definitionEditing_) {
         pendingSelect_.clear();
         closePending_ = true;
         closeSaveWaiting_ = worldFuture_.valid();
-    } else quit_ = true;
+    } else { if (recoveryPending_.empty()) retireRecovery(); quit_ = true; }
 }
 
 void App::selectMap(const std::string& nameOrKey) {
@@ -936,6 +1049,8 @@ void App::selectMap(const std::string& nameOrKey) {
     auto it = std::find_if(maps_.begin(), maps_.end(), [&](const MapEntry& m) { return m.key == nameOrKey; });
     if (it == maps_.end()) it = std::find_if(maps_.begin(), maps_.end(), [&](const MapEntry& m) { return m.name == nameOrKey; });
     if (it == maps_.end()) return;
+    if (previewLoaded() && documentLoaded() && lastFramedFor_==selectedName_) mapViews_[selectedName_]={camera_,mode_};
+    if (it->key!=sessionMap_) sessionCamera_.reset();
     selectedName_ = it->key;
     scrollToSelected_ = true;
     groupOpen_[it->group] = true;
@@ -965,6 +1080,7 @@ void App::setPreviewThings(bool on) {
 }
 
 void App::startFoliageLoad(bool foliageOnly) {
+    if(meshReplaceFuture_.valid()) {foliagePendingName_=selectedName_;return;}
     if (modFilesBusy()) { foliagePendingName_ = selectedName_; return; }
     if (selectedName_.empty() || !ctx_.ready()) return;
     if (foliageFuture_.valid()) { foliagePendingName_ = selectedName_; return; }
@@ -993,6 +1109,7 @@ void App::startFoliageLoad(bool foliageOnly) {
             to.gameRoot = root;
             to.graphicsBig = graphics;
             to.textures = true;
+            to.creatures = true; // Editor map previews show skinned creatures in bind pose.
             to.up = te::UpAxis::Y;
             to.tngText = tngText;
             try { r.things = thingsexport::load(entry.name, to, *ctx, &r.thingStats); } catch (const std::exception& e) { r.things.warnings.push_back(e.what()); }
@@ -1219,6 +1336,7 @@ void App::pollWorkers() {
         const auto [ok, err] = ctxFuture_.get();
         if (ok) {
             ctx_ = *ctxPending_;
+            renderer_.clearSurveyOverlay();
             pushLog("Textures ready (game.bin themes + textures.big)", 3);
             if (reloadWhenContextReady_ && !selectedName_.empty()) {
                 if (hasUnsavedEdits() || (documentLoaded() && doc_.strokeActive())) startThemeRebake();
@@ -1227,7 +1345,7 @@ void App::pollWorkers() {
             else if ((previewFoliage_ || previewThings_) && previewLoaded() && !foliageLoaded()) startFoliageLoad();
         } else {
             ctxError_ = err;
-            if (ctxPending_->themeLibrary()) ctx_ = *ctxPending_;   // defs-only context
+            if (ctxPending_->themeLibrary()) { ctx_ = *ctxPending_; renderer_.clearSurveyOverlay(); }   // defs-only context
             pushLog("Textures unavailable: " + err, 1);
         }
         ctxPending_.reset();
@@ -1239,7 +1357,12 @@ void App::pollWorkers() {
             pushLog("Preview failed for " + r.name + ": " + r.error, 2);
         } else if (r.name == selectedName_) {
             // Re-bakes of the same map (gain change, textures arriving) keep the camera.
-            renderer_.upload(r.scene, camera_, lastFramedFor_ != r.name);
+            const auto remembered=mapViews_.find(r.name);
+            const bool restoreView=lastFramedFor_!=r.name && remembered!=mapViews_.end() && documentLoaded();
+            const bool restoreCamera=sessionCamera_.has_value() && r.name==sessionMap_ && documentLoaded();
+            renderer_.upload(r.scene, camera_, !restoreCamera && !restoreView && lastFramedFor_ != r.name);
+            if (restoreView) { camera_=remembered->second.camera; mode_=remembered->second.mode; }
+            if (restoreCamera) { camera_=*sessionCamera_; sessionCamera_.reset(); }
             lastFramedFor_ = r.name;
             previewScene_ = std::move(r.scene);
             previewScene_.albedo = {};  // GPU owns it now; keep stats only
@@ -1356,6 +1479,9 @@ void App::pollWorkers() {
         else { ++batchDone_; ++batchFailed_; }
     }
     pollMeshImport();
+    pollMeshReplace();
+    pollTextBank();
+    pollDefinitions();
     pollModsTool();
     std::lock_guard<std::mutex> lock(logMutex_);
     for (auto& l : logPending_) {
@@ -1453,11 +1579,15 @@ int App::confirmRow(const char* question, const char* yes, float width, float he
     ImGui::PopTextWrapPos();
     ImGui::PopFont();
     const float half = (width - S(6)) * 0.5f;
+    const auto padding=ImGui::GetStyle().FramePadding;
+    const float labelWidth=std::max(1.f,half-2*padding.x);
+    height=std::max(height,std::max(ImGui::CalcTextSize(yes,nullptr,true,labelWidth).y,
+        ImGui::CalcTextSize("Cancel  (Esc)",nullptr,true,labelWidth).y)+2*padding.y);
     int r = 0;
-    if (theme::primaryButton(yes, ImVec2(half, height))) r = 1;
+    if (theme::primaryButton(yes, ImVec2(half, height), true, true)) r = 1;
     auto_.registerWidget(widget);
     ImGui::SameLine(0, S(6));
-    if (theme::ghostButton("Cancel  (Esc)", ImVec2(half, height))) r = -1;
+    if (theme::ghostButton("Cancel  (Esc)", ImVec2(half, height), true)) r = -1;
     // Escape backs out of a pending write; Enter deliberately does not confirm one
     if (r == 0 && !ImGui::GetIO().WantTextInput && ImGui::IsKeyPressed(ImGuiKey_Escape, false)) r = -1;
     return r;
@@ -1515,6 +1645,7 @@ std::vector<std::string> App::stateDump() const {
     { const InstallHealth h = installHealth(); v.push_back("install_textures=" + std::string(h.texturesBig ? "1" : "0")); v.push_back("install_fse=" + std::string(h.fse ? "1" : "0")); v.push_back("setup_open=" + std::string(setupOpen_ ? "1" : "0")); }
     if (installValid_) { size_t d = 0; for (const auto& e : backupList_) d += e.differs; v.push_back("backups_differ=" + std::to_string(d)); }
     v.push_back("maps=" + std::to_string(maps_.size()));
+    v.push_back("setup_restore_failed=" + std::to_string(!restoreError_.empty()));
     v.push_back("selected=" + selectedName_);
     v.push_back("settings_scroll=" + std::to_string(int(settingsScroll_)));
     v.push_back(std::string("settings_scrolled=") + (settingsScroll_ > 0.5f ? "1" : "0"));
@@ -1526,8 +1657,25 @@ std::vector<std::string> App::stateDump() const {
     v.push_back("context_ready=" + std::string(ctx_.ready() ? "1" : "0"));
     v.push_back("mode=" + std::string(kModeNames[int(mode_)]));
     v.push_back("rule_notice=" + (ruleKey_.empty() ? std::string("-") : ruleKey_));
+    v.push_back("brush_pin_point_valid=" + std::to_string(brushPinHaveLast_));
+    v.push_back("brush_pin_held=" + std::to_string(brushPinHeld_));
+    v.push_back("viewport_hovered=" + std::to_string(viewportHovered_));
+    v.push_back("brush_pinned=" + std::to_string(brushPinned_));
+    v.push_back("brush_pin_x=" + std::to_string(brushPinPoint_[0]));
+    v.push_back("brush_pin_y=" + std::to_string(brushPinPoint_[1]));
+    v.push_back("camera_fov_degrees=" + std::to_string(camera_.fovY * (180.f / 3.14159265358979323846f)));
+    v.push_back("ground_smear=" + std::to_string(paintSmear_));
+    v.push_back("terrain_mode=" + std::to_string(terrainMode_));
     v.push_back("edit_tab=" + std::to_string(editTab_));
     v.push_back("palette_definition="+placeDef_);
+    v.push_back("place_snap_grid=" + std::to_string(placeSnapGrid_));
+    v.push_back("pen_target=" + std::to_string(penTarget_));
+    v.push_back("pen_target_from_stroke=" + std::to_string(penTargetFromStroke_));
+    v.push_back("pen_speed=" + std::to_string(penSpeed_));
+    v.push_back("height_key_step=" + std::to_string(forge::heightpen::speedToOpacity(penSpeed_)));
+    v.push_back("height_key_active=" + std::to_string(keyStroke_));
+    v.push_back("height_key_x=" + std::to_string(keyAnchor_[0]));
+    v.push_back("height_key_y=" + std::to_string(keyAnchor_[1]));
     v.push_back("palette_reveal_pending="+std::to_string(!revealDef_.empty()));
     v.push_back("toasts=" + std::to_string(toasts_.size()));
     v.push_back("help_open=" + std::string(helpOpen_ ? "1" : "0"));
@@ -1682,6 +1830,8 @@ std::vector<std::string> App::stateDump() const {
     v.push_back("dialogue_pack_added=" + std::to_string(dialogueExportMessage_.rfind("Added ",0)==0));
     v.push_back("dialogue_audio_available=" + std::to_string(dialogueLoaded_ && dialogueAudioDuration_>0));
     v.push_back("dialogue_scrubbed=" + std::to_string(dialogueLoaded_ && dialogueTime_>0));
+    v.push_back("dialogue_at_end=" + std::to_string(dialogueLoaded_ &&
+        dialogueTime_>=float(std::max(dialogueAudioDuration_,double(dialogueEntry_.duration())))));
     v.push_back("dialogue_playing=" + std::to_string(dialogueMotionPlaying_ ||
         (dialogueAudio_ && dialogueAudio_->playing())));
     v.push_back("dialogue_audio_muted=" + std::to_string(dialogueAudioMuted_));
@@ -1731,6 +1881,59 @@ std::vector<std::string> App::stateDump() const {
     v.push_back("effect_meshes=" + std::to_string(effectBrowserSelection_.meshes.size()));
     v.push_back("effect_lights=" + std::to_string(effectBrowserSelection_.lights.size()));
     v.push_back("models_count=" + std::to_string(modelRows_.size()));
+    v.push_back("texts_count=" + std::to_string(textRows_.size()));
+    v.push_back("texts_decode_errors=" + std::to_string(std::count_if(textRows_.begin(),textRows_.end(),[](const auto& row){return !row.error.empty();})));
+    v.push_back("texts_filtered=" + std::to_string(textFilteredRows_.size()));
+    v.push_back("texts_busy=" + std::to_string(textsBusy()));
+    v.push_back("text_language=" + textLanguage_);
+    v.push_back("text_selected=" + (textSelected_ ? textRows_[*textSelected_].name : "-"));
+    v.push_back("text_ready=" + std::to_string(textSelected_ && textRows_[*textSelected_].type<=2 && textRows_[*textSelected_].error.empty() && textLoaded_ && !textsBusy()));
+    v.push_back("text_type=" + std::to_string(textSelected_ ? int(textRows_[*textSelected_].type) : -1));
+    v.push_back("text_tags=" + std::to_string(textSelected_ ? textRows_[*textSelected_].value.tags.size() : 0));
+    v.push_back("text_content=" + (textSelected_ ? textRows_[*textSelected_].value.content : ""));
+    v.push_back("text_members=" + std::to_string(textSelected_ ? textRows_[*textSelected_].value.groupMembers.size() : 0));
+    v.push_back("text_narrators=" + std::to_string(textSelected_ ? textRows_[*textSelected_].narrators.size() : 0));
+    v.push_back("text_export_busy=" + std::to_string(textExportBusy()));
+    v.push_back("text_export_failed=" + std::to_string(!textExportError_.empty()));
+    v.push_back("text_export_succeeded=" + std::to_string(!textExportSuccess_.empty()));
+    v.push_back("text_failed=" + std::to_string(!textError_.empty() || !textSelectionError_.empty() || (textSelected_ && !textRows_[*textSelected_].error.empty())));
+    v.push_back("definitions_busy="+std::to_string(definitionsBusy()));
+    v.push_back("definitions_count="+std::to_string(definitionFile_.entries().size()));
+    v.push_back("definitions_grouped="+std::to_string(std::count_if(definitionGroupOf_.begin(),definitionGroupOf_.end(),[](const auto& group){return group.has_value();})));
+    v.push_back("definitions_filtered="+std::to_string(definitionFiltered_.size()));
+    v.push_back("definition_bank="+definitionBank_);
+    v.push_back("definition_selected="+(definitionSelected_?std::to_string(*definitionSelected_):"-"));
+    v.push_back("definition_fields="+std::to_string(definitionDecoded_?definitionDecoded_->fields.size():0));
+    const auto definitionGroup=definitionBank_=="game.bin" && definitionDecoded_?definitionread::groupTarget(definitionFile_,*definitionDecoded_):std::optional<size_t>{};
+    v.push_back("definition_group="+(definitionGroup?std::to_string(*definitionGroup):"-"));
+    std::optional<uint32_t> definitionModel;
+    if(definitionBank_=="game.bin" && definitionSelected_ && definitionDecoded_)
+        for(size_t i=0;i<definitionDecoded_->fields.size();++i)
+            if(const auto model=definitionread::objectModelId(definitionFile_.entries()[*definitionSelected_],*definitionDecoded_,i)) definitionModel=model;
+    v.push_back("definition_model="+(definitionModel?std::to_string(*definitionModel):"-"));
+    size_t definitionTextures=0;
+    if(definitionBank_=="game.bin" && definitionSelected_ && definitionDecoded_)
+        for(size_t i=0;i<definitionDecoded_->fields.size();++i)
+            if(definitionread::themeTextureId(definitionFile_.entries()[*definitionSelected_],*definitionDecoded_,i)) ++definitionTextures;
+    v.push_back("definition_texture_links="+std::to_string(definitionTextures));
+    size_t definitionNameRefs=0;
+    if(definitionDecoded_) for(size_t i=0;i<definitionDecoded_->fields.size();++i) {
+        if(definitionDecoded_->fields[i].type!="CDefString") continue;
+        std::string name="-";
+        if(const auto offset=definitionread::nameOffset(*definitionDecoded_,i)) {
+            const auto found=definitionNameIndices_.find(*offset);
+            if(found!=definitionNameIndices_.end()) {
+                name=definitionFile_.originalNames()[found->second].second;
+                if(name.empty()) name="(empty name)";++definitionNameRefs;
+            }
+        }
+        v.push_back("definition_name_ref_"+std::to_string(i)+"="+name);
+    }
+    v.push_back("definition_name_refs="+std::to_string(definitionNameRefs));
+    v.push_back("definition_editing="+std::to_string(definitionEditing_));
+    v.push_back("definition_edit_failed="+std::to_string(!definitionEditError_.empty()));
+    v.push_back("definition_ready="+std::to_string(bool(definitionDecoded_)));
+    v.push_back("definition_failed="+std::to_string(!definitionError_.empty() || !definitionSelectionError_.empty() || !definitionDecodeError_.empty()));
     v.push_back("models_filtered=" + std::to_string(modelFiltered_));
     v.push_back("model_selected=" + modelName_);
     v.push_back("model_ready=" + std::to_string(modelReady_));
@@ -1744,20 +1947,89 @@ std::vector<std::string> App::stateDump() const {
     v.push_back("textures_mode=" + std::string(texturesMode_ ? "1" : "0"));
     v.push_back("mods_mode=" + std::string(modsMode_ ? "1" : "0"));
     v.push_back("mods_count=" + std::to_string(modOrder_.mods.size()));
+    const auto modOutcomes = modConflictOutcomes();
+    for (size_t i = 0; i < modOrder_.mods.size(); ++i) {
+        const auto outcome = modOutcomes.find(modOrder_.mods[i].name);
+        v.push_back("mods_wins_"+std::to_string(i)+"="+
+            std::to_string(outcome == modOutcomes.end() ? 0 : outcome->second.won.size()));
+        v.push_back("mods_losses_"+std::to_string(i)+"="+
+            std::to_string(outcome == modOutcomes.end() ? 0 : outcome->second.lost.size()));
+    }
     v.push_back("pack_destination=" + fs::path(packDest_).generic_string());
     v.push_back("mods_picks=" + std::to_string(modPicks_.size()));
+    v.push_back("mod_action_failed=" + std::to_string(!modsActionError_.empty()));
+    v.push_back("mod_choice_failed=" + std::to_string(!modsChoiceError_.empty()));
+    size_t unavailableChoices = 0;
+    if (modReportLoaded_)
+        for (const auto& conflict : modConflicts_) {
+            unavailableChoices += modChoiceUnavailable(conflict);
+            for (const auto& field : conflict.fields) unavailableChoices += modFieldChoiceUnavailable(conflict,field);
+        }
+    v.push_back("mods_unavailable_choices="+std::to_string(unavailableChoices));
+    v.push_back("mods_stale_file_choices="+std::to_string(std::count_if(
+        modConflicts_.begin(), modConflicts_.end(), [&](const ModConflict& c) { return modFileChoiceStale(c); })));
+    const auto unreportedChoices = modUnreportedChoices();
+    v.push_back("mods_unreported_choices="+std::to_string(unreportedChoices.size()));
+    size_t matchingUnreportedChoices = 0;
+    for (const auto& [key, winner] : unreportedChoices) {
+        ModConflict choice;
+        choice.kind = "saved choice"; choice.key = key; choice.label = modSavedChoiceLabel(key);
+        matchingUnreportedChoices += modConflictMatches(choice);
+    }
+    v.push_back("mods_unreported_matching="+std::to_string(matchingUnreportedChoices));
     v.push_back("mods_conflicts=" + std::to_string(modConflicts_.size()));
+    size_t matchingConflicts = 0;
+    std::string firstMatchingConflict;
+    for (const auto& conflict : modConflicts_) if (modConflictMatches(conflict)) {
+        if (!matchingConflicts) firstMatchingConflict = conflict.key;
+        ++matchingConflicts;
+    }
+    v.push_back("mods_conflicts_matching="+std::to_string(matchingConflicts));
+    v.push_back("mods_first_matching_conflict="+firstMatchingConflict);
+    v.push_back("mods_choices_only="+std::to_string(modChoicesOnly_));
     v.push_back("mods_first_winner=" + (modConflicts_.empty() ? std::string() : modConflictWinner(modConflicts_.front())));
+    size_t fieldConflicts=0;
+    for (const auto& conflict : modConflicts_) fieldConflicts+=conflict.fields.size();
+    v.push_back("mods_field_conflicts="+std::to_string(fieldConflicts));
+    v.push_back("mods_file_content_rows="+std::to_string(std::count_if(modConflicts_.begin(),modConflicts_.end(),
+        [](const ModConflict& conflict) { return conflict.hasFileContent; })));
+    if (!modConflicts_.empty()) {
+        const auto& first=modConflicts_.front();
+        if (first.hasFileContent) {
+            v.push_back("mods_first_file_base_present="+std::to_string(first.fileBaseline.present));
+            v.push_back("mods_first_file_base_sha256="+first.fileBaseline.sha256);
+            const auto winner=modConflictWinner(first);
+            const ModFileContent* selected=winner=="vanilla" ? &first.fileBaseline : nullptr;
+            for (const auto& version:first.fileVersions) if (version.mod==winner) selected=&version;
+            v.push_back("mods_first_file_selected_sha256="+(selected ? selected->sha256 : std::string()));
+        }
+        for (size_t i=0;i<first.fields.size();++i) {
+            v.push_back("mods_first_field_"+std::to_string(i)+"="+first.fields[i].field);
+            v.push_back("mods_first_field_winner_"+std::to_string(i)+"="+modFieldWinner(first,first.fields[i]));
+            if (first.fields[i].hasValues) {
+                v.push_back("mods_first_field_base_"+std::to_string(i)+"="+first.fields[i].baseline);
+                v.push_back("mods_first_field_value_"+std::to_string(i)+"="+modFieldValue(first,first.fields[i]));
+            }
+        }
+    }
     v.push_back("mods_missing_models=" + std::to_string(modNewMissingMeshes_.size()));
     v.push_back("origin_mods=" + std::to_string(originMods_.size()));
     v.push_back("mesh_import_busy=" + std::string(meshImportFuture_.valid() ? "1" : "0"));
+    v.push_back("mesh_replace_busy=" + std::string(meshReplaceBusy() ? "1" : "0"));
+    v.push_back("mesh_replace_failed=" + std::string(meshReplaceError_.empty() ? "0" : "1"));
+    v.push_back("mesh_replace_succeeded=" + std::string(meshReplaceSuccess_.empty() ? "0" : "1"));
     v.push_back("mesh_import_failed=" + std::string(meshImportError_.empty() ? "0" : "1"));
+    v.push_back("mesh_import_note_count=" + std::to_string(meshImportNotes_.size()));
     v.push_back("mesh_import_name=" + std::string(meshName_));
     v.push_back("custom_theme_failed=" + std::string(customThemeError_.empty() ? "0" : "1"));
     v.push_back("origin_things=" + std::to_string(thingOrigin_.size()));
     v.push_back("textures_count=" + std::to_string(texRows_.size()));
     v.push_back("texture_thumbs_made=" + std::to_string(texThumbsMade_));
     v.push_back("texture_search=" + std::string(texSearch_));
+    v.push_back("texture_export_failed=" + std::to_string(!texExportError_.empty()));
+    v.push_back("texture_replace_failed=" + std::to_string(!texReplaceError_.empty()));
+    v.push_back("texture_add_failed=" + std::to_string(!texAddError_.empty()));
+    v.push_back("texture_add_name=" + std::string(texAddName_));
     v.push_back("tool_panel_visible=" + std::to_string(settings_.showActions));
     { const auto* t = selectedTexture(); v.push_back("texture_selected=" + (t ? t->label : std::string("-"))); }
     v.push_back("world_loaded=" + std::string(worldLoaded_ ? "1" : "0"));
@@ -1797,6 +2069,14 @@ std::vector<std::string> App::stateDump() const {
     v.push_back("foliage_preview_reseated=" + std::to_string(foliagePreviewReseated_));
     v.push_back("foliage_preview_reseated_any=" + std::to_string(foliagePreviewReseated_ > 0));
     v.push_back("budget_open=" + std::to_string(budgetOpen_));
+    v.push_back("recovery_pending=" + std::to_string(!recoveryPending_.empty()));
+    v.push_back("recovery_busy=" + std::to_string(recoveryFuture_.valid()));
+    v.push_back("autosave_enabled=" + std::to_string(settings_.autosave));
+    v.push_back("budget_scope=" + std::to_string(budgetScope_));
+    v.push_back("budget_picking=" + std::to_string(budgetPicking_));
+    v.push_back("budget_areas=" + std::to_string(budgetAreas_.size()));
+    v.push_back("budget_area_drag=" + std::to_string(budgetAreaDrag_));
+    v.push_back("budget_things=" + std::to_string(budgetReport_.things));
     v.push_back("selection_inspector_def=" + (selectionInspectorOpen_ && documentLoaded() && selectedThing_ >= 0 && size_t(selectedThing_) < doc_.thingCount()
         ? doc_.summary(size_t(selectedThing_)).definition : std::string{}));
     v.push_back("doc_things=" + std::to_string(documentLoaded() ? doc_.thingCount() : 0));
@@ -1852,8 +2132,22 @@ std::vector<std::string> App::stateDump() const {
     }
     v.push_back("gizmo=" + std::to_string(gizmoOp_));
     v.push_back("brush_radius=" + std::to_string(brushRadius_));
+    v.push_back("paint_stamp=" + std::string(paintStamp_ ? "1" : "0"));
+    v.push_back("brush_cursor_vertices=" + std::to_string(brushCursorVertices_));
+    v.push_back("brush_cursor_sound_cells=" + std::to_string(brushCursorSoundCells_));
+    v.push_back("sound_index=" + std::to_string(soundIndex_));
+    v.push_back("brush_cursor_environment_cells=" + std::to_string(brushCursorEnvironmentCells_));
+    v.push_back("survey_overlay_kind=" + std::to_string(renderer_.hasSurveyOverlay() ? surveyOverlayKind_ : 0));
+    v.push_back("survey_overlay_filter=" + std::to_string(surveyOverlayFilter_));
+    v.push_back("environment_index=" + std::to_string(envSlot_));
+    v.push_back("shore_set=" + std::string(shoreSet_ ? "1" : "0"));
+    v.push_back("shore_overlay=" + std::string(shoreOverlayShow_ ? "1" : "0"));
+    v.push_back("environment_smear=" + std::string(envSmear_ ? "1" : "0"));
+    v.push_back("terrain_draft_dirty=" + std::string(doc_.hasTerrain() && doc_.terrainDraftDirty() ? "1" : "0"));
     v.push_back("terrain_dirty=" + std::string(documentLoaded() && doc_.hasTerrain() && doc_.terrainDirty() ? "1" : "0"));
     v.push_back("write_both_pending=" + std::string(writeObjectsAfterTerrain_ ? "1" : "0"));
+    v.push_back("snapshots_open=" + std::string(snapshotsOpen_ ? "1" : "0"));
+    v.push_back("snapshot_count=" + std::to_string(snapshots_.size()));
     v.push_back("confirm_pending=" + std::string(confirmPending() ? "1" : "0"));
     v.push_back("terrain_deploy_busy=" + std::string(terrainDeployBusy() ? "1" : "0"));
     std::string fileJob = activeFileJob() ? activeFileJob() : "none";
@@ -1872,6 +2166,7 @@ std::vector<std::string> App::stateDump() const {
 // ------------------------------------------------------------------ drawing
 
 void App::frame(float dt) {
+    pollRecovery();
     renderer_.pollTextureCleanup();
     time_ += dt;
     frameDialoguePlayback();
@@ -1894,6 +2189,7 @@ void App::frame(float dt) {
         else if (r.ok) pushLog("terrain saved into the game (start a new game or re-enter the region to see it)", 3);
         else pushLog("terrain save failed: " + r.error, 2);
         if (writeObjectsAfterTerrain_) finishWriteBoth(r.ok);
+        if (r.ok && r.pack.empty() && !hasUnsavedEdits()) retireRecovery();
     }
     if (worldFuture_.valid() && worldFuture_.wait_for(std::chrono::milliseconds(0)) == std::future_status::ready) {
         const WorldJob r = worldFuture_.get();
@@ -1909,7 +2205,7 @@ void App::frame(float dt) {
         if (closeSaveWaiting_) {
             closeSaveWaiting_ = false;
             if (r.ok && closePending_ && !hasUnsavedEdits() &&
-                worldPendingCount() == 0 && dialogueStaged_.empty()) quit_ = true;
+                worldPendingCount() == 0 && dialogueStaged_.empty() && !textEditing_ && !definitionEditing_) quit_ = true;
         }
     }
     if (newLevelFuture_.valid() && newLevelFuture_.wait_for(std::chrono::milliseconds(0)) == std::future_status::ready) {
@@ -2009,9 +2305,16 @@ void App::frame(float dt) {
     drawPanelStrip(false);
     if (settings_.showActions) { ImGui::SameLine(0, 0); drawActions(right); }
     drawUnsavedPrompt();
+    drawRecoveryPrompt();
     if (firstRun_ && !auto_.active()) { firstRun_ = false; setupOpen_ = true; tourPending_ = true; }
     drawToolWindows();
     if (!texturesMode_ || assetsTab_ != 1) modelImportOpen_ = false;
+    if (!texturesMode_ || assetsTab_ != 1) modelReplaceOpen_ = false;
+    if(modelReplaceOpen_ && beginToolWindow("##model_replace","Replace model geometry","Keep the mesh identity, materials and collision.",&modelReplaceOpen_,theme::S(460))) {
+        const float pad=ImGui::GetCursorPosX(),inner=ImGui::GetContentRegionAvail().x;
+        drawModelReplaceCard(pad,inner,inner-theme::S(24));
+        endToolWindow();
+    }
     if (modelImportOpen_ &&
         beginToolWindow("##model_import", "Import model", "Choose a model and its destination.",
                         &modelImportOpen_, theme::S(460))) {
@@ -2037,9 +2340,37 @@ void App::drawMenuBar() {
     if (!ImGui::BeginMenuBar()) { ImGui::PopStyleVar(); ImGui::PopStyleColor(); return; }
     ImGui::TextColored(theme::vec(theme::Accent), "FableForge");
     if (ImGui::IsItemHovered()) ImGui::SetTooltip("v" ALBION_VERSION "   Fable: The Lost Chapters level editor");
-    if (ImGui::BeginMenu("File")) {
+    const bool fileMenu = ImGui::BeginMenu("File");
+    auto_.registerWidget("menu_file");
+    if (fileMenu) {
         if (ImGui::MenuItem("Open world (.wld)...", "Ctrl+Shift+O")) openWorldFile();
         if (ImGui::MenuItem("Open level file (.lev)...", "Ctrl+O")) openLevelFile();
+        ImGui::Separator();
+        const bool recoveryMenu = ImGui::BeginMenu("Recovery snapshots");
+        auto_.registerWidget("menu_recovery");
+        if (recoveryMenu) {
+            if (ImGui::MenuItem("Automatic snapshots",nullptr,settings_.autosave)) { settings_.autosave=!settings_.autosave; saveSettings(); }
+            for (int minutes : {1,5,10,30}) {
+                const std::string label=minutes==1 ? "Every minute" : "Every "+std::to_string(minutes)+" minutes";
+                if (ImGui::MenuItem(label.c_str(),nullptr,settings_.autosaveMinutes==minutes)) { settings_.autosaveMinutes=minutes; saveSettings(); }
+            }
+            ImGui::Separator();
+            if (ImGui::MenuItem("Snapshot now",nullptr,false,documentLoaded() && !doc_.editActive() && !activeFileJob())) autosaveNow();
+            auto_.registerWidget("menu_autosave_now");
+            std::error_code ec;
+            const bool available=documentLoaded() && (!auto_.active() || !recoveryRoot_.empty()) && fs::is_regular_file(recoveryPath(),ec);
+            if (ImGui::MenuItem("Recover latest snapshot...",nullptr,false,available && !doc_.editActive() && !activeFileJob())) {
+                cancelCarry(); recoveryPending_=recoveryPath();
+            }
+            auto_.registerWidget("menu_recovery_restore");
+            ImGui::Separator();
+            const bool snapshotAllowed=documentLoaded() && (!auto_.active() || !recoveryRoot_.empty());
+            if (ImGui::MenuItem("Create dated snapshot","Ctrl+B",false,snapshotAllowed && !doc_.editActive() && !activeFileJob())) createSnapshot();
+            auto_.registerWidget("menu_snapshot_create");
+            if (ImGui::MenuItem("Saved snapshots...",nullptr,false,snapshotAllowed)) { snapshotsOpen_=true; snapshotsFor_.clear(); }
+            auto_.registerWidget("menu_snapshots");
+            ImGui::EndMenu();
+        }
         ImGui::Separator();
         if (ImGui::MenuItem("Change install folder...")) changeInstall();
         if (ImGui::MenuItem("Setup check...")) setupOpen_ = true;
@@ -2047,7 +2378,9 @@ void App::drawMenuBar() {
         if (ImGui::MenuItem("Exit", "Alt+F4")) requestClose();
         ImGui::EndMenu();
     }
-    if (ImGui::BeginMenu("View")) {
+    const bool viewMenu=ImGui::BeginMenu("View");
+    auto_.registerWidget("menu_view");
+    if (viewMenu) {
         ImGui::BeginDisabled(standaloneAssetPreview());
         if (ImGui::MenuItem("Map list", "Ctrl+[", settings_.showExplorer)) { settings_.showExplorer = !settings_.showExplorer; saveSettings(); }
         ImGui::EndDisabled();
@@ -2055,6 +2388,20 @@ void App::drawMenuBar() {
             ImGui::SetTooltip("The map list returns when you leave this asset preview.");
         if (ImGui::MenuItem("Tool panel", "Ctrl+]", settings_.showActions)) { settings_.showActions = !settings_.showActions; saveSettings(); }
         ImGui::Separator();
+        const bool cameraMenu=ImGui::BeginMenu("Map camera", documentLoaded() && !worldMode_ && !texturesMode_ && !modsMode_);
+        auto_.registerWidget("menu_map_camera");
+        if (cameraMenu) {
+            ImGui::TextUnformatted("Vertical field of view");
+            float degrees=camera_.fovY * (180.f / 3.14159265358979323846f);
+            ImGui::SetNextItemWidth(theme::S(220));
+            if (ImGui::SliderFloat("##camera_fov", &degrees, 30.f, 100.f, "%.1f deg", ImGuiSliderFlags_AlwaysClamp))
+                camera_.fovY=degrees * (3.14159265358979323846f / 180.f);
+            auto_.registerWidget("slider_camera_fov");
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("Narrower views zoom in; wider views show more of the map. Ctrl+click to type degrees.");
+            if (ImGui::Button("Reset field of view")) camera_.fovY=Camera{}.fovY;
+            auto_.registerWidget("button_camera_fov_reset");
+            ImGui::EndMenu();
+        }
         if (ImGui::BeginMenu("Text size")) {
             // on top of the display DPI and the window size
             for (const float z : {0.8f, 0.9f, 1.0f, 1.1f, 1.25f, 1.5f}) {
@@ -2335,7 +2682,7 @@ void App::handleViewportInput(const ImVec2& origin, const ImVec2& size) {
     const float panK = camera_.distance / std::max(size.y, 1.0f) * 1.6f;
 
     if (ImGui::IsMouseClicked(ImGuiMouseButton_Right)) {
-        contextClickArmed_ = editMode_ && documentLoaded() && viewportHovered_;
+        contextClickArmed_ = editMode_ && documentLoaded() && viewportHovered_ && !budgetPicking_;
         contextClickMoved_ = false;
         contextClickPos_ = io.MousePos;
     }
@@ -2365,6 +2712,12 @@ void App::handleViewportInput(const ImVec2& origin, const ImVec2& size) {
         const float boost = io.KeyShift ? 3.0f : 1.0f;
         if (fwd || strafe || rise) camera_.fly(fwd * boost, strafe * boost, rise * boost, std::min(io.DeltaTime, 0.1f));
     } else {
+        if (editMode_ && budgetOpen_ && budgetScope_ == 3 && budgetPicking_ && !io.KeyAlt) {
+            cancelCarry(); clickArmed_ = false;
+            if (ImGui::IsMouseDragging(ImGuiMouseButton_Middle,0.0f)) camera_.pan(-dx*panK,dy*panK);
+            if (io.MouseWheel != 0 && viewportHovered_) camera_.dolly(io.MouseWheel);
+            return;
+        }
         if (carryCursorMode_) {
             if (viewportHovered_ && size.x > 0 && size.y > 0) {
                 updateCarry((io.MousePos.x - origin.x) / size.x, (io.MousePos.y - origin.y) / size.y);
@@ -2440,6 +2793,17 @@ void App::drawViewport(float width) {
     const ImVec2 size = ImGui::GetContentRegionAvail();
     ImDrawList* dl = ImGui::GetWindowDrawList();
 
+    if (texturesMode_ && assetsTab_ == 6) {
+        viewportHovered_ = viewportCaptured_ = false;
+        drawDefinitionViewport(origin, size);drawViewportEdges();ImGui::EndChild();return;
+    }
+    if (texturesMode_ && assetsTab_ == 5) {
+        viewportHovered_ = viewportCaptured_ = false;
+        drawTextViewport(origin, size);
+        drawViewportEdges();
+        ImGui::EndChild();
+        return;
+    }
     if (texturesMode_ && assetsTab_ == 3) {
         viewportHovered_ = viewportCaptured_ = false;
         drawEffectViewport(origin, size);
@@ -2481,12 +2845,13 @@ void App::drawViewport(float width) {
         ImGui::EndChild();
         return;
     }
+    refreshSurveyOverlay();
     ID3D11ShaderResourceView* srv = renderer_.render(uint32_t(std::max(size.x, 8.0f)), uint32_t(std::max(size.y, 8.0f)), camera_, mode_, time_);
     if (srv) {
         ImGui::SetCursorScreenPos(origin);
         ImGui::Image((ImTextureID)(intptr_t)srv, size);
         viewportOrigin_ = origin; viewportSize_ = size;
-        viewportHovered_ = ImGui::IsItemHovered();
+        viewportHovered_ = ImGui::IsItemHovered(ImGuiHoveredFlags_NoNavOverride);
         // The controls are drawn later in this child. Keep their clicks from
         // selecting terrain or clearing the current thing underneath them.
         if (viewportHovered_) {
@@ -2494,14 +2859,17 @@ void App::drawViewport(float width) {
             if (ImGui::GetIO().MousePos.y >= controlsTop) viewportHovered_ = false;
         }
         refreshThingGlyphs(origin, size);
-        if (editMode_ && selectedThing_ >= 0 && size.x >= theme::S(280) &&
+        if (editMode_ && !budgetPicking_ && selectedThing_ >= 0 && size.x >= theme::S(280) &&
             ImGui::IsMouseHoveringRect(ImVec2(origin.x+theme::S(12),origin.y+theme::S(100)),
                                       ImVec2(origin.x+theme::S(276),origin.y+theme::S(140))))
             viewportHovered_ = false;
+        if (budgetOpen_ && budgetScope_ == 3 && budgetPicking_ && ImGui::IsMouseHoveringRect(ImVec2(origin.x+theme::S(12),origin.y+theme::S(70)),ImVec2(origin.x+std::min(theme::S(332),size.x-theme::S(12)),origin.y+theme::S(124)))) viewportHovered_=false;
+        budgetAreaInput(origin, size);
         handleViewportInput(origin, size);
         terrainInput(origin, size);
         drawGizmo(origin, size);
         drawBrushCursor(origin, size);
+        drawBudgetOverlay(origin, size);
         if (editMode_ && gizmoOp_ == 4 && terrainMode_ == 14 && !clipDrag_ &&
             clipRectValid_ && clipRectMap_ == doc_.mapName())
             drawGroundRect(origin, size, float(clipRect_[0]), float(clipRect_[1]),
@@ -2937,12 +3305,13 @@ void App::drawActions(float width) {
     if (modsMode_) {
         ImGui::SetCursorPosX(pad);
         ImGui::PushFont(fontSmall_);
-        theme::hintMore("The load order is kept next to Fable.exe; Undeploy restores the originals.", "The order lives in forge_mods.json next to Fable.exe. Deploy writes the merged files with .forgebak originals; Undeploy restores them. Setup's Restore also reverts the staged deployment and restores other tracked backups.");
+        theme::hintMore("The load order is kept in the save folder; Undeploy restores its originals.", "The order lives in forge_mods.json in the save folder. Deploy writes merged files there and keeps originals; Undeploy restores those originals. Setup's Restore manages backups for the install currently selected in Setup.");
         ImGui::PopFont();
     } else if (texturesMode_) {
         ImGui::SetCursorPosX(pad);
         ImGui::PushFont(fontSmall_);
         if (assetsTab_ == 3) theme::hint("Effects inspection is read-only.");
+        else if (assetsTab_ == 5) theme::hint(textEditing_?"Save asks for confirmation; Cancel discards the draft.":"Browse text or select a string to edit its content.");
         else if (assetsTab_ == 4) {
             ImGui::PopFont();
             if(theme::primaryButton(dialogueToolsOpen_?"Back to dialogue":"Edit lip sync", ImVec2(inner,S(32)),dialogueLoaded_))

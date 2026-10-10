@@ -3,11 +3,13 @@
 #include "forge/terrain.hpp"
 
 #include <cstdint>
+#include <utility>
 #include <vector>
 
 // The vanilla editor's Height Toolbox pens (FableWin CPaintMapDialog, Land tab), ported from
-// their code. One map block = one world unit = one Heightfield vertex. Every pen is a hard
-// disc around the pointer rounded to a block (fistp, round half to even); none has a falloff
+// their code. One map block = one world unit = one Heightfield vertex. Change Height,
+// Paint Height and Smear use hard discs around a rounded block (fistp, round half to even).
+// Noise gates by a disc mean but pokes in a square; height keys use a fractional disc. None has a falloff
 // or a time term -- each call is one application, which vanilla makes on the LMB press and,
 // with Spray can on, on every held event and the release. Change Height, Paint Height and
 // Smear keep heights in [0, 2048 - 1e-4] (GFLimit with DNZ_FOR_HEIGHTS); Noise clamps at 0 only. The water re-fit vanilla's setter does
@@ -20,6 +22,20 @@ constexpr float kMaxHeight = float(2048.0 - double(1.0e-4f));
 float sizeToRadius(float slider);
 // The Speed slider (0 .. 1): opacity = 1 - cos(pi/2 * value) (GetOpacity).
 float speedToOpacity(float speed);
+
+// In-map vertices of Change Height / Paint Height's rounded hard disc. This
+// uses their shared distance predicate; the cursor can show small exact pens.
+std::vector<std::pair<int, int>> discFootprint(int cellsX, int cellsY,
+                                            float x, float y, float radius);
+// Smear considers the strict integer-radius disc, with radius clamped to >=1
+// then truncated. The rejected boundary makes its vertex set symmetric.
+std::vector<std::pair<int, int>> smearFootprint(int cellsX, int cellsY,
+                                             float x, float y, float radius);
+// Distinct in-map vertices of the height-key pen. Its truncated fractional
+// positions can revisit a vertex near map edges; the actual pen keeps those
+// repeated applications, while the cursor query returns one dot per vertex.
+std::vector<std::pair<int, int>> heightAdditionFootprint(int cellsX, int cellsY,
+                                                      float x, float y, float radius);
 
 // Change Height (EditChangeHeightPenUndoable 0x02975710): every block with distance < r + 0.5
 // from the rounded centre gets `delta`, at most once per stroke -- `altered` (cellsX*cellsY,

@@ -193,7 +193,9 @@ const Hull* HullCache::forRenderMesh(uint32_t meshId) {
     if (r == byId_.end() || r->second->subHeader.size() < 4) return nullptr;
     uint32_t physics = 0;
     std::memcpy(&physics, r->second->subHeader.data(), 4);
-    return physics ? forPhysicsMesh(physics) : nullptr;
+    // Native metadata skips zero; C3DMeshInfo::HasPhysicsMesh also rejects the
+    // all-ones runtime sentinel (0313D620). Other high unsigned IDs are valid.
+    return physics && physics != UINT32_MAX ? forPhysicsMesh(physics) : nullptr;
 }
 
 const Hull* HullCache::forPhysicsMesh(uint32_t physicsId) {

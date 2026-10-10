@@ -3,10 +3,25 @@
 Open a map, then **Edit > Terrain** (or press T). The **Terrain tool** card has
 four groups: **Sculpt** (heights), **Paint** (what the ground looks and sounds
 like), **Passability** (where the hero and camera may go) and **Region** (copy and
-paste). This page covers Paint and Passability. Every stroke is one undo step
-(Ctrl+Z).
+paste). Every stroke is one undo step (Ctrl+Z).
 
 ![Painting a sand path](img/paint_ground.png)
+
+## Pick a sculpting height
+
+With Raise, Lower, Flatten, Smooth, Noise or Paths selected, hold Ctrl and drag
+on the ground to sample its height without changing it. **Paint height** shows
+the current sample. Switch to **Flatten** to level the ground to that height.
+Hold `-` or `=` in a sculpt tool to lower or raise a fixed ground spot. Moving
+the pointer keeps the edit at its starting point; release finishes the stroke.
+**Speed** is available in each sculpt tool. Hover it to see the height-key step.
+With **Exact step** in Raise/Lower, or with Flatten, small brushes show dots on
+the vertices they affect. A 0.25-cell radius affects one vertex.
+Smooth also shows its considered vertices; its radius rounds down to a whole
+cell, with a minimum of 1. Smooth may leave flat ground and straight slopes as they are.
+Noise shows a square enclosing its possible random pokes.
+While a height key is held, small brushes show the key pen's distinct vertices.
+At a radius of 0.25 or 0.5 it reaches none; increase **Radius** when prompted.
 
 ## Ground textures
 
@@ -19,6 +34,18 @@ paste). This page covers Paint and Passability. Every stroke is one undo step
 3. Hold the left mouse button on the ground. **Radius** sets the brush size
    (`[` and `]`), **Strength** how quickly the theme blends in.
 
+**Full stamp** sets every considered vertex fully to the theme in one
+application. It uses a strict disc centred on a truncated vertex; small cursors
+show the vertices. Strength is hidden while Full stamp is on. Switch it off to
+keep soft blending.
+
+Choose Ground's **Smear** to soften boundaries between existing ground themes.
+No theme selection is needed: each vertex blends its 3x3 neighbourhood and
+keeps the three strongest distinct themes. Click to apply once, or enable
+**Repeat while held** to keep blending. The whole stroke is one undo step.
+Radius rounds down to a whole cell, with a minimum of 1. Small cursors show
+the affected vertices; Smear stays within the current map.
+
 Hide **Foliage** in the chips at the bottom of the view to see the ground under
 trees. Your own picture can become a theme too: *Your own ground texture...*
 opens **Assets > Ground themes**.
@@ -27,9 +54,21 @@ opens **Assets > Ground themes**.
 whole connected patch with one click, like the vanilla editor. For both, Ctrl+click
 the ground to pick the theme to paint and Ctrl+Shift+click to pick the theme to
 replace.
+Replace's small cursor shows the vertices it considers; only matching themes
+change. It truncates the pointer to a vertex and excludes the radius boundary,
+so a radius of 1 considers one vertex.
 
 **Environ.** and **Sound** paint the map's environment (lighting and atmosphere)
 and ambient sound regions. Ctrl+click samples what is already under the cursor.
+Small Sound brushes outline each 4x4 cell they touch; even a 0.25-cell brush
+paints the cell containing its rounded ground vertex.
+Environ. sets each touched 4x4 cell fully to the chosen environment. Its small
+brush outlines the cells; *(no environment)* clears them. Radius 1 considers
+only the pointer's truncated vertex, which can differ from Sound's brush.
+Switch Environ. from **Paint** to **Smear** to blend each reached cell with its
+neighbours. Small brushes outline the cells; increase **Radius** if prompted.
+Smear has a minimum effective radius of 1 and works within this map. Holding
+the mouse keeps blending; Ctrl+Z undoes the whole stroke.
 With *(no sound)* chosen, **Clear all sounds on this map** removes every ambient
 sound in one step; with a sound chosen, the same button fills the whole map with it.
 Older `.lev` files without a game-map grid do not offer these two.
@@ -46,10 +85,41 @@ is walkable, red is blocked.
 - **Camera ok / Camera no** paint where the camera may pass. Walkable ground is
   always camera-passable, so this matters on cliffs, walls and water edges.
 
+**Shore** paints shore-point flags with **On** or **Off**. Hold Shift to reverse
+the stroke. **Show shore points** marks set cells in translucent red; small
+brushes show the affected vertices. The flags save with terrain and undo as one
+stroke. The visible water shoreline comes from water generation.
+
+Walkable, Blocked, Camera ok and Camera no use a rounded vertex pen. Small
+brushes show the affected vertices; a radius of 0.25 reaches one vertex and a
+radius of 1 reaches nine. Extra boundary vertices are excluded.
+
 Painting walkability changes the map's navigation by patching the game's existing
 navigation data. It does not regenerate navigation for a whole map.
 
+## Save your work
+
+**Save draft**, Ctrl+S or F6 saves objects and terrain together. F7 saves and
+reloads the current map. You can switch maps or close the editor after saving;
+reopening the map restores its terrain draft.
+
+Terrain drafts use `<map>.lev.forge-draft` beside the level files. The game
+ignores this file on both stock and loose installs. **Write terrain** remains
+available after saving and applies the terrain to the game, including its bake.
+An object draft remains a `.tng` file; on a loose or external-world install,
+the game reads that file, so saving object edits requires the game to be closed.
+
+If either part of a joint draft save fails, both edits remain pending. Pack
+exports retain the install's authoring draft. A successful terrain write into
+the game retires its draft file. Restore removes Forge-created draft files.
+
 ## Write it into the game
+
+Sound and Environ. show their regions in the themes' editor colours. Sound can
+show all sounds, only the selected sound, or be switched off. Environ. has its
+own **Show colours** toggle. Both update during painting and undo. Colour chips
+in the theme pickers select that theme. These are region labels, rather than
+previews of audible sound or the game's lighting.
 
 Painted themes, walkability and heights are all part of the terrain. Press
 **Write terrain into the game** at the bottom of the Edit panel (or *Write terrain

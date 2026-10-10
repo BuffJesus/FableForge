@@ -97,6 +97,9 @@ struct Light {
     std::string name;
 };
 
+struct MeshBank; // retained archive index and geometry cache for one source
+using MeshBankHandle = std::shared_ptr<MeshBank>;
+
 struct Scene {
     std::string mapName;
     std::string rootName = "Foliage"; // glTF root node / OBJ object suffix
@@ -115,6 +118,7 @@ struct Scene {
     int zspriteDuplicates = 0;        // ...of which coincide with a type-0 placement and were dropped
     int treeInstances = 0;            // type-0/2 (single-mesh) instances placed
     std::vector<std::string> warnings;
+    MeshBankHandle meshBank; // retain source identity for deferred world LOD reads
     size_t triangleCount() const;
 };
 
@@ -124,12 +128,20 @@ struct Scene {
 void setTextureLimit(int maxDimension);
 int textureLimit();
 
+// Reuse only while path, file size and modification time match. Failure clears
+// the active cache; geometry already held by callers stays valid.
+// Workers retain a handle so another install cannot redirect subsequent reads.
+// Payloads remain lazy disk reads; concurrent rewriting of that file is unsupported.
+MeshBankHandle acquireMeshBank(const std::filesystem::path& graphicsBig, std::string& err);
 bool openMeshBank(const std::filesystem::path& graphicsBig, std::string& err);
-// forget the open bank and every decoded mesh (after graphics.big was rewritten: an import)
+// Forget the default bank after an import. Existing worker handles stay alive.
 void closeMeshBank();
 // Retain immutable geometry while exporting: closing/reopening the bank drops
-// cache ownership but must not invalidate an active worker's mesh.
+// default cache ownership but must not invalidate an active worker's mesh.
 std::shared_ptr<const forge::meshpreview::Geometry> cachedMesh(uint32_t id, std::string& err);
+std::shared_ptr<const forge::meshpreview::Geometry> cachedMesh(const MeshBankHandle& bank, uint32_t id, std::string& err);
+std::string meshName(const MeshBankHandle& bank, uint32_t id);
+uint32_t meshIdByName(const MeshBankHandle& bank, const std::string& name);
 std::string meshName(uint32_t id);
 uint32_t meshIdByName(const std::string& name);   // 0 when unknown
 // Build a Mesh (parts split by material, textures resolved through `context`,

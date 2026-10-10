@@ -1,9 +1,15 @@
 # Mod packs and load order
 
 The **Mods** tab keeps one ordered list of every mod you want, builds them
-together onto the retail files and can undo the whole deploy. Mods are merged
-record by record, so two mods that change different parts of the same game file
-both keep their changes.
+together onto the selected installation and can undo the whole deploy. Supported
+named definition records and level objects merge individually.
+
+Whole overhauls can also merge unnamed components when their record identities
+agree with the baseline and other active banks. Their supported fields use the
+same conflict choices as smaller mods. When two banks assign different content
+to the same identity, Forge reports the collision instead of silently dropping
+edits. Using an intact overhaul installation as the baseline remains an option;
+in that case, do not add the same overhaul again as a source.
 
 ![Two mods in the load order](img/mods_load_order.png)
 
@@ -23,6 +29,10 @@ The tick box beside each row turns a mod off without removing it.
 
 ## Order them
 
+If choosing a winner or clearing a saved choice fails, Mods keeps the error
+visible beside the choices. The previous selection stays saved. Resolve the
+reported file/access problem, then retry the choice.
+
 The **top loads first and the last mod wins**. Drag a name, or use the arrows,
 to reorder. Game records, a level's objects, text strings and world maps/regions
 are merged; whole files such as texture banks come from the last mod that ships
@@ -40,13 +50,33 @@ that several enabled mods change differently. Edits that agree are not
 conflicts. For each conflict you can keep the load-order winner, pick another
 mod, or pick *vanilla*. Your picks are saved and applied by the next deploy.
 
+For records merged by field, expand **Conflicting fields** to see each field's
+winner and the mods that changed it. The record choice resolves contested fields;
+other edits still merge. A selected mod only wins fields it changed. If it left
+a field unchanged, the last mod that changed that field wins instead, with an
+explanation beside the field. **Vanilla for conflicting fields** restores those
+contested fields and keeps independent edits from the other mods.
+
+Supported named scalar fields also have their own winner dropdown. A field
+choice takes precedence over the record choice. **Current baseline** restores
+that contested field; **record / load order** clears only its field choice.
+Other independent edits still merge. The selected values and wins/loses counts
+update immediately; Build and deploy applies the saved choices.
+
+If a saved field source has no changed value in the current comparison, Forge
+keeps the choice for review and uses the record choice. Choices whose targets
+or field layouts are absent from the latest report appear under **Other saved
+choices**, where you can clear them individually. Values describe the last
+check; run Check conflicts again after updating your mods.
+
 ## Deploy and undeploy
 
-**Build and deploy into the game** undoes the previous deploy, builds the whole
-order onto the retail files and installs the result, keeping the originals.
-**Undeploy** puts the retail files back. Both refuse while Fable runs. The
-Activity log shows the build's progress and any refused input; an invalid mod is
-rejected before the previous deployment is replaced.
+**Build and deploy** first undoes the save folder's previous deployment, then
+builds the whole order and installs the result, keeping the originals.
+**Undeploy** restores those originals. Both refuse while Fable runs from that
+destination. Failures stay visible beside the actions; Activity contains the
+full diagnostics. If the new build fails after reverting a previous deployment,
+the destination remains restored to its original files. Fix the input and retry.
 
 After a deploy, the Edit tab marks objects that a mod placed or changed.
 *Placed by* filters the object list by mod, and *Back to retail* on a selected

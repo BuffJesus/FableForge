@@ -1,0 +1,139 @@
+# Cell-centre placement, paste and carry. In-memory edits only; no game writes.
+wait_maps
+wait_ready
+select StartOakValeWest
+wait_loaded
+wait_foliage
+edit 1
+tour -1
+gizmo 0
+edit_tab 0
+set place_def OBJECT_BARREL_BREAKABLE
+camera 30.7 40.8 45 0 0.8 20
+frames 5
+snapshot_document
+assert_state place_snap_grid 0
+place OBJECT_BARREL_BREAKABLE
+wait_foliage
+assert_selected_xy 30.7 40.8
+assert_selected_ground
+undo
+wait_foliage
+assert_document_same
+# Enable through the real control, including at compact size/scale.
+reveal toggle_place_snap_grid
+frames 8
+reveal toggle_place_snap_grid
+frames 8
+click toggle_place_snap_grid
+frames 3
+assert_state place_snap_grid 1
+mouse_move viewport
+clear_toasts
+frames 3
+screenshot build/ui/placement_grid_options.png
+place OBJECT_BARREL_BREAKABLE
+wait_foliage
+assert_selected_xy 30.5 40.5
+assert_selected_ground
+undo
+wait_foliage
+assert_document_same
+# Fixed height is applied after sampling the snapped ground point.
+set place_height 5000
+place OBJECT_BARREL_BREAKABLE
+wait_foliage
+assert_selected_xy 30.5 40.5
+assert_selected_height 5000
+undo
+wait_foliage
+set place_height -1000
+place OBJECT_BARREL_BREAKABLE
+wait_foliage
+assert_selected_xy 30.5 40.5
+assert_selected_ground
+undo
+wait_foliage
+set place_height off
+# The camera-point and pointer placement paths use the same option.
+place_at 0.5 0.5
+wait_foliage
+assert_selected_cell_centre
+assert_selected_ground
+undo
+wait_foliage
+assert_document_same
+# Paste snaps its anchor, preserving the fragment layout rather than each item.
+select_def OBJECT_BARREL_BREAKABLE
+copy
+camera 30.7 40.8 45 0 0.8 20
+frames 3
+paste
+wait_foliage
+assert_selected_xy 30.5 40.5
+assert_selected_ground
+undo
+wait_foliage
+assert_document_same
+# Special authoring paths keep their own height rules (emitters stay 0.5 above).
+place_emitter FIRE
+wait_foliage
+assert_selected_xy 30.5 40.5
+assert_selected_ground 0.5
+undo
+wait_foliage
+place_fishing_spot -
+wait_foliage
+assert_selected_xy 30.5 40.5
+assert_selected_ground
+undo
+wait_foliage
+place_village VILLAGE_GENERIC GridVillage
+wait_foliage
+assert_selected_xy 30.5 40.5
+assert_selected_ground
+undo
+wait_foliage
+assert_document_same
+# Carry snaps after the grab offset, preserves height, and undoes exactly.
+place_spawner 15 4 WASPS_01,WASPS_02 GridSpawner
+wait_foliage
+assert_selected_xy 30.5 40.5
+assert_selected_ground
+undo
+wait_foliage
+assert_document_same
+select_def OBJECT_BARREL_BREAKABLE
+frame_selected
+frames 5
+snapshot_frame
+mouse_move selected_pivot
+mouse_down left
+mouse_delta 70 35
+frames 3
+assert_state carrying 1
+mouse_up left
+wait_foliage
+assert_selected_cell_centre
+assert_ground_offset_same
+undo
+wait_foliage
+assert_selected_frame_same
+assert_document_same
+# Disable through the control and verify exact unsnapped placement returns.
+edit_tab 0
+reveal toggle_place_snap_grid
+frames 8
+reveal toggle_place_snap_grid
+frames 8
+click toggle_place_snap_grid
+frames 3
+assert_state place_snap_grid 0
+camera 30.7 40.8 45 0 0.8 20
+place OBJECT_BARREL_BREAKABLE
+wait_foliage
+assert_selected_xy 30.7 40.8
+undo
+wait_foliage
+assert_document_same
+quit

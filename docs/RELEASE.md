@@ -22,6 +22,37 @@ Keep local development packages separate from published assets with
 `python tools/package.py --no-check --output-dir dist/development` after the
 relevant checks pass. Both the application and guide ZIPs use that destination;
 `--guide-only` accepts it too. The default remains `dist` for release tooling.
+Packaging follows local Markdown links from the shipped user guides and adds
+missing document/assets/licence dependencies from docs/vendor. Broken or escaping
+links stop packaging before the ZIP is written. `tools/test_package.py <zip>`
+checks extracted links and runs retail/GUI plus field-comparison, long-value,
+search, unavailable-choice and unreported-choice workflows from an unrelated
+working directory. The asset-restore fixture also exercises packaged mesh import
+and Setup restoration of real copied banks.
+The GUI smoke uses an explicit 1440x900 window and private settings/cache folders
+so saved geometry or UI scale cannot substitute a compact toolbar for its chip
+clicks. Float conflict coverage likewise isolates settings at both tested sizes.
+The package gate also checks ordinary and complete-Data whole-file review
+refusals. It writes `progress.json` after each completed workflow, including the
+archive SHA256 and any nonzero exit status. After correcting a failed fixture, use
+`--start-at <workflow-name>` to exercise the remaining workflows from the same
+archive. Earlier workflows appear as `not_run`, never as passes; retain the
+earlier logs and report combined coverage only for the identical archive hash.
+`--only <name> ...` selects focused workflows for a later artifact; it also
+reports all omitted checks as `not_run`. Scalar and record contributor checks
+cover ordinary and synthetic complete-Data composition. Unknown/unavailable
+requested workflow names fail the gate.
+Extracted-package checks also cover locked/partial writes, ambiguous recovery
+records, active/orphaned stages, confirmation cancellation and absent bank,
+loose-level and stock-WAD recovery. Recovery fixtures accept `--gui` and `--cwd`
+so the executable and working directory both belong to the extracted check.
+
+Application ZIPs include `PACKAGE_INFO.json`: sizes and SHA256 hashes for all
+shipped files after stripping, plus the version and packaging checkout commit /
+tracked-change status when Git is available. The manifest excludes itself.
+Checkout metadata identifies the packaging source tree; it does not verify the
+source revision used to build existing executables. Record the archive hash and
+actual check results alongside it when reporting development-build acceptance.
 
 ## Final release checklist
 

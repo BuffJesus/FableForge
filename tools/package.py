@@ -4,8 +4,66 @@ README, LICENSE and third-party notices. Runs check_all first unless --no-check.
 
   python tools/package.py [--version 0.1.0] [--no-check] [--guide-only] [--output-dir dist]
 """
-import argparse, os, re, shutil, subprocess, sys, zipfile
+import argparse, hashlib, json, os, re, shutil, subprocess, sys, zipfile
 from pathlib import Path
+from urllib.parse import unquote
+
+
+def write_package_identity(root, stage, version):
+    """Identify shipped bytes; checkout metadata is not executable provenance."""
+    checkout = {'commit': None, 'tracked_changes': None}
+    try:
+        commit = subprocess.run(['git', 'rev-parse', 'HEAD'], cwd=root,
+                                capture_output=True, text=True, check=True).stdout.strip()
+        status = subprocess.run(['git', 'status', '--porcelain', '--untracked-files=no'],
+                                cwd=root, capture_output=True, text=True, check=True).stdout
+        if re.fullmatch(r'[0-9a-f]{40,64}', commit):
+            checkout = {'commit': commit, 'tracked_changes': bool(status.strip())}
+    except (OSError, subprocess.CalledProcessError):
+        pass  # Source archives and machines without Git still package normally.
+    files = {}
+    for path in sorted(stage.rglob('*')):
+        if path.is_file() and path != stage / 'PACKAGE_INFO.json':
+            files[path.relative_to(stage).as_posix()] = {
+                'bytes': path.stat().st_size,
+                'sha256': hashlib.sha256(path.read_bytes()).hexdigest()}
+    (stage / 'PACKAGE_INFO.json').write_text(json.dumps({
+        'format': 1, 'version': version, 'packaging_checkout': checkout,
+        'checkout_scope': 'Checkout at packaging time; executable build provenance is not verified.',
+        'files': files}, indent=2) + '\n', encoding='utf-8')
+
+
+def copy_document_dependencies(root, stage):
+    """Complete local Markdown links reachable from packaged user documentation."""
+    root, stage = root.resolve(), stage.resolve()
+    pending = [stage / name for name in ('README.md', 'FIRST_LEVEL.md', 'EDITOR.md',
+        'ENGINE_RULES.md', 'AUTOMATION.md', 'THIRD_PARTY.md')]
+    visited = set()
+    copied = []
+    while pending:
+        document = pending.pop()
+        if document in visited: continue
+        visited.add(document)
+        for link in re.findall(r'\]\(([^)]+)\)', document.read_text(encoding='utf-8')):
+            link = link.split('#')[0]
+            if not link or re.match(r'[A-Za-z]+:', link): continue
+            target = (document.parent / unquote(link)).resolve()
+            if not target.is_relative_to(stage):
+                raise RuntimeError(f'Packaged document link escapes staging: {document.name}: {link}')
+            if not target.is_file():
+                source = (root / target.relative_to(stage)).resolve()
+                if not source.is_relative_to(root) or not source.is_file():
+                    raise RuntimeError(f'Packaged document dependency missing: {document.name}: {link}')
+                # Local links may supply docs/assets/licences, never build/work
+                # scratch trees or executable dependencies by accident.
+                if (not (source.is_relative_to(root / 'docs') or source.is_relative_to(root / 'vendor')) or
+                    source.suffix.lower() not in {'.md', '.txt', '.png', '.jpg', '.jpeg', '.gif', '.svg', '.html', '.json', '.pdf'}):
+                    raise RuntimeError(f'Unsupported packaged document dependency: {source}')
+                target.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy(source, target)
+                copied.append(str(target.relative_to(stage)))
+            if target.suffix.lower() == '.md': pending.append(target)
+    print(f'  local document dependencies: {len(copied)} added, {len(visited)} pages checked')
 
 def package_guide(root, output=None):
     guide_dir = root / "docs/walkthrough/aeon-controller"
@@ -19,10 +77,14 @@ def package_guide(root, output=None):
     guide_zip = output / "FableForge-Aeon-Controller-Guide.zip"
     with zipfile.ZipFile(guide_zip, "w", zipfile.ZIP_DEFLATED) as archive:
         archive.write(guide_dir / "index.html", "AEON_CONTROLLER.html")
-        for shot in ("01-order.png", "02-add.png", "03-check.png", "04-deploy.png"):
+        for shot in ("01-order.png", "02-add.png", "03-check.png", "04-deploy.png",
+                     "05-aeon-selected.png", "06-fmp-selected.png", "07-runtime-selected.png"):
             archive.write(guide_dir / shot, shot)
         archive.writestr("README.txt",
             "Extract this ZIP, then open AEON_CONTROLLER.html in your browser.\n\n"
+            "Use the updated application build specified in the guide; the older rc.3 rejects this route.\n"
+            "Aeon 5.03 has no Data folder in the ZIP: put its Bones, CompiledDefs, graphics, lang and Levels folders in a new AeonEdition/Data folder.\n"
+            "Then add AeonEdition, controller FMP and the original controller runtime folder in Forge, in that order.\n"
             "Download FableForge separately from:\n"
             f"{download}\n\n"
             "This ZIP contains only the illustrated guide, not the application or mods.\n")
@@ -65,6 +127,7 @@ def main():
     for doc in ["FIRST_LEVEL.md", "ENGINE_RULES.md", "EDITOR.md", "AUTOMATION.md", "CLI.md"]:
         readme = readme.replace("docs/" + doc, doc)
     readme = readme.replace("docs/guide/", "guide/")
+    readme = readme.replace("docs/walkthrough/aeon-controller/index.html", "AEON_CONTROLLER.html")
     readme = readme.replace("vendor/EgoCore-LICENSE.txt", "EgoCore-LICENSE.txt")
     readme = readme.replace("vendor/VENDORED.md", "THIRD_PARTY.md")
     readme += "\nIllustrated Aeon Edition + Controller Support setup: open [AEON_CONTROLLER.html](AEON_CONTROLLER.html) in your browser.\n"
@@ -91,7 +154,8 @@ def main():
     shutil.copy(os.path.join("docs", "CLI.md"), stage)
     shutil.copytree(os.path.join("docs", "walkthrough"), os.path.join(stage, "walkthrough"))
     guide = (root / "docs/walkthrough/aeon-controller/index.html").read_text(encoding="utf-8")
-    for shot in ("01-order.png", "02-add.png", "03-check.png", "04-deploy.png"):
+    for shot in ("01-order.png", "02-add.png", "03-check.png", "04-deploy.png",
+                 "05-aeon-selected.png", "06-fmp-selected.png", "07-runtime-selected.png"):
         guide = guide.replace('"' + shot + '"', '"walkthrough/aeon-controller/' + shot + '"')
     (Path(stage) / "AEON_CONTROLLER.html").write_text(guide, encoding="utf-8")
     shutil.copytree("presets", os.path.join(stage, "presets"))
@@ -114,6 +178,8 @@ def main():
     shutil.copytree(os.path.join("docs", "screenshots"), os.path.join(stage, "docs", "screenshots"))
     for screenshot in (root / "docs").glob("screenshot_*.png"):
         shutil.copy(screenshot, os.path.join(stage, "docs", screenshot.name))
+    copy_document_dependencies(root, Path(stage))
+    write_package_identity(root, Path(stage), a.version)
     zpath = output / (name + ".zip")
     with zipfile.ZipFile(zpath, "w", zipfile.ZIP_DEFLATED) as z:
         for folder, _, files in os.walk(stage):

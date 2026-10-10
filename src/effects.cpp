@@ -21,6 +21,7 @@ std::string upper(std::string s) { for (char& c : s) c = char(std::toupper((unsi
 struct Bank {
     forge::big::File file;
     std::map<std::string, const forge::big::Entry*> byName;
+    std::map<std::string, const forge::big::Entry*> byFoldedName;
     std::map<std::string, std::shared_ptr<const Effect>> parsed;
     size_t count = 0;
     fs::file_time_type modified{};
@@ -259,7 +260,8 @@ std::unique_ptr<Effect> parse(const forge::big::Entry& e, const std::vector<uint
     fx->id = e.id; fx->name = e.name;
     Stream s(buf);
     try {
-        s.u32();                                  // magic 0x64
+        // CParticleEmitter::ReadBinary 02F0D3A0 checks BINARY_FORMAT_VERSION.
+        if (s.u32()!=100) throw std::runtime_error("unsupported effect payload version");
         fx->displayName = s.cstr();
         fx->emitter2D=s.ebool(); fx->preWater=s.ebool(); fx->water=s.ebool(); fx->zWrite=s.ebool();
         fx->continuous=s.ebool(); fx->screenDisplacement=s.ebool(); fx->readZ=s.ebool();
@@ -319,6 +321,7 @@ std::unique_ptr<Effect> parse(const forge::big::Entry& e, const std::vector<uint
                 fx->sprites.push_back(sprite);
             }
         }
+        if (s.p!=buf.size()) throw std::runtime_error("trailing effect payload bytes");
         fx->parsedFully = true;
     } catch (const std::exception& error) {
         // keep what was decoded before the walk failed
@@ -348,8 +351,19 @@ bool openBank(const fs::path& gameRoot, std::string& err, bool reload) {
         // A retained snapshot must not lazily reread changed bytes from disk.
         bank->file = forge::big::File::openFully(p);
         bank->modified=modified; bank->bytes=bytes;
-        for (const auto& b : bank->file.banks())
-            for (const auto& e : b.entries) { bank->byName[upper(e.name)] = &e; ++bank->count; }
+        const forge::big::Bank* mainBank=nullptr;
+        for (const auto& b : bank->file.banks()) if(b.name=="PARTICLE_MAIN_PC") {
+            if(mainBank) throw std::runtime_error("duplicate PARTICLE_MAIN_PC banks");
+            mainBank=&b;
+        }
+        if(!mainBank) throw std::runtime_error("missing PARTICLE_MAIN_PC bank");
+        for (const auto& e : mainBank->entries) {
+            const auto [exact,uniqueExact]=bank->byName.emplace(e.name,&e);
+            if (!uniqueExact) exact->second=nullptr;
+            const auto [folded,uniqueFolded]=bank->byFoldedName.emplace(upper(e.name),&e);
+            if (!uniqueFolded) folded->second=nullptr;
+            ++bank->count;
+        }
         g_bank=bank.get(); g_banks[key]=std::move(bank); err.clear();
         return true;
     } catch (const std::exception& e) {
@@ -379,11 +393,16 @@ std::vector<std::string> entryNames(const fs::path& root) {
 namespace {
 std::shared_ptr<const Effect> lookup(Bank* bank,const std::string& name) {
     if (!bank) return nullptr;
-    const std::string key = upper(name);
+    auto it = bank->byName.find(name);
+    if (it==bank->byName.end()) {
+        const auto folded=bank->byFoldedName.find(upper(name));
+        if (folded==bank->byFoldedName.end() || !folded->second) return nullptr;
+        it=bank->byName.find(folded->second->name);
+    }
+    if (!it->second) return nullptr; // duplicate exact names have no unique entry
+    const auto& key=it->first;
     auto hit = bank->parsed.find(key);
     if (hit != bank->parsed.end()) return hit->second;
-    auto it = bank->byName.find(key);
-    if (it == bank->byName.end()) { bank->parsed[key] = nullptr; return nullptr; }
     const auto data = bank->file.entryData(*it->second);
     std::shared_ptr<const Effect> fx = parse(*it->second, data);
     bank->parsed[key] = fx;

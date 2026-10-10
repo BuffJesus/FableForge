@@ -41,7 +41,7 @@ std::optional<BoundingSphere> sphereAt(const std::vector<uint8_t>& bytes,size_t 
 }
 
 void descriptorSphereFallback(Geometry& geometry,const std::vector<uint8_t>& descriptor) {
-    // Entry metadata: PhysicsIndex (i32), sphere (4*f32), AABB (6*f32).
+    // Entry metadata: PhysicsIndex (u32), sphere (4*f32), AABB (6*f32).
     // Require the complete fixed bounds header, as in EgoCore MeshParser.
     if(!geometry.boundingSphere && descriptor.size()>=44)
         geometry.boundingSphere=sphereAt(descriptor,4,BoundingSphere::Source::Descriptor);
@@ -196,7 +196,7 @@ Geometry decodeLod0(const std::vector<uint8_t>& payload, uint32_t meshType) {
     if(materials<0||materials>10000||primitives<0||primitives>10000||bones<0||bones>10000||boneNames<0)
         throw std::runtime_error("meshpreview: unreasonable counts");
     result.boneCount=uint32_t(bones);result.primitiveCount=uint32_t(primitives);
-    c.u8();c.u16();c.u16();
+    result.hasCloth=c.u8()!=0;c.u16();result.animatedBlockCount=c.u16();
     if(bones) {
         const size_t count=size_t(bones);
         c.need(count*2);
@@ -234,13 +234,16 @@ Geometry decodeLod0(const std::vector<uint8_t>& payload, uint32_t meshType) {
     }
     c.skip(48);
     for(int32_t i=0;i<materials;++i){
-        Material m; m.id=c.i32(); c.str(); c.i32(); m.diffuseTexture=c.i32();
-        m.bumpTexture=c.i32(); m.reflectionTexture=c.i32(); m.alphaMapTexture=c.i32();
+        Material m; m.id=c.i32(); m.name=c.str(); m.decalId=c.i32();
+        m.textureWordOffsets=std::array<size_t,4>{c.p,c.p+4,c.p+8,c.p+12};
+        m.diffuseTexture=c.u32();
+        m.bumpTexture=c.u32(); m.reflectionTexture=c.u32(); m.alphaMapTexture=c.u32();
         m.textureFlags=c.u32(); m.glowStrength=c.u32(); m.unknown40=c.u8();
-        m.alphaEnabled=c.u8()!=0; m.unknown42=c.u8();
+        const uint8_t transparent=c.u8();m.alphaEnabled=transparent!=0; m.unknown42=c.u8();
         const uint8_t unknown43=c.u8(), unknown44=c.u8();
         m.unknown43=uint16_t(unknown43)|(uint16_t(unknown44)<<8);
-        if(unknown44)for(int k=0;k<4;++k)c.str(); result.materials.push_back(m);
+        m.nativeFlags={m.unknown40,transparent,m.unknown42,unknown43,unknown44};
+        if(unknown44)for(size_t k=0;k<4;++k)m.filenames[k]=c.str(); result.materials.push_back(std::move(m));
     }
     for(int32_t pi=0;pi<primitives;++pi) {
         const int32_t primitiveMaterialId=c.i32(); const int32_t repeated=c.i32(); c.skip(20);
@@ -250,7 +253,7 @@ Geometry decodeLod0(const std::vector<uint8_t>& payload, uint32_t meshType) {
                 primitiveMaterial=static_cast<int32_t>(materialIndex);break;
             }
         const uint32_t sbc=c.u32(),abc=c.u32(),vc=c.u32(),tc=c.u32(),ic=c.u32(),format=c.u32(); c.skip(8);
-        if(sbc>100000||abc>100000||vc>10000000||ic>30000000)throw std::runtime_error("meshpreview: unreasonable primitive");
+        if(sbc>100000||abc>100000||vc>10000000||ic>maxPrimitiveIndices)throw std::runtime_error("meshpreview: unreasonable primitive");
         std::vector<Block> staticBlocks,animatedBlocks;staticBlocks.reserve(sbc);animatedBlocks.reserve(abc);
         // A static block carries its OWN material index (EgoCore
         // GltfExporter uses CStaticBlock.MaterialIndex); the primitive's material is
@@ -323,7 +326,7 @@ Geometry decodeLod0(const std::vector<uint8_t>& payload, uint32_t meshType) {
         appendFaces(result.triangles,std::move(staticFaces),base,vc,true);
         for(const auto& b:animatedBlocks)emit(ib,b,animatedFaces);
         appendFaces(result.triangles,std::move(animatedFaces),base,vc,false);
-        const uint32_t cloth=c.u32();for(uint32_t i=0;i<cloth;++i){c.u32();c.u32();uint32_t n=c.u32();if(n)fableLzo(c,n);}
+        const uint32_t cloth=c.u32();result.hasCloth=result.hasCloth || cloth!=0;for(uint32_t i=0;i<cloth;++i){c.u32();c.u32();uint32_t n=c.u32();if(n)fableLzo(c,n);}
         (void)meshType;
     }
     return result;
@@ -345,6 +348,9 @@ std::vector<Geometry> decodeLods(const std::vector<uint8_t>& payload,
     size_t offset = 0;
     for (const auto size : sizes) {
         lods.push_back(decodeLod0({payload.begin() + offset, payload.begin() + offset + size}, meshType));
+        for(auto& material:lods.back().materials)
+            if(material.textureWordOffsets)
+                for(auto& wordOffset:*material.textureWordOffsets)wordOffset+=offset;
         descriptorSphereFallback(lods.back(),descriptor);
         offset += size;
     }
@@ -354,9 +360,14 @@ std::vector<Geometry> decodeLods(const std::vector<uint8_t>& payload,
 Geometry readLod0(const std::filesystem::path& graphicsBig, uint32_t meshId) {
     const auto file=forge::big::File::open(graphicsBig);const auto* bank=file.findBank("MBANK_ALLMESHES");
     if(!bank)throw std::runtime_error("meshpreview: MBANK_ALLMESHES not found");
+    const big::Entry* found=nullptr;
     for(const auto& e:bank->entries)if(e.id==meshId) {
-        auto geometry=decodeLod0(file.entryData(e),e.type);
-        descriptorSphereFallback(geometry,e.subHeader);
+        if(found)throw std::runtime_error("meshpreview: duplicate mesh entry ID " + std::to_string(meshId));
+        found=&e;
+    }
+    if(found) {
+        auto geometry=decodeLod0(file.entryData(*found),found->type);
+        descriptorSphereFallback(geometry,found->subHeader);
         return geometry;
     }
     throw std::runtime_error("meshpreview: mesh id not found");

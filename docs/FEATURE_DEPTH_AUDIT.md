@@ -1,5 +1,70 @@
 # Feature depth audit — started 2026-09-30
 
+2026-10-03 choice feedback checkpoint: b428ec1 is integrated and rebuilt. Choice
+read/write failures remain visible beside comparisons through reopen/refresh;
+normal/compact locks and unreadable input preserve file/winner, reset on a new
+destination and recover on same-process retry. Primary expanded choice fixture
+passes. The 34b29bf package passes THREE focused extracted workflows, not a new
+full 39-workflow gate. See HANDOFF_WORLD_UI for exact acceptance boundaries.
+
+2026-10-03 primary file comparison checkpoint: 55e20dc is integrated and rebuilt.
+Normal/compact file snapshot visibility, same-size refresh, preserved choices
+and exact output pass; all 14 Controller references resolve in retail/Aeon/merged
+banks. The 7b1c043 development package passes ALL 39 extracted runtime workflows,
+zero skips, and 103 shipped identities. This includes the persistent texture
+Add/Replace recovery and dialogue endpoint fix. Full source coverage remains
+frozen b1eb3b9 136 PASS / 1 identified/fixed dialogue FAIL. See HANDOFF_WORLD_UI.
+
+2026-10-03 primary texture checkpoint: 39bdf32 is promoted and rebuilt. Its
+stripped development ZIP passes four focused texture workflows sequentially,
+including new locked/invalid replacement recovery and existing Unicode inputs /
+locked exports. The full 33-workflow package suite was not rerun; the preceding
+e4a2807 package passes all 31. See HANDOFF_WORLD_UI for the exact boundaries.
+
+2026-10-03 primary Mods checkpoint: e4a2807 is promoted and rebuilt; its stripped
+development ZIP passes all 31 runtime workflows, 115 Markdown links and four
+guide images. Mods failure feedback and same-process recovery pass at both sizes.
+The isolated texture replacement follow-up below is excluded from this archive;
+see HANDOFF_WORLD_UI for the retained hash and exact validation boundaries.
+
+2026-10-03 isolated texture replacement follow-up: actual forms retain errors
+after toast dismissal and reopening, preserve complete inventories on failure,
+and recover on same-process retry. Locked/invalid inputs, normal/compact error
+bounds, exact blue export pixels and Restore pass. Promotion/package checks
+remain pending; see HANDOFF_WORLD_UI.
+
+2026-10-03 isolated Mods action follow-up: persistent wrapped errors explain
+failed redeploy, malformed/incomplete reports and missing tools after toasts fade.
+Both sizes preserve files and recover on same-process retry; reopening Mods and
+same-install rescans retain the error, destination changes clear it. Compact
+labels fit, and the guide now describes restored originals after a failed build.
+Promoted e4a2807 passes all 31 extracted workflows; see HANDOFF_WORLD_UI.
+
+2026-10-03 promoted Unicode follow-up: CLI arguments, packaged helper/schema
+lookup, texture image opening and EgoCore compiler/environment/temp paths use
+native Windows paths. Normal/compact deploy/undeploy and pixel/Restore checks,
+locked/missing compiler retry and matching real compile outputs pass. Primary
+Release builds and the documentation checker pass at product source 6387b06;
+the owned review passes 37 core tests. The d5347ea package passes 27 extracted
+workflows; the 6387b06 compiler package passes 28 plus real bundled-compiler
+Unicode compiles. Frozen e7cb37b passes all 126 runtime checks with one separate prose
+documentation failure; it excludes the Unicode increments. See HANDOFF_WORLD_UI.
+
+2026-10-03 promoted follow-up: saved choices outside the latest conflict report
+are reviewable/searchable and can be cleared individually, including when no
+conflicts remain. Uncontested choices can still affect composition. Both sizes,
+locked-save preservation, zero-conflict recovery and search beyond 400 pass;
+existing field/conflict-search regressions pass. Combined primary Release build,
+choice/field fixtures and a nine-workflow extracted development ZIP pass. The
+frozen afe9e55 whole gate passes 110 checks; later increments have focused
+coverage. See HANDOFF_WORLD_UI for exact source and validation scope.
+
+2026-10-03: corrected CDefString comparison values to signed four-byte name-table
+references rather than inline strings. Long-value fixtures now use actual
+CCharString and Vector_J fields plus reference conflicts. Both panel sizes,
+exact merged bytes, source hashes, retail Sword of Aeons decode and 37/37 core
+tests pass; see HANDOFF_WORLD_UI for evidence and the earlier fixture limitation.
+
 This is the working checklist for reviewing Forge's existing features as complete
 user workflows. The inventory comes from `docs/EDITOR.md`, `docs/ROADMAP_1.0.md`,
 the active GUI, and the 2026-09-28 UI review. A passing unit or UI script proves
@@ -9,19 +74,53 @@ only after checking those paths against the current build.
 
 | Area | First depth question | Current evidence / finding | Next verification |
 | --- | --- | --- | --- |
-| Setup, game discovery, backups, restore | Can a new user find the install, understand writes, and recover a bad edit? | CLI backup manager and Setup restore pass on isolated roots. The GUI reloads an open map after restore; labels describe the backed-up bytes and loose draft removal. A missing path and 13-backup restore are visually checked at 800x600 / 1.5 scale. Changing folders protects unsaved work and clears the previous map, terrain and context. | Walk through write failure in the GUI; verify restore after a real modded-bank write. |
+| Setup, game discovery, backups, restore | Can a new user find the install, understand writes, and recover a bad edit? | CLI backup manager and Setup restore pass on isolated roots. The GUI reloads an open map after restore; labels describe the backed-up bytes and loose draft removal. A missing path and 13-backup restore are visually checked at 800x600 / 1.5 scale. Changing folders protects unsaved work and clears the previous map, terrain and context. Actual model-import/Setup restoration retires model/texture views, refreshes definition users and restores four banks exactly at both sizes, including extracted executables. Locked writes now have persistent wrapped errors, exact preservation and same-process retry checks at both sizes. Missing game-bank, only-loose-level and stock-WAD recovery pass at both sizes, including a selected Data folder and running-process guard refusal. Partial restores reload the successful selected map, retain the failed target and visible error, then finish on retry. Conflicting legacy/current originals and creation/original records visibly refuse before any files change, with manual resolution and retry verified at both sizes. Staged baselines rebase correctly; orphaned stage backups remain untouched with a durable explanation, and recovery passes after returning the preserved manifest. Setup confirms only within its current open panel and install; closing or switching cancels, Enter is ignored and Escape cancels without writes. All recovery variants pass in the extracted 7336194 development ZIP (19 runtime workflows). | Validate the latest asset-view/export increment in an extracted development package. |
 | Map browser and viewport | Can a user find, inspect and navigate a map at common window sizes? | Eight requested size/scale tours pass; 3840×2160 is clamped by the current monitor. At 800x600 / 1.5, all panes now fit, map rows reveal full names on hover, and compact View/Show/Frame and tool-mode menus remain usable. | Recheck zoom, selection and true 4K when available. |
 | Placed objects, ownership and links | Do placement, transforms, duplication, links and deletion stay correct through undo and game save? | Core ownership/locked tests and several retail UI scripts cover individual paths. Terrain-following now carries owned descendants with a grounded parent in the terrain edit's undo step. | Review object families on a real map, linked-copy edge cases, and saved game behavior. |
 | Ground sculpt, paint, copy and Fit/Generate | Does what the preview shows match the terrain and objects the game receives? | Fractal height range is explicit; Fit now reports affected vertices and largest height shift. Fit preview returns to zero changes after Apply, back to pending changes after Undo, and zero after Redo on Greatwood_Filler_04. Grounded things and foliage follow height edits. | Inspect remaining brush modes, Fit/Generate seams and game output on representative maps. |
 | Foliage and scenery | Do baked trees/grass remain seated and visible before and after terrain deployment? | 2,514 StartOakValeWest foliage instances were re-seated in the preview after a raised-ground stroke; undo restored zero offsets. Terrain-triggered foliage refresh avoids re-decoding placed things. | Compare near trees in the preview and game after deployment; test maps with missing/partial STB foliage. |
 | World view and new levels | Are map placement, seams, neighbour preview and level creation understandable and recoverable? | Scratch copied/blank creation, region entrances, minimap framing, compact actual creation and byte-exact restore pass. Existing edits and edits made during creation are preserved; restoring a removed map clears its preview. | Review pack/loose creation, world movement/seams and new game output. |
-| Assets: themes, models, effects, dialogue | Can assets be found, previewed accurately and applied without ambiguous state? | Effect background presets and the 1280x720 / 1.5 scale preview fit; effect transport now carries elapsed time through loops. Dialogue has expandable speaker groups and subtitle leaves, 18 head previews, compact playback/timeline and inline lip-sync editing. Short effects fit their supported lifetimes automatically. Owned normal/compact workflows, retail pose and scratch recipe/export checks pass. | Review each browser from search through preview and export; compare eye attachment with a live retail capture. |
-| Mods and content packs | Can users combine common TLC mods, see conflicts and undo installs? | Mod-pack and Freeroam/Aeon research exists; integration outcomes vary by install order. | Exercise representative local corpus packs in an isolated install and document exact supported paths. |
+| Assets: themes, models, effects, dialogue | Can assets be found, previewed accurately and applied without ambiguous state? | Effect background presets and the 1280x720 / 1.5 scale preview fit; effect transport now carries elapsed time through loops. Dialogue has expandable speaker groups and subtitle leaves, 18 head previews, compact playback/timeline and inline lip-sync editing. Short effects fit their supported lifetimes automatically. Owned normal/compact workflows, retail pose and scratch recipe/export checks pass. | Validate persistent texture replacement errors in an extracted package; continue other browsers and compare eye attachment with a live retail capture. |
+| Mods and content packs | Can users combine common TLC mods, see conflicts and undo installs? | The frozen afe9e55 gate exercises every available mod corpus. Comparison rows expose typed baseline/contributor/winner values, actual changers, independent edits and unavailable/unreported saved choices. Search works before the 400-row cap. Loaded model/texture views follow actual deploy/undeploy at the selected install or a separate save folder; four copied banks restore exactly. Failed redeploy also refreshes restored baseline views while retaining its error report at both destinations. Texture browsing follows save-folder bank changes, preserves same-bank views and checks fallback without any GUI file changes. Same-name textures preview/export the correct destination pixels; locked PNG outputs remain intact with a persistent wrapped error and same-process retry. | Persistent Mods action feedback and recovery pass in the 31-workflow extracted e4a2807 package; per-field choices remain in the content-override backlog. |
 | Live game link and deployment | Does a previewed change appear in TLC, and are failure messages actionable? | Scratch-install terrain, theme and custom-theme writes pass; the resulting Greatwood_1 chunk audits cleanly. Failed pack and missing-STB paths restore files and keep edits dirty. | Verify object/terrain/foliage in a running game, then inspect restore from the GUI. |
 | Popups and small-screen UI | Does every floating tool remain tied to its source and usable at high UI scale? | Context test covers Terrain, Level and Properties window closure; tour captures four tool windows at eight requested sizes. | Review setup, confirmation, import and error dialogs with focus/keyboard and resize. |
 | CLI and automation | Can documented commands reproduce the editor's outputs and failures? | `check_all.py` and many focused tests exist. | Audit command examples against actual binaries, then run the required gate. |
 
 ## Terrain/foliage change in this pass
+
+2026-10-03: saved choices absent from current conflict contributors now show the
+actual composer fallback and retain the choice for review. Both-size long-name
+checks cover readable explanations, search, preserved metadata and actual
+dropdown clearing. This is contributor review, not fingerprint validation.
+
+2026-10-03: wins/loses badges now count actual contested fields rather than
+marking every contributor as losing a field-merged record. Partial wins, picks,
+vanilla/reset and unchanged whole-file counts pass at both sizes. See HANDOFF_WORLD_UI.
+
+2026-10-03: conflict search now filters before the 400-row limit. A real 401-file
+fixture reaches/chooses/resets the last row at both sizes; saved-choice and
+name/mod/field searches pass without changing source bytes. See HANDOFF_WORLD_UI.
+
+2026-10-03: the Mods card now exposes field-conflict names, types, baseline and
+contributor values, plus current winning values. Record-choice scope and
+unchanged-field fallback are explained.
+A three-mod synthetic definition fixture verifies UI updates at both sizes and
+independent merged-bank values, including preserved non-conflicting edits under
+a vanilla choice. Primary gate source remains fixed; details are in HANDOFF_WORLD_UI.
+
+2026-10-03: write actions now wrap at narrow widths, including long pack names.
+Confirmation buttons share enough height for their wrapped captions. Normal/
+compact visual checks and six combined-write/failure/Escape workflows pass;
+scratch WAD hashes remain identical after failed or cancelled writes. Exact
+evidence and full-build boundary are in HANDOFF_WORLD_UI.
+
+2026-10-03: Ground Smear's frozen 3x3 blend, distinct top-three projection,
+minimum-one truncated strict disc, repeated application and draft reopen pass
+on owned stock/loose copies at normal/compact sizes. Full saved-LEV comparisons
+verify theme-only deltas preserve passability, and all 36 CTest cases pass.
+Controls/cursor captures were inspected; see HANDOFF_WORLD_UI for exact evidence.
+The corrected projection differs from native duplicate/overflow behavior;
+cross-map blending and live game output remain unverified.
 
 - `Document::endStroke` and `setVertexHeights` move grounded, unlocked placed
   objects with the height change in its existing undo step. Owned descendants

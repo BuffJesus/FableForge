@@ -398,6 +398,9 @@ void File::setWalkableAt(int x, int y, bool walkable) {
 bool File::cameraPassableAt(int x, int y) const { return cell(x, y)[16] != 0; }
 void File::setCameraPassableAt(int x, int y, bool passable) { cell(x, y)[16] = passable ? 1 : 0; }
 
+bool File::shorePointAt(int x, int y) const { return cell(x, y)[19] != 0; }
+void File::setShorePointAt(int x, int y, bool shore) { cell(x, y)[19] = shore ? 1 : 0; }
+
 bool File::preferredPathAt(int x, int y) const {
     return cell(x, y)[20] != 0;
 }

@@ -3,6 +3,7 @@
 // layout, explorer, export and automation.
 
 #include <chrono>
+#include <ctime>
 #include "app.hpp"
 #include "vanilla_props.hpp"
 #include "modpack.hpp"
@@ -13,6 +14,7 @@
 #include "effects.hpp"
 #include "forge/heightpen.hpp"
 #include "forge/trackpath.hpp"
+#include "forge/temporarydirectory.hpp"
 
 #include <fstream>
 #include <algorithm>
@@ -25,6 +27,7 @@
 #include <sstream>
 
 #include "ImGuizmo.h"
+#include "imgui_internal.h"
 #include "theme.hpp"
 
 namespace fs = std::filesystem;
@@ -56,6 +59,10 @@ float yawDegrees(const editor::Frame& f) {
 void App::openDocument() {
     if (modFilesBusy()) return;
     cancelCarry();
+    brushPinned_=brushPinHeld_=brushPinHaveLast_=false; brushPinTool_=-1;
+    recoveryPending_.clear();
+    snapshotsOpen_=snapshotRestore_=false; snapshots_.clear(); snapshotsFor_.clear(); snapshotDeletePending_.clear();
+    clearBudgetAreas(); budgetHasReport_ = budgetPicking_ = false;
     docLoadedFor_.clear();
     thingGlyphs_.clear();
     selectedThing_ = -1; selectedUid_ = 0;
@@ -72,11 +79,24 @@ void App::openDocument() {
         if (!derr.empty()) pushLog("editor: " + derr, 1);
         return;
     }
+    if (doc_.hasTerrain() && fs::exists(doc_.terrainDraftPath(saveRoot()))) {
+        std::string draftError;
+        if (!doc_.loadTerrainDraft(saveRoot(), draftError)) pushLog("terrain draft: " + draftError, 2);
+        else pushLog("opened saved terrain draft; Write terrain applies it to the game", 0);
+    }
     doc_.setCreatureSexLookup([this](const std::string& definition) {
         return ctx_.defIntField(definition,"Sex");
     });
     if (!derr.empty()) pushLog("editor: " + derr, 1);
     docLoadedFor_ = selectedName_;
+    recoveryAt_ = std::chrono::steady_clock::now();
+    recoveryPending_.clear();
+    if (!auto_.active() || !recoveryRoot_.empty()) {
+        std::error_code ec;
+        const auto path=recoveryPath();
+        if (fs::is_regular_file(path,ec)) recoveryPending_=path;
+        else if (ec) pushLog("recovery check: "+ec.message(),1);
+    }
     syncedRevision_ = doc_.revision();
     hiddenSections_.clear(); sectionsDirty_ = true; sectionsCardRev_ = ~0ull;
     tracksCacheRev_ = ~0ull; linkPick_.active = false; trackLinkPick_ = false; attachPick_.active = false;
@@ -191,6 +211,7 @@ void App::syncInstances() {
 }
 
 void App::startThingsReload() {
+    if(meshReplaceFuture_.valid()) {thingsReloadPending_=true;return;}
     if (modFilesBusy()) { thingsReloadPending_ = true; return; }
     if (!documentLoaded() || !ctx_.ready()) return;
     if (foliageFuture_.valid()) { thingsReloadPending_ = true; return; }
@@ -212,6 +233,7 @@ void App::startThingsReload() {
         to.gameRoot = root;
         to.graphicsBig = graphics;
         to.textures = true;
+        to.creatures = true; // Keep placed and edited creatures visible on reload.
         to.up = te::UpAxis::Y;
         to.tngText = text;
         try { r.things = thingsexport::load(entry.name, to, *ctx, &r.thingStats); } catch (const std::exception& e) { r.things.warnings.push_back(e.what()); }
@@ -282,8 +304,7 @@ void App::copySelection() {
 void App::pasteClipboard() {
     if (!documentLoaded()) return;
     if (clipboard_.empty()) { pushLog("paste: the clipboard is empty (Ctrl+C a selection first)", 1); return; }
-    float focus[3]; camera_.focus(focus);
-    const float at[3] = {focus[0], -focus[2], focus[1]};
+    float at[3]; cameraPlacementPoint(at);
     try {
         const auto pasted = doc_.paste(clipboard_, at, true);
         if (pasted.empty()) return;
@@ -576,6 +597,10 @@ void App::drawPropertyGrid(float cardInner) {
     using theme::S;
     if (selectedThing_ < 0) return;
     const size_t idx = size_t(selectedThing_);
+    const auto definition=doc_.summary(idx).definition;
+    ImGui::BeginDisabled(definition.empty() || definition=="NULL");
+    if(ImGui::SmallButton("Open definition")) browseDefinition(definition);
+    auto_.registerWidget("btn_object_definition");ImGui::EndDisabled();
     const auto rows = doc_.propertiesOf(idx);
     const auto knownProperties=doc_.knownComponentProperties(idx);
     if (rows.empty() && doc_.ctcBlocksOf(idx).empty()) return;
@@ -721,6 +746,8 @@ void App::drawPropertyGrid(float cardInner) {
             std::snprintf(buf, sizeof buf, "%s", r.value.c_str());
             ImGui::InputText("##v", buf, sizeof buf);
             if (ImGui::IsItemDeactivatedAfterEdit()) { next = buf; commit = true; }
+            if (propertyBlock.empty() && propertyKey=="scriptname" && ImGui::IsItemHovered())
+                ImGui::SetTooltip("Start with a letter or underscore; use ASCII letters, digits and underscores. Enter NULL for no name.");
         }
         // the vanilla dialog's range for numbers (its spin controls stop there)
         if (commit && vf && vf->hasRange && (r.kind == K::Int || r.kind == K::Float)) {
@@ -735,6 +762,8 @@ void App::drawPropertyGrid(float cardInner) {
         if (commit && next != r.value) {
             const bool updated=canReset?doc_.setComponentOverride(idx,r.ctc,r.key,next):doc_.setPropertyValue(idx,r.ctc,r.key,next);
             if (updated) pushLog((r.ctc.empty() ? "" : r.ctc + ".") + r.key + " = " + next, 0);
+            else if (propertyBlock.empty() && forge::tng::isIdentifierProperty(doc_.summary(idx).type,r.key))
+                pushLog("property: " + r.key + " must start with a letter or underscore and contain only ASCII letters, digits and underscores. Use NULL for no name.",1);
             else pushLog("property: " + next + " does not fit " + r.key + (r.kind == K::String ? " (a quoted \"text\")" : r.kind == K::Int ? " (a whole number)" : r.kind == K::Float ? " (a number)" : ""), 1);
         }
         if (canReset) {
@@ -746,6 +775,16 @@ void App::drawPropertyGrid(float cardInner) {
             if (ImGui::IsItemHovered()) ImGui::SetTooltip("Remove the saved value and let the game supply it. Undo restores the exact original text.");
         }
         ImGui::EndDisabled();
+        const bool textReference=(r.ctc=="CTCActionUseReadable" && propertyKey=="gametextdefname") ||
+            (r.ctc=="CTCInfoDisplay" && (propertyKey=="texttag" || propertyKey=="texttagback"));
+        if(textReference) {
+            std::string reference=r.value;
+            if(r.kind==K::String && reference.size()>=2) reference=reference.substr(1,reference.size()-2);
+            ImGui::BeginDisabled(reference.empty() || reference=="NULL");
+            if(ImGui::SmallButton("View text")) browseText(reference);
+            auto_.registerWidget(("property_text_"+r.ctc+"_"+r.key).c_str());
+            ImGui::EndDisabled();
+        }
         ImGui::PopID();
     }
     drawListProperties(cardInner);
@@ -838,11 +877,11 @@ void App::drawTracksCard(float pad, float inner, float cardInner) {
         if (theme::ghostButton("Unlink node", ImVec2(half, S(26)))) doc_.unlinkTrackNode(size_t(selectedThing_));
         auto_.registerWidget("btn_track_unlink");
         ImGui::SetNextItemWidth(cardInner - S(76));
-        ImGui::InputTextWithHint("##trackname", "Track name (letters, digits, _)", trackName_, sizeof trackName_);
+        ImGui::InputTextWithHint("##trackname", "Track name (start with a letter or _)", trackName_, sizeof trackName_);
         ImGui::SameLine(0, S(6));
         if (theme::ghostButton("Rename", ImVec2(S(70), S(24))) && trackName_[0]) {
             if (doc_.renameTrack(size_t(selectedThing_), trackName_)) pushLog(std::string("track renamed ") + trackName_, 0);
-            else pushLog("track: letters, digits and _ only", 1);
+            else pushLog("track: start with a letter or underscore; use ASCII letters, digits and underscores", 1);
         }
         auto_.registerWidget("btn_track_rename");
     }
@@ -1297,7 +1336,7 @@ void App::drawSelectionActions(const ImVec2& origin, const ImVec2& size) {
     selectionPopupOpen_ = false;
     selectionHeightPopupOpen_=false;
     ownedDeletePopupOpen_=false;
-    if (!editMode_ || !documentLoaded() || texturesMode_ || worldMode_ || modsMode_) { selectionHeightRequested_=false; return; }
+    if (!editMode_ || !documentLoaded() || texturesMode_ || worldMode_ || modsMode_ || budgetPicking_) { selectionHeightRequested_=false; return; }
     const bool selected = selectedThing_ >= 0 && size_t(selectedThing_) < doc_.thingCount();
     if (selected && size.x >= S(140) && size.y >= S(220)) {
         const bool compact = size.x < S(280);
@@ -1727,7 +1766,7 @@ void App::drawPackDestination(float cardInner, bool allowDirect) {
 
 // Import into the chosen pack (a recipe) or directly (the in-place import). model: the Models page.
 bool App::addToPackOrGame(bool model) {
-    if (model) meshImportSuccess_.clear();
+    if (model) { meshImportSuccess_.clear(); meshImportNotes_.clear(); }
     auto& lastError = model ? meshImportError_ : customThemeError_;
     lastError.clear();
     if (fileWriteBlocked("asset import")) { lastError = "Wait for the current file operation to finish, then import again."; return false; }
@@ -1779,6 +1818,13 @@ void App::drawModelImportCard(float pad, float inner, float cardInner) {
         ImGui::TextWrapped("%s", meshImportSuccess_.c_str());
         auto_.registerWidget("mesh_import_success");
         ImGui::PopStyleColor();
+    }
+    if (!meshImportNotes_.empty()) {
+        ImGui::BeginGroup();
+        theme::label("Import notes");
+        for (const auto& note : meshImportNotes_) ImGui::TextWrapped("%s", note.c_str());
+        ImGui::EndGroup();
+        auto_.registerWidget("mesh_import_notes");
     }
     if (theme::primaryButton(meshBusy ? "Importing..." : packDest_.empty() ? "Import into the game" : "Add to the pack", ImVec2(cardInner, S(30)), meshCan))
         addToPackOrGame(true);
@@ -1882,6 +1928,7 @@ bool App::createCustomTheme(const std::string& png, const std::string& name, con
 bool App::importMesh(const std::string& model, const std::string& name, const std::string& texturePng) {
     meshImportError_.clear();
     meshImportSuccess_.clear();
+    meshImportNotes_.clear();
     auto fail = [&](const std::string& message) {
         meshImportError_ = message; pushLog("import model: " + message, 1); return false;
     };
@@ -1898,7 +1945,7 @@ bool App::importMesh(const std::string& model, const std::string& name, const st
         job.submittedFields = submittedFields;
         meshimport::ImportResult out;
         job.ok = meshimport::importModel(root, req, out, job.error);
-        job.notes = out.notes; job.objectName = out.objectName;
+        job.notes = out.notes; job.modelNotes = out.modelNotes; job.objectName = out.objectName;
         return job;
     });
     return true;
@@ -1910,10 +1957,12 @@ void App::pollMeshImport() {
     meshImportError_ = job.ok ? std::string{} : job.error;
     if (!job.ok) { pushLog("import model failed: " + job.error, 2); return; }
     meshImportSuccess_ = "Imported " + job.objectName + ". Find it under Add an object.";
+    meshImportNotes_ = job.modelNotes;
     for (const auto& n : job.notes) pushLog("import model: " + n, 0);
     pushLog(job.objectName + " ready: find it under Add an object (with a collision hull from its own triangles; not yet seen in-game)", 3);
     // the def list, the thumbnails and the texture context must see the new entries
-    foliageexport::closeMeshBank(); thumbBankOpen_ = false; defThumbs_.clear(); defList_.clear(); themeGroupOf_.clear(); envDefs_.clear(); soundDefs_.clear(); familyNames_.clear(); issuesRev_ = ~0ull;
+    foliageexport::closeMeshBank(); defThumbs_.clear(); defList_.clear(); themeGroupOf_.clear(); envDefs_.clear(); soundDefs_.clear(); familyNames_.clear(); issuesRev_ = ~0ull;
+    refreshTextures(); // Material links must see a PNG appended by this import.
     // Keep the next draft if the user changed any field while this import ran.
     if (job.submittedFields == std::array<std::string, 3>{meshModelPath_, meshName_, meshTexturePng_}) {
         meshModelPath_[0] = 0; meshName_[0] = 0; meshTexturePng_[0] = 0;
@@ -2058,7 +2107,9 @@ void App::updateCarry(float u, float v) {
     if (!carryArmed_) return;
     float ground[3];
     if (!groundUnderCursor(u, v, ground)) return;
-    const float x = ground[0] + carryGrab_[0], y = ground[1] + carryGrab_[1];
+    ground[0] += carryGrab_[0]; ground[1] += carryGrab_[1];
+    snapPlacementPoint(ground);
+    const float x = ground[0], y = ground[1];
     const auto height = doc_.groundHeight(x, y);
     if (!height) return;
     carrying_ = true;
@@ -2422,6 +2473,9 @@ void App::drawPlacementOptions(float width) {
         if (ImGui::IsItemHovered()) ImGui::SetTooltip("Take the ground height where the camera looks.");
         theme::hint("A world height. Where the ground is higher, the thing sits on the ground.");
     }
+    if (theme::toggle("Snap to cell centres", &placeSnapGrid_)) saveSettings();
+    auto_.registerWidget("toggle_place_snap_grid");
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Place, paste and carry things on the centres of the 1 m grid cells.\nGround height is sampled after snapping; carrying keeps the height above ground.\nThe gizmo's Snap toggle is separate.");
 }
 
 int App::ownerFor(const std::string& def) const {
@@ -2468,6 +2522,19 @@ bool App::thingHiddenBySection(const std::vector<std::string>& per, size_t t) co
     return (split.second == 1 && !showDayOnly_) || (split.second == 2 && !showNightOnly_);
 }
 
+void App::snapPlacementPoint(float position[3]) const {
+    if (!placeSnapGrid_) return;
+    const auto snapped = forge::thingplacer::snapToCellCentre(position[0], position[1]);
+    position[0] = snapped.x; position[1] = snapped.y;
+    position[2] = doc_.groundHeight(position[0], position[1]).value_or(position[2]);
+}
+
+void App::cameraPlacementPoint(float position[3]) const {
+    float focus[3]; camera_.focus(focus);
+    position[0] = focus[0]; position[1] = -focus[2]; position[2] = focus[1];
+    snapPlacementPoint(position);
+}
+
 bool App::placeDefinition(const std::string& def, const std::string& scriptName) {
     float focus[3]; camera_.focus(focus);
     const float position[3] = {focus[0], -focus[2], focus[1]};
@@ -2485,7 +2552,9 @@ bool App::placeDefinitionAt(const std::string& def, const float position[3], con
     p.definitionType = def;
     p.thingType = def.rfind("BUILDING_", 0) == 0 ? "Building" : "Object";
     p.scriptName = scriptName;
-    p.position = {position[0], position[1], position[2]};
+    float at[3] = {position[0], position[1], position[2]};
+    snapPlacementPoint(at);
+    p.position = {at[0], at[1], at[2]};
     p.player = ownerFor(def);
     if (const auto h = doc_.groundHeight(p.position.x, p.position.y)) p.position.z = *h;
     if (placeFixedHeight_) p.position.z = forge::thingplacer::constantPlacementHeight(placeHeight_, p.position.z);
@@ -2515,6 +2584,25 @@ bool App::placeDefinitionAt(const std::string& def, const float position[3], con
     } catch (const std::exception& e) { pushLog(std::string("editor: ") + e.what(), 2); return false; }
 }
 
+bool App::saveDraft() {
+    if (!documentLoaded() || fileWriteBlocked("save draft")) return false;
+    if (doc_.strokeActive()) { pushLog("save draft: finish the terrain stroke first", 1); return false; }
+    if (doc_.external() && saveRoot() != installPath_) {
+        pushLog("save draft: this map belongs to another world; a redirected save root does not apply to it", 2); return false;
+    }
+    // Terrain authoring files are ignored by the game. Loose/external TNG files are active.
+    if (doc_.dirty() && (doc_.external() || forge::levelstore::detect(saveRoot()).looseOnly()) && gameWriteBlocked("save draft")) return false;
+    const bool terrain = doc_.hasTerrain() && doc_.terrainDraftDirty(), objects = doc_.dirty();
+    std::string err; std::vector<std::string> notes;
+    if (!doc_.saveDraftLoose(saveRoot(), err, &notes)) { pushLog("draft save failed: " + err, 2); return false; }
+    retireRecovery();
+    for (const auto& note : notes) pushLog(note, 0);
+    if (terrain) pushLog("saved terrain draft " + doc_.terrainDraftPath(saveRoot()).string() + "; Write terrain applies it to the game", 3);
+    if (objects) pushLog("saved " + doc_.loosePath().string(), 3);
+    if (objects && !validateMap().empty()) pushLog("The object draft contains invalid things. Press V to see the first.", 1);
+    return true;
+}
+
 bool App::saveDocument() {
     if (!documentLoaded()) return false;
     if (fileWriteBlocked("save")) return false;
@@ -2523,17 +2611,21 @@ bool App::saveDocument() {
     if ((doc_.external() || forge::levelstore::detect(saveRoot()).looseOnly()) && gameWriteBlocked("save")) return false;
     std::string err;
     if (!doc_.saveLoose(saveRoot(), err)) { pushLog("save failed: " + err, 2); return false; }
+    if (!hasUnsavedEdits()) retireRecovery();
     pushLog("saved " + doc_.loosePath().string(), 3);
     if (const auto n = validateMap().size()) pushLog("There are " + std::to_string(n) + " invalid thing(s) on this map. Press V to see the first (saved anyway, as vanilla does).", 1);
     return true;
 }
 
 const char* App::activeFileJob() const {
+    if (definitionsBusy()) return "definition read";
+    if (recoveryFuture_.valid()) return "recovery snapshot";
     if (terrainDeployFuture_.valid()) return "terrain write";
     if (worldFuture_.valid()) return "world write";
     if (newLevelFuture_.valid()) return "level creation";
     if (compactFuture_.valid()) return "bank compaction";
     if (meshImportFuture_.valid()) return "model import";
+    if (meshReplaceFuture_.valid()) return "model replacement";
     if (modsFuture_.valid()) return "mod processing";
     if (!modsQueuedVerb_.empty()) return "mod preparation";
     if (modsRefreshPending_) return "mod refresh";
@@ -2569,6 +2661,7 @@ bool App::deployDocument() {
     if (doc_.external() && saveRoot() != installPath_) { pushLog("deploy: this map belongs to another world and writes its own files; a redirected save root does not apply to it", 2); return false; }
     std::string err;
     if (!doc_.deployWad(saveRoot(), err)) { pushLog("deploy failed: " + err, 2); return false; }
+    if (!hasUnsavedEdits()) retireRecovery();
     if (writesLoose()) pushLog("wrote " + doc_.loosePath().string() + " (loose-level install: the game reads this file)", 3);
     else pushLog("wrote " + doc_.mapName() + ".tng into FinalAlbion.wad (backup FinalAlbion.wad.forge-orig)", 3);
     if (const auto n = validateMap().size()) pushLog("There are " + std::to_string(n) + " invalid thing(s) on this map. Press V to see the first.", 1);
@@ -2629,6 +2722,36 @@ void App::startThemeRebake() {
         } catch (const std::exception& e) { r.error = e.what(); }
         return r;
     });
+}
+
+void App::refreshSurveyOverlay() {
+    int kind = 0;
+    if (editMode_ && editTab_ == 1 && gizmoOp_ == 4 && documentLoaded() && doc_.hasTerrain()) {
+        if (terrainMode_ == 17 && shoreOverlayShow_) kind = 3;
+        if (doc_.hasGameMap() && ctx_.ready()) {
+            if (terrainMode_ == 10 && environmentOverlayShow_) kind = 1;
+            if (terrainMode_ == 11 && soundOverlayShow_ != 0) kind = 2;
+        }
+    }
+    const int filter = kind == 2 && soundOverlayShow_ == 2 ? soundIndex_ : -1;
+    if (!kind) {
+        renderer_.clearSurveyOverlay();
+        surveyOverlayKind_ = 0;
+        return;
+    }
+    if (renderer_.hasSurveyOverlay() && surveyOverlayKind_ == kind && surveyOverlayFilter_ == filter &&
+        surveyOverlayRevision_ == doc_.terrainRevision() && surveyOverlayMap_ == selectedName_) return;
+    const auto colours = kind == 3 ? doc_.shoreOverlay() : doc_.surveyOverlay(kind == 1, filter, [this](const std::string& name, const std::string& field) {
+        return ctx_.defColourField(name, field);
+    });
+    terrainexport::Image image;
+    image.width = kind == 3 ? doc_.level()->width() : doc_.level()->gameMapWidth();
+    image.height = kind == 3 ? doc_.level()->height() : doc_.level()->gameMapHeight();
+    image.rgba.reserve(colours.size() * 4);
+    for (const auto& colour : colours) image.rgba.insert(image.rgba.end(), colour.begin(), colour.end());
+    renderer_.updateSurveyOverlay(image, kind == 3 ? 1.0f : 4.0f);
+    surveyOverlayKind_ = kind; surveyOverlayFilter_ = filter;
+    surveyOverlayRevision_ = doc_.terrainRevision(); surveyOverlayMap_ = selectedName_;
 }
 
 void App::syncTerrain() {
@@ -2707,6 +2830,7 @@ editor::TerrainBrush::Mode brushModeFor(int mode) {
         case 14: case 15: return M::Theme;   // not brushes: handled before any stroke starts
         case 13: return M::CameraBlock;
         case 16: return M::Noise;
+        case 17: return M::ShoreSet;
         default: return M::Theme;
     }
 }
@@ -2714,16 +2838,50 @@ editor::TerrainBrush::Mode brushModeFor(int mode) {
 
 void App::terrainInput(const ImVec2& origin, const ImVec2& size) {
     brushHit_ = false;
-    if (!editMode_ || gizmoOp_ != 4 || !documentLoaded() || !doc_.hasTerrain()) { if (doc_.strokeActive()) doc_.endStroke(); return; }
+    brushCursorVertices_ = 0;
+    brushCursorSoundCells_ = 0;
+    brushCursorEnvironmentCells_ = 0;
+    if (!editMode_ || gizmoOp_ != 4 || !documentLoaded() || !doc_.hasTerrain() || (budgetOpen_ && budgetScope_ == 3 && budgetPicking_)) {
+        if (doc_.strokeActive()) doc_.endStroke();
+        keyStroke_ = false;
+        brushPinned_=brushPinHaveLast_=false; brushPinTool_=-1;
+        brushPinHeld_=ImGui::IsKeyDown(ImGuiKey_Space);
+        return;
+    }
     ImGuiIO& io = ImGui::GetIO();
-    if (size.x <= 0 || size.y <= 0) return;
+    if (brushPinTool_!=terrainMode_) { brushPinned_=brushPinHaveLast_=false; brushPinTool_=terrainMode_; }
+    const bool pinAllowed=!io.WantTextInput && !io.KeyCtrl && !io.KeyAlt && terrainMode_!=14 && terrainMode_!=15 &&
+        !ImGui::IsPopupOpen(nullptr,ImGuiPopupFlags_AnyPopupId | ImGuiPopupFlags_AnyPopupLevel) &&
+        !ImGui::IsKeyPressed(ImGuiKey_Escape,false);
+    const bool pinHover=viewportHovered_ ||
+        (ImGui::IsWindowHovered(ImGuiHoveredFlags_AllowWhenBlockedByActiveItem) &&
+         ImGui::IsMouseHoveringRect(origin,ImVec2(origin.x+size.x,origin.y+size.y)) &&
+         io.MousePos.y < origin.y+size.y-ImGui::GetFrameHeight()-theme::S(16)-viewportControlsLift());
+    const ImGuiID pinKey=ImGui::GetID("##terrain_pin_key");
+    // Reserve Space in the terrain viewport before a nav-focused control can
+    // activate it. Clipboard modes consume the key without starting a pin.
+    if (pinHover && !io.WantTextInput && !io.KeyCtrl && !io.KeyAlt &&
+        !ImGui::IsPopupOpen(nullptr,ImGuiPopupFlags_AnyPopupId|ImGuiPopupFlags_AnyPopupLevel))
+        ImGui::SetKeyOwner(ImGuiKey_Space,pinKey,ImGuiInputFlags_LockThisFrame);
+    // A viewport drag may claim all keyboard keys; keep the held pin tied
+    // to physical Space state while the gating above protects text and popups.
+    const bool space=ImGui::GetKeyData(ImGuiKey_Space)->Down;
+    if (!space || !pinAllowed) brushPinned_=false;
+    if (space && !brushPinHeld_ && pinAllowed && brushPinHaveLast_ && pinHover) {
+        brushPinPoint_[0]=brushLastPoint_[0]; brushPinPoint_[1]=brushLastPoint_[1]; brushPinned_=true;
+    }
+    brushPinHeld_=space;
+    if (size.x <= 0 || size.y <= 0) { brushPinned_=brushPinHaveLast_=false; return; }
     const float u = (io.MousePos.x - origin.x) / size.x, v = (io.MousePos.y - origin.y) / size.y;
-    if (viewportHovered_ || doc_.strokeActive()) {
+    if (brushPinned_) {
+        brushHit_=true; brushFable_[0]=brushPinPoint_[0]; brushFable_[1]=brushPinPoint_[1];
+    } else if (viewportHovered_ || doc_.strokeActive()) {
         float o[3], d[3], hit[3];
         renderer_.screenRay(u, v, o, d);
         if (renderer_.rayTerrain(o, d, hit)) {
             brushHit_ = true;
             brushFable_[0] = hit[0]; brushFable_[1] = -hit[2];
+            brushLastPoint_[0]=brushFable_[0]; brushLastPoint_[1]=brushFable_[1]; brushPinHaveLast_=true;
         }
     }
     editor::TerrainBrush b;
@@ -2737,19 +2895,27 @@ void App::terrainInput(const ImVec2& origin, const ImVec2& size) {
     b.replaceFrom = uint8_t(std::max(replaceFrom_, 0));
     fillPen(b);
     const bool lmb = ImGui::IsMouseDown(ImGuiMouseButton_Left);
-    // vanilla '-' / '=' (PaintInputPaintMapHeightAddition): lower / raise the ground under the cursor by the
-    // Speed opacity on every frame the key is held, one undo step per key press; any terrain tool
+    const bool heightTool = (terrainMode_ >= 0 && terrainMode_ <= 3) || terrainMode_ == 9 || terrainMode_ == 16;
+    // Native '-' / '=' (PaintInputPaintMapHeightAddition): sculpt tools only,
+    // Speed opacity per held frame at a latched ground point, one undo step.
     {
         const bool keysFree = !io.WantTextInput && !io.KeyCtrl && !io.KeyAlt && !lmb;
-        const bool down = keysFree && (ImGui::IsKeyDown(ImGuiKey_Minus) || ImGui::IsKeyDown(ImGuiKey_Equal));
+        const bool down = keysFree && heightTool && (ImGui::IsKeyDown(ImGuiKey_Minus) || ImGui::IsKeyDown(ImGuiKey_Equal));
         if (keyStroke_ && !down) { doc_.endStroke(); keyStroke_ = false; }
-        if (down && brushHit_ && (keyStroke_ || (!doc_.strokeActive() && viewportHovered_))) {
+        if (down && (keyStroke_ || (brushHit_ && !doc_.strokeActive() && viewportHovered_))) {
             editor::TerrainBrush k = b;
             k.mode = editor::TerrainBrush::Mode::HeightKey;
             const float op = forge::heightpen::speedToOpacity(penSpeed_);
             k.step = ImGui::IsKeyDown(ImGuiKey_Equal) ? op : -op;
+            if (!keyStroke_) {
+                keyAnchor_[0] = brushFable_[0]; keyAnchor_[1] = brushFable_[1];
+            }
+            k.x = keyAnchor_[0]; k.y = keyAnchor_[1];
             if (!keyStroke_) { doc_.beginStroke(k); keyStroke_ = true; }
             doc_.applyBrush(k, 0.0f);
+            brushFable_[0] = keyAnchor_[0]; brushFable_[1] = keyAnchor_[1];
+            brushLastPoint_[0]=keyAnchor_[0]; brushLastPoint_[1]=keyAnchor_[1]; brushPinHaveLast_=true;
+            brushHit_ = true;
         }
         if (keyStroke_) return;
     }
@@ -2768,12 +2934,16 @@ void App::terrainInput(const ImVec2& origin, const ImVec2& size) {
         }
         return;
     }
-    // Ctrl+click in Flatten: the vanilla height eyedropper (PaintInputPickupHeight) fills the target
-    if (press && io.KeyCtrl && terrainMode_ == 2) {
+    // Native Height Toolbox Ctrl press/held events sample Paint Height for every
+    // sculpt pen, including Paths. Do not hijack an already active edit.
+    if (heightTool && io.KeyCtrl && lmb && viewportHovered_ && brushHit_ && !io.KeyAlt &&
+        !doc_.strokeActive() && !pathDrag_) {
         if (const auto h = doc_.terrainHeight(brushFable_[0], brushFable_[1])) {
             penTarget_ = *h; penTargetFromStroke_ = false;
-            char msg[64]; std::snprintf(msg, sizeof msg, "flatten: target height %.2f", *h);
-            pushLog(msg, 0);
+            if (press) {
+                char msg[64]; std::snprintf(msg, sizeof msg, "picked height %.2f", *h);
+                pushLog(msg, 0);
+            }
         }
         return;
     }
@@ -2784,7 +2954,7 @@ void App::terrainInput(const ImVec2& origin, const ImVec2& size) {
         }
         return;
     }
-    if (terrainMode_ >= 6 && terrainMode_ <= 8 && !paintableSlot(paintTheme_)) {
+    if (terrainMode_ >= 6 && terrainMode_ <= 8 && !(terrainMode_==6 && paintSmear_) && !paintableSlot(paintTheme_)) {
         if (press) pushLog("paint: pick a ground theme to paint first (the list under the tool, or Ctrl+click the ground)", 1);
         return;
     }
@@ -2829,6 +2999,8 @@ void App::terrainInput(const ImVec2& origin, const ImVec2& size) {
         if (press) pushLog("replace: pick the theme to replace (Ctrl+Shift+click the ground or the list)", 1);
         return;
     }
+    if (terrainMode_ == 17 && io.KeyShift)
+        b.mode = b.mode == editor::TerrainBrush::Mode::ShoreSet ? editor::TerrainBrush::Mode::ShoreClear : editor::TerrainBrush::Mode::ShoreSet;
     if (!doc_.strokeActive() && press) {
         if (terrainMode_ == 7) syncThemeFamilies();
         doc_.beginStroke(b);
@@ -2846,6 +3018,10 @@ void App::terrainInput(const ImVec2& origin, const ImVec2& size) {
 }
 
 void App::fillPen(editor::TerrainBrush& b) const {
+    if (b.mode == editor::TerrainBrush::Mode::Theme && paintSmear_) b.mode = editor::TerrainBrush::Mode::ThemeSmear;
+    if (b.mode == editor::TerrainBrush::Mode::Environment && envSmear_) b.mode = editor::TerrainBrush::Mode::EnvironmentSmear;
+    if (b.mode == editor::TerrainBrush::Mode::ShoreSet && !shoreSet_) b.mode = editor::TerrainBrush::Mode::ShoreClear;
+    b.themeStamp = paintStamp_;
     b.exactStep = penExactStep_; b.step = penStep_;
     b.targetFromStroke = penTargetFromStroke_; b.target = penTarget_; b.speed = penSpeed_;
     b.smoothness = penSmoothness_; b.spikyness = penSpikyness_; b.magnifier = penMagnifier_;
@@ -2856,7 +3032,13 @@ void App::fillPen(editor::TerrainBrush& b) const {
 void App::drawPenControls(float cardInner) {
     using theme::S;
     const int m = terrainMode_;
-    if (m != 0 && m != 1 && m != 2 && m != 3 && m != 16) return;
+    if (m != 0 && m != 1 && m != 2 && m != 3 && m != 9 && m != 16 && !(m==6 && paintSmear_)) return;
+    if (m==6 && paintSmear_) {
+        ImGui::Checkbox("Repeat while held##pspray", &penSpray_);
+        auto_.registerWidget("check_pen_spray");
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("On: blends again every held frame. Off: one application per click.");
+        return;
+    }
     const float labelW = S(110);
     auto row = [&](const char* label) {
         ImGui::AlignTextToFramePadding();
@@ -2877,21 +3059,13 @@ void App::drawPenControls(float cardInner) {
     } else if (m == 2) {
         ImGui::Checkbox("Level to where the stroke starts##ptfs", &penTargetFromStroke_);
         auto_.registerWidget("check_pen_target_from_stroke");
-        if (ImGui::IsItemHovered()) ImGui::SetTooltip("On: the ground under the first click is the target.\nOff: the target height below (vanilla Paint Height); Ctrl+click the ground to sample it.");
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("On: the ground under the first click is the target.\nOff: the target height below (vanilla Paint Height); Ctrl+drag the ground to sample it.");
         if (!penTargetFromStroke_) {
             row("Target (m)");
             ImGui::InputFloat("##ptarget", &penTarget_, 0.5f, 5.0f, "%.2f");
             penTarget_ = std::clamp(penTarget_, 0.0f, 2048.0f);
             auto_.registerWidget("input_pen_target");
         }
-        {
-            char v[16]; std::snprintf(v, sizeof v, "%.1f", penSpeed_);
-            theme::labelValue("Speed", v, cardInner);
-            ImGui::SetNextItemWidth(cardInner);
-        }
-        ImGui::SliderFloat("##pspeed", &penSpeed_, 0.0f, 1.0f, "");
-        auto_.registerWidget("slider_pen_speed");
-        if (ImGui::IsItemHovered()) ImGui::SetTooltip("How far toward the target each application goes: 1 - cos(90 deg x speed)\n(0.5 = 29%%, 1 = all the way). Vanilla's Speed slider.\nIt is also the step of the - / = keys, which lower / raise the ground under the cursor while held.");
     } else if (m == 3) {
         row("Smoothness");
         float pct = penSmoothness_ * 100.0f;
@@ -2908,16 +3082,35 @@ void App::drawPenControls(float cardInner) {
         auto_.registerWidget("slider_pen_magnifier");
         if (ImGui::IsItemHovered()) ImGui::SetTooltip("Each jump is up to 0.01 + 0.05 x amount world units (vanilla noise magnifier, 1 - 50).");
     }
+    {
+        char value[16]; std::snprintf(value, sizeof value, "%.1f", penSpeed_);
+        theme::labelValue("Speed", value, cardInner);
+        ImGui::SetNextItemWidth(cardInner);
+        ImGui::SliderFloat("##pspeed", &penSpeed_, 0.0f, 1.0f, "");
+        auto_.registerWidget("slider_pen_speed");
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip(
+            "Height keys (- / =): %.3f m per held frame at one fixed spot.\n"
+            "Flatten: fraction toward the target per application = 1 - cos(90 deg x speed)\n"
+            "(0.5 = 29%%, 1 = all the way).",
+            forge::heightpen::speedToOpacity(penSpeed_));
+    }
     if (isVanillaPen(m)) {
         ImGui::Checkbox("Repeat while held##pspray", &penSpray_);
         auto_.registerWidget("check_pen_spray");
         if (ImGui::IsItemHovered()) ImGui::SetTooltip("Vanilla Spray can. On: applies every frame while the button is held. Off: once per click.");
     }
+    {
+        char value[32]; std::snprintf(value, sizeof value, "%.2f m", penTarget_);
+        theme::labelValue("Paint height", value, cardInner);
+        auto_.registerWidget("text_paint_height");
+        theme::hint("Ctrl+drag the ground to pick a height for Flatten.");
+        theme::hint("Hold - / = to lower / raise one fixed spot; release to finish.");
+    }
 }
 
 void App::terrainStroke(float x, float y, float seconds) {
     if (!documentLoaded() || !doc_.hasTerrain()) return;
-    if (terrainMode_ >= 6 && terrainMode_ <= 8 && !paintableSlot(paintTheme_)) { pushLog("paint: pick a ground theme to paint first (the list under the tool, or Ctrl+click the ground)", 1); return; }
+    if (terrainMode_ >= 6 && terrainMode_ <= 8 && !(terrainMode_==6 && paintSmear_) && !paintableSlot(paintTheme_)) { pushLog("paint: pick a ground theme to paint first (the list under the tool, or Ctrl+click the ground)", 1); return; }
     editor::TerrainBrush b;
     b.mode = brushModeFor(terrainMode_);
     b.x = x; b.y = y; b.radius = brushRadius_; b.strength = brushStrength_;
@@ -2948,24 +3141,112 @@ void App::drawGroundRect(const ImVec2& origin, const ImVec2& size, float x0, flo
 }
 
 void App::drawBrushCursor(const ImVec2& origin, const ImVec2& size) {
+    brushCursorVertices_ = 0;
+    brushCursorSoundCells_ = 0;
+    brushCursorEnvironmentCells_ = 0;
     if (!brushHit_ || !editMode_ || gizmoOp_ != 4) return;
+    const bool surveyDisc = terrainMode_ == 4 || terrainMode_ == 5 || terrainMode_ == 12 || terrainMode_ == 13 || terrainMode_ == 17;
+    const bool roundedDisc = !keyStroke_ &&
+        (terrainMode_ == 2 || ((terrainMode_ == 0 || terrainMode_ == 1) && penExactStep_));
+    const bool groundSmearDisc = terrainMode_ == 6 && paintSmear_;
+    const bool smearDisc = !keyStroke_ && terrainMode_ == 3;
+    const bool keyDisc = keyStroke_;
+    const bool replaceDisc = terrainMode_ == 7;
+    const bool stampDisc = terrainMode_ == 6 && !paintSmear_ && paintStamp_;
+    const bool vertexDisc = roundedDisc || smearDisc || groundSmearDisc || keyDisc || replaceDisc || stampDisc || surveyDisc;
+    const bool noiseSquare = !keyStroke_ && terrainMode_ == 16;
+    const bool soundDisc = terrainMode_ == 11;
+    const bool environmentDisc = terrainMode_ == 10;
+    const bool environmentSmearDisc = environmentDisc && envSmear_;
+    const float centreX = surveyDisc ? std::nearbyint(float(doc_.worldX()) + brushFable_[0]) - float(doc_.worldX())
+        : environmentSmearDisc ? std::trunc(float(doc_.worldX()) + brushFable_[0]) - float(doc_.worldX())
+        : replaceDisc || stampDisc || groundSmearDisc || environmentDisc ? std::trunc(brushFable_[0])
+        : vertexDisc || noiseSquare || soundDisc ? std::nearbyint(brushFable_[0]) : brushFable_[0];
+    const float centreY = surveyDisc ? std::nearbyint(float(doc_.worldY()) + brushFable_[1]) - float(doc_.worldY())
+        : environmentSmearDisc ? std::trunc(float(doc_.worldY()) + brushFable_[1]) - float(doc_.worldY())
+        : replaceDisc || stampDisc || groundSmearDisc || environmentDisc ? std::trunc(brushFable_[1])
+        : vertexDisc || noiseSquare || soundDisc ? std::nearbyint(brushFable_[1]) : brushFable_[1];
+    const float radius = (smearDisc || groundSmearDisc) ? std::trunc(std::max(brushRadius_, 1.0f))
+                                  : brushRadius_ + (roundedDisc || soundDisc || surveyDisc ? 0.5f : 0.0f);
     ImDrawList* dl = ImGui::GetWindowDrawList();
+    const ImU32 col = terrainMode_ == 10 ? IM_COL32(120, 220, 200, 230) : terrainMode_ == 11 ? IM_COL32(120, 170, 255, 230)
+                    : terrainMode_ >= 6 && terrainMode_ <= 8 ? IM_COL32(240, 200, 80, 230)
+                    : terrainMode_ == 4 ? IM_COL32(80, 220, 140, 230) : terrainMode_ == 5 ? IM_COL32(230, 80, 90, 230) : theme::col(theme::Accent);
+    if ((soundDisc || environmentDisc) && brushRadius_ <= 4.0f) {
+        const auto cells = soundDisc
+            ? doc_.soundBrushCells(brushFable_[0], brushFable_[1], brushRadius_)
+            : environmentSmearDisc
+            ? doc_.environmentSmearBrushCells(brushFable_[0], brushFable_[1], brushRadius_)
+            : doc_.environmentBrushCells(brushFable_[0], brushFable_[1], brushRadius_);
+        for (const auto [gx, gy] : cells)
+            drawGroundRect(origin, size, float(gx * 4), float(gy * 4),
+                           float((gx + 1) * 4), float((gy + 1) * 4), col);
+        if (soundDisc) brushCursorSoundCells_ = cells.size();
+        else brushCursorEnvironmentCells_ = cells.size();
+        if (environmentSmearDisc && cells.empty()) {
+            ImGui::PushFont(fontSmall_);
+            const float wrap = std::max(theme::S(40), size.x - theme::S(24));
+            dl->AddText(fontSmall_, ImGui::GetFontSize(), ImVec2(origin.x + theme::S(12), origin.y + theme::S(80)), col,
+                        "Increase Radius to reach a cell.", nullptr, wrap);
+            ImGui::PopFont();
+        }
+        return;
+    }
+    if (noiseSquare) {
+        // GFRandom(ceil(radius)) excludes its upper bound. Enclose each
+        // possible vertex's half-cell area, clipped to the map extent.
+        const float extent = std::max(0.0f, std::ceil(brushRadius_) - 1.0f) + 0.5f;
+        drawGroundRect(origin, size, std::max(0.0f, centreX - extent), std::max(0.0f, centreY - extent),
+                       std::min(float(doc_.cellsX() - 1), centreX + extent),
+                       std::min(float(doc_.cellsY() - 1), centreY + extent), col);
+        const float p[3] = {centreX, doc_.terrainHeight(centreX, centreY).value_or(0.0f) + 0.05f, -centreY};
+        float u, v;
+        if (renderer_.project(p, u, v))
+            dl->AddCircleFilled(ImVec2(origin.x + u * size.x, origin.y + v * size.y), theme::S(3.0f), col);
+        return;
+    }
     const int n = 48;
     ImVec2 pts[n];
     int got = 0;
-    for (int i = 0; i < n; ++i) {
+    for (int i = 0; i < n && !(keyDisc && brushRadius_ <= 4.0f); ++i) {
         const float a = float(i) / n * 6.2831853f;
-        const float fx = brushFable_[0] + brushRadius_ * std::cos(a), fy = brushFable_[1] + brushRadius_ * std::sin(a);
+        const float fx = centreX + radius * std::cos(a), fy = centreY + radius * std::sin(a);
         const auto h = doc_.terrainHeight(fx, fy);
         const float p[3] = {fx, h.value_or(0.0f) + 0.05f, -fy};
         float u, v;
         if (!renderer_.project(p, u, v)) return;
         pts[got++] = ImVec2(origin.x + u * size.x, origin.y + v * size.y);
     }
-    const ImU32 col = terrainMode_ == 10 ? IM_COL32(120, 220, 200, 230) : terrainMode_ == 11 ? IM_COL32(120, 170, 255, 230)
-                    : terrainMode_ >= 6 && terrainMode_ <= 8 ? IM_COL32(240, 200, 80, 230)
-                    : terrainMode_ == 4 ? IM_COL32(80, 220, 140, 230) : terrainMode_ == 5 ? IM_COL32(230, 80, 90, 230) : theme::col(theme::Accent);
-    dl->AddPolyline(pts, got, col, ImDrawFlags_Closed, theme::S(2.0f));
+    if (got > 2) dl->AddPolyline(pts, got, col, ImDrawFlags_Closed, theme::S(2.0f));
+    if (vertexDisc && brushRadius_ <= 4.0f) {
+        const auto vertices = surveyDisc ? doc_.surveyBrushVertices(brushFable_[0], brushFable_[1], brushRadius_) : keyDisc
+            ? forge::heightpen::heightAdditionFootprint(doc_.cellsX(), doc_.cellsY(), brushFable_[0], brushFable_[1], brushRadius_)
+            : replaceDisc || stampDisc || groundSmearDisc
+            ? doc_.themeBrushVertices(brushFable_[0], brushFable_[1], groundSmearDisc ? radius : brushRadius_)
+            : smearDisc
+            ? forge::heightpen::smearFootprint(doc_.cellsX(), doc_.cellsY(), brushFable_[0], brushFable_[1], brushRadius_)
+            : forge::heightpen::discFootprint(doc_.cellsX(), doc_.cellsY(), brushFable_[0], brushFable_[1], brushRadius_);
+        for (const auto [bx, by] : vertices) {
+            const float p[3] = {float(bx), doc_.terrainHeight(float(bx), float(by)).value_or(0.0f) + 0.05f, -float(by)};
+            float u, v;
+            if (!renderer_.project(p, u, v)) continue;
+            const ImVec2 dot(origin.x + u * size.x, origin.y + v * size.y);
+            dl->AddCircleFilled(dot, theme::S(3.0f), col);
+            dl->AddCircleFilled(dot, theme::S(1.2f), IM_COL32(255, 255, 255, 240));
+            ++brushCursorVertices_;
+        }
+        if (keyDisc && vertices.empty()) {
+            const float p[3] = {centreX, doc_.terrainHeight(centreX, centreY).value_or(0.0f) + 0.05f, -centreY};
+            float u, v;
+            if (renderer_.project(p, u, v)) {
+                const float wrap = std::min(theme::S(220.0f), size.x - theme::S(16.0f));
+                const float left = std::max(origin.x + theme::S(8.0f),
+                    std::min(origin.x + u * size.x + theme::S(8.0f), origin.x + size.x - wrap - theme::S(8.0f)));
+                dl->AddText(nullptr, 0.0f, ImVec2(left, origin.y + v * size.y + theme::S(8.0f)),
+                            theme::col(theme::Text), "Increase Radius to reach a vertex.", nullptr, wrap);
+            }
+        }
+    }
     if (terrainMode_ == 14 && clipDrag_)
         drawGroundRect(origin, size, clipStart_[0], clipStart_[1], brushFable_[0], brushFable_[1], IM_COL32(255, 255, 255, 220));
     if (terrainMode_ == 15 && !terrainClip_.empty()) {
@@ -2986,11 +3267,21 @@ void App::drawBrushCursor(const ImVec2& origin, const ImVec2& size) {
         }
         if (m > 1) dl->AddPolyline(line, m, col, ImDrawFlags_None, theme::S(3.0f));
     }
+    if (brushPinned_) {
+        const float p[3]={brushPinPoint_[0],doc_.terrainHeight(brushPinPoint_[0],brushPinPoint_[1]).value_or(0.f)+0.1f,-brushPinPoint_[1]};
+        float u,v;
+        if (renderer_.project(p,u,v)) {
+            const ImVec2 at(origin.x+u*size.x,origin.y+v*size.y);
+            dl->AddCircle(at,theme::S(7),theme::col(theme::Warn),16,theme::S(2));
+            dl->AddText(ImVec2(at.x+theme::S(10),at.y+theme::S(8)),theme::col(theme::Text),"Pinned (Space)");
+        }
+    }
     // centre dot
-    const auto hc = doc_.terrainHeight(brushFable_[0], brushFable_[1]);
-    const float c[3] = {brushFable_[0], hc.value_or(0.0f) + 0.05f, -brushFable_[1]};
+    const auto hc = doc_.terrainHeight(centreX, centreY);
+    const float c[3] = {centreX, hc.value_or(0.0f) + 0.05f, -centreY};
     float cu, cv;
-    if (renderer_.project(c, cu, cv)) dl->AddCircleFilled(ImVec2(origin.x + cu * size.x, origin.y + cv * size.y), theme::S(3.0f), col);
+    if (!brushCursorVertices_ && renderer_.project(c, cu, cv))
+        dl->AddCircleFilled(ImVec2(origin.x + cu * size.x, origin.y + cv * size.y), theme::S(3.0f), col);
 }
 
 // ---- new level from the selected map
@@ -2998,8 +3289,7 @@ void App::drawBrushCursor(const ImVec2& origin, const ImVec2& size) {
 bool App::placeSpawner(const std::vector<std::string>& families, float radius, int limit, const std::string& scriptName) {
     if (!documentLoaded()) { pushLog("editor: no level document", 1); return false; }
     if (families.empty()) { pushLog("editor: pick at least one creature family", 1); return false; }
-    float focus[3]; camera_.focus(focus);
-    float pos[3] = {focus[0], -focus[2], focus[1]};
+    float pos[3]; cameraPlacementPoint(pos);
     if (const auto h = doc_.groundHeight(pos[0], pos[1])) pos[2] = *h;
     try {
         const size_t n = doc_.placeCreatureGenerator(pos, families, radius, limit, scriptName);
@@ -3018,8 +3308,7 @@ bool App::placeSpawner(const std::vector<std::string>& families, float radius, i
 bool App::placeVillage(const std::string& def, const std::string& scriptName) {
     if (!documentLoaded()) { pushLog("editor: no level document", 1); return false; }
     if (def.rfind("VILLAGE_", 0) != 0) { pushLog("editor: " + def + " is not a VILLAGE_ definition", 1); return false; }
-    float focus[3]; camera_.focus(focus);
-    float pos[3] = {focus[0], -focus[2], focus[1]};
+    float pos[3]; cameraPlacementPoint(pos);
     if (const auto h = doc_.groundHeight(pos[0], pos[1])) pos[2] = *h;
     try {
         const size_t n = doc_.placeVillage(pos, def, scriptName, ownerFor(def));
@@ -3192,8 +3481,7 @@ void App::drawLiveLinkCard(float pad, float inner, float cardInner) {
 
 bool App::placeFishingSpot(const std::string& reward, const std::string& scriptName) {
     if (!documentLoaded()) { pushLog("editor: no level document", 1); return false; }
-    float focus[3]; camera_.focus(focus);
-    float pos[3] = {focus[0], -focus[2], focus[1]};
+    float pos[3]; cameraPlacementPoint(pos);
     if (const auto h = doc_.groundHeight(pos[0], pos[1])) pos[2] = *h;
     try {
         const size_t n = doc_.placeFishingSpot(pos, reward, scriptName);
@@ -3505,6 +3793,7 @@ void App::startTerrainDeploy() {
 // ------------------------------------------------------------ viewport
 
 void App::editorShortcuts() {
+    if (!recoveryPending_.empty()) return;
     if (!editMode_ || !documentLoaded()) return;
     ImGuiIO& io = ImGui::GetIO();
     // a pending write confirmation owns Escape (confirmRow cancels it): nothing else reacts this frame
@@ -3512,6 +3801,7 @@ void App::editorShortcuts() {
     if (carryArmed_ && ImGui::IsKeyPressed(ImGuiKey_Escape)) { cancelCarry(); clickArmed_ = false; return; }
     if (ImGui::IsAnyItemActive() || io.WantTextInput) return;
     if (ImGui::IsPopupOpen(nullptr,ImGuiPopupFlags_AnyPopupId | ImGuiPopupFlags_AnyPopupLevel)) return;
+    if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_B)) { createSnapshot(); return; }
     if (selectionInspectorOpen_ && ImGui::IsKeyPressed(ImGuiKey_Escape)) { selectionInspectorOpen_ = false; return; }
     const bool rmb = ImGui::IsMouseDown(ImGuiMouseButton_Right);
     if (!rmb) {
@@ -3538,8 +3828,9 @@ void App::editorShortcuts() {
         else if (selectedThing_ >= 0) deleteSelected();
     }
     if (ImGui::IsKeyPressed(ImGuiKey_V) && !io.KeyCtrl) showFirstInvalid();   // vanilla: find the invalid thing
-    // vanilla saves with Ctrl+S / F6: here the draft (the loose .tng); writing into the game stays a confirmed button
-    if (((io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_S)) || ImGui::IsKeyPressed(ImGuiKey_F6)) && doc_.dirty()) saveDocument();
+    // Ctrl+S / F6 save authoring work; F7 saves and reopens it. Deployment stays separate.
+    if (((io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_S)) || ImGui::IsKeyPressed(ImGuiKey_F6)) && hasUnsavedEdits()) saveDraft();
+    if (ImGui::IsKeyPressed(ImGuiKey_F7) && saveDraft()) { openDocument(); startFoliageLoad(); }
     if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_Z)) editUndo();
     if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_Y)) editRedo();
     if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_D) && selectedThing_ >= 0) {
@@ -3601,7 +3892,7 @@ void App::editorShortcuts() {
 }
 
 void App::drawGizmo(const ImVec2& origin, const ImVec2& size) {
-    if (!editMode_ || !documentLoaded() || selectedThing_ < 0 || gizmoOp_ == 0 || gizmoOp_ == 4) { gizmoWasUsing_ = false; return; }   // 4 = the terrain tool: no gizmo
+    if (!editMode_ || !documentLoaded() || selectedThing_ < 0 || gizmoOp_ == 0 || gizmoOp_ == 4 || (budgetOpen_ && budgetScope_ == 3 && budgetPicking_)) { gizmoWasUsing_ = false; return; }   // 4 = the terrain tool: no gizmo
     // ImGuizmo's viewport-rectangle fallback can see clicks behind a modal.
     // Do not start a drag through a popup; let an existing drag finish normally.
     if (!gizmoWasUsing_ && ImGui::IsPopupOpen(nullptr,ImGuiPopupFlags_AnyPopupId | ImGuiPopupFlags_AnyPopupLevel)) { ImGuizmo::Enable(false); return; }
@@ -3690,6 +3981,201 @@ editor::Frame App::groupFrame(const editor::Frame& start) const {
 
 // ------------------------------------------------------------ unsaved-changes prompt
 
+fs::path App::recoveryPath() const {
+    auto hash=[](const std::string& text) {
+        uint64_t value=14695981039346656037ull;
+        for (unsigned char c:text) { value^=c; value*=1099511628211ull; }
+        char buf[17]; std::snprintf(buf,sizeof buf,"%016llx",static_cast<unsigned long long>(value));
+        return std::string(buf);
+    };
+    const auto root=recoveryRoot_.empty() ? fs::path(settingsPath()).parent_path()/"autosave" : recoveryRoot_;
+    const MapEntry* map=findEntry(selectedName_);
+    const std::string identity=doc_.mapName()+"|"+(map ? map->worldFile : "")+"|"+saveRoot();
+    return root/hash(lowerCopy(fs::weakly_canonical(installPath_).generic_string()))/(hash(identity)+".ffrecovery");
+}
+
+bool App::autosaveNow() {
+    if (!documentLoaded() || !doc_.hasTerrain() || doc_.editActive() || activeFileJob() || !recoveryPending_.empty()) return false;
+    if (auto_.active() && recoveryRoot_.empty()) { pushLog("autosave: scripted runs need an owned recovery root",1); return false; }
+    try {
+        const auto path=recoveryPath();
+        auto snapshot=doc_.recoveryWriteSnapshot();
+        recoveryRetired_.erase(path);
+        const auto map=doc_.mapName();
+        recoveryFuture_=std::async(std::launch::async,[snapshot=std::move(snapshot),path,map]() mutable {
+            RecoveryResult result; result.path=path; result.map=map;
+            result.ok=snapshot.saveRecovery(path,result.error); return result;
+        });
+        recoveryAt_=std::chrono::steady_clock::now();
+        return true;
+    } catch (const std::exception& e) { pushLog(std::string("autosave: ")+e.what(),2); return false; }
+}
+
+fs::path App::snapshotDirectory() const {
+    const auto archive=recoveryPath();
+    const auto root=recoveryRoot_.empty() ? fs::path(settingsPath()).parent_path()/"snapshots" : recoveryRoot_.parent_path()/"snapshots";
+    return root/archive.parent_path().filename()/archive.stem();
+}
+
+bool App::createSnapshot() {
+    if (!documentLoaded() || !doc_.hasTerrain() || doc_.editActive() || activeFileJob() || !recoveryPending_.empty()) return false;
+    if (auto_.active() && recoveryRoot_.empty()) return false;
+    try {
+        auto snapshot=doc_.recoveryWriteSnapshot();
+        const auto captured=std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+        forge::TemporaryDirectory reserved(snapshotDirectory(),"snapshot-"+std::to_string(captured)+"-");
+        const auto path=reserved.path()/"state.ffsnapshot";
+        const auto map=doc_.mapName();
+        recoveryFuture_=std::async(std::launch::async,[snapshot=std::move(snapshot),path,map]() mutable {
+            RecoveryResult result; result.path=path; result.map=map; result.history=true;
+            result.ok=snapshot.saveRecovery(path,result.error); return result;
+        });
+        reserved.retain();
+        return true;
+    } catch (const std::exception& e) { pushLog(std::string("snapshot: ")+e.what(),2); return false; }
+}
+
+void App::refreshSnapshots() {
+    snapshots_.clear(); snapshotsFor_=snapshotDirectory();
+    std::error_code ec;
+    if (!fs::exists(snapshotsFor_,ec)) return;
+    std::map<fs::path,fs::file_time_type> times;
+    for (fs::directory_iterator it(snapshotsFor_,ec),end; !ec && it!=end; it.increment(ec)) {
+        if (!it->is_directory(ec)) { if (ec) break; continue; }
+        const auto file=it->path()/"state.ffsnapshot";
+        if (fs::is_regular_file(file,ec)) {
+            const auto written=fs::last_write_time(file,ec);
+            if (!ec) { snapshots_.push_back(file); times[file]=written; }
+        }
+    }
+    std::sort(snapshots_.begin(),snapshots_.end(),[&](const auto& a,const auto& b) { return times.at(a)!=times.at(b) ? times.at(a)>times.at(b) : a>b; });
+    if (ec) pushLog("snapshot list: "+ec.message(),1);
+}
+
+void App::drawSnapshotsWindow() {
+    if (!snapshotsOpen_ || !documentLoaded() || texturesMode_ || worldMode_ || modsMode_ || (auto_.active() && recoveryRoot_.empty())) {
+        snapshotsOpen_=false; snapshotDeletePending_.clear(); return;
+    }
+    if (snapshotsFor_!=snapshotDirectory()) refreshSnapshots();
+    using theme::S;
+    const std::string sub=doc_.mapName()+" / Saved restore points for objects and terrain.";
+    if (!beginToolWindow("##snapshots","Saved snapshots",sub.c_str(),&snapshotsOpen_,S(450))) return;
+    const bool busy=activeFileJob()!=nullptr || doc_.editActive();
+    if (theme::primaryButton("Create snapshot",ImVec2(S(170),S(28)),!busy)) createSnapshot();
+    auto_.registerWidget("btn_snapshot_create");
+    ImGui::SameLine();
+    if (theme::ghostButton("Refresh",ImVec2(S(80),S(28)))) refreshSnapshots();
+    auto_.registerWidget("btn_snapshots_refresh");
+    if (snapshots_.empty()) theme::hint("No saved snapshots for this map yet.");
+    for (size_t i=0;i<snapshots_.size();++i) {
+        const auto path=snapshots_[i];
+        ImGui::PushID(int(i));
+        std::error_code timeError;
+        const auto written=fs::last_write_time(path,timeError);
+        char text[32]="Time unavailable";
+        if (!timeError) {
+            const auto systemTime=std::chrono::time_point_cast<std::chrono::system_clock::duration>(written-fs::file_time_type::clock::now()+std::chrono::system_clock::now());
+            const auto stamp=std::chrono::system_clock::to_time_t(systemTime);
+            std::tm local{};
+            if (localtime_s(&local,&stamp)==0) std::strftime(text,sizeof text,"%Y-%m-%d %H:%M:%S",&local);
+        }
+        ImGui::Separator(); ImGui::TextUnformatted(text);
+        ImGui::BeginDisabled(busy || bool(timeError));
+        if (theme::ghostButton("Restore",ImVec2(S(100),S(26)))) { recoveryPending_=path; snapshotRestore_=true; }
+        auto_.registerWidget(("btn_snapshot_restore_"+std::to_string(i)).c_str());
+        ImGui::SameLine();
+        if (theme::dangerButton("Delete",ImVec2(S(100),S(26)))) snapshotDeletePending_=path;
+        auto_.registerWidget(("btn_snapshot_delete_"+std::to_string(i)).c_str());
+        int removal=0;
+        if (snapshotDeletePending_==path) removal=confirmRow("Delete this saved snapshot?","Delete##confirm",toolWindowInner_,S(26),("btn_snapshot_delete_confirm_"+std::to_string(i)).c_str());
+        ImGui::EndDisabled();
+        if (removal) snapshotDeletePending_.clear();
+        if (removal>0) {
+            if (path.parent_path().parent_path()==snapshotDirectory()) {
+                std::error_code ec; fs::remove(path,ec);
+                if (!ec) fs::remove(path.parent_path(),ec);
+                if (ec) pushLog("snapshot delete: "+ec.message(),2);
+                snapshotsFor_.clear();
+            }
+        }
+        ImGui::PopID();
+    }
+    endToolWindow();
+}
+
+void App::retireRecovery() {
+    if (!documentLoaded() || (auto_.active() && recoveryRoot_.empty())) return;
+    const auto path=recoveryPath();
+    recoveryRetired_.insert(path);
+    std::error_code ec; fs::remove(path,ec);
+    if (ec) pushLog("recovery cleanup: "+ec.message(),1);
+    if (recoveryPending_==path) recoveryPending_.clear();
+    recoveryAt_=std::chrono::steady_clock::now();
+}
+
+void App::pollRecovery() {
+    if (recoveryFuture_.valid() && recoveryFuture_.wait_for(std::chrono::milliseconds(0))==std::future_status::ready) {
+        const auto result=recoveryFuture_.get();
+        if (result.history) {
+            snapshotsFor_.clear();
+            if (!result.ok) { std::error_code ec; fs::remove(result.path.parent_path(),ec); }
+            pushLog(result.ok ? "saved snapshot of "+result.map : "snapshot failed: "+result.error,result.ok ? 3 : 2);
+        } else if (recoveryRetired_.erase(result.path)) {
+            std::error_code ec; fs::remove(result.path,ec);
+            if (ec) pushLog("recovery cleanup: "+ec.message(),1);
+        } else if (result.ok) pushLog("autosaved "+result.map+" (objects and terrain)",0);
+        else pushLog("autosave failed: "+result.error,2);
+        if (closePending_ && !hasUnsavedEdits() && !worldPendingCount() && !worldFuture_.valid() && dialogueStaged_.empty() && !textEditing_ && !definitionEditing_) {
+            retireRecovery(); quit_=true;
+        }
+    }
+    if ((!auto_.active() || recoveryTimerInAuto_) && settings_.autosave && hasUnsavedEdits() && recoveryPending_.empty() && !activeFileJob() &&
+        std::chrono::steady_clock::now()-recoveryAt_>=std::chrono::minutes(settings_.autosaveMinutes)) autosaveNow();
+}
+
+void App::drawRecoveryPrompt() {
+    if (recoveryPending_.empty() || (auto_.active() && !recoveryPromptInAuto_)) return;
+    using theme::S;
+    const char* title=snapshotRestore_ ? "Restore saved snapshot" : "Recover unsaved edits";
+    ImGui::OpenPopup(title);
+    ImGui::SetNextWindowSize(ImVec2(S(390),0));
+    if (ImGui::BeginPopupModal(title,nullptr,ImGuiWindowFlags_AlwaysAutoResize)) {
+        std::error_code ec;
+        const auto written=fs::last_write_time(recoveryPending_,ec);
+        if (!ec) {
+            const auto systemTime=std::chrono::time_point_cast<std::chrono::system_clock::duration>(
+                written-fs::file_time_type::clock::now()+std::chrono::system_clock::now());
+            const auto stamp=std::chrono::system_clock::to_time_t(systemTime);
+            std::tm local{}; char text[32]{};
+            if (localtime_s(&local,&stamp)==0 && std::strftime(text,sizeof text,"%Y-%m-%d %H:%M",&local)) {
+                ImGui::TextColored(theme::vec(theme::Muted),"Captured %s",text);
+                auto_.registerWidget("text_recovery_time");
+            }
+        }
+        ImGui::TextWrapped(snapshotRestore_ ? "Restore %s's saved objects and terrain? Undo returns to your current edits." : "%s has a recovery snapshot of objects and terrain. Recover it as an undoable edit, or discard it.",doc_.mapName().c_str());
+        ImGui::BeginDisabled(activeFileJob()!=nullptr);
+        if (theme::primaryButton("Recover",ImVec2(S(160),S(32)))) {
+            std::string error;
+            if (doc_.recover(recoveryPending_,error)) {
+                recoveryPending_.clear(); snapshotRestore_=false; recoveryAt_=std::chrono::steady_clock::now();
+                selectedThing_=-1; selectedUid_=0; extraUids_.clear();
+                sectionsDirty_=true; startFoliageLoad();
+                pushLog("recovered objects and terrain; Save draft keeps them",3);
+                ImGui::CloseCurrentPopup();
+            } else pushLog("recovery failed: "+error,2);
+        }
+        auto_.registerWidget("btn_recovery_recover");
+        ImGui::SameLine();
+        if (theme::dangerButton(snapshotRestore_ ? "Cancel" : "Discard",ImVec2(S(160),S(32)))) {
+            if (snapshotRestore_) { recoveryPending_.clear(); snapshotRestore_=false; }
+            else retireRecovery();
+            ImGui::CloseCurrentPopup();
+        }
+        auto_.registerWidget("btn_recovery_discard");
+        ImGui::EndDisabled(); ImGui::EndPopup();
+    }
+}
+
 void App::drawUnsavedPrompt() {
     if (pendingSelect_.empty() && !closePending_) return;
     using theme::S;
@@ -3711,6 +4197,11 @@ void App::drawUnsavedPrompt() {
                                    doc_.dirty() && doc_.hasTerrain() && doc_.terrainDirty() ? "objects and terrain" : doc_.dirty() ? "objects" : "terrain");
             if (worldPendingCount())
                 ImGui::TextColored(theme::vec(theme::Muted), "%zu pending world change%s not written.", worldPendingCount(), worldPendingCount() == 1 ? "" : "s");
+            if(definitionEditing_)
+                ImGui::TextColored(theme::vec(theme::Muted),"%s has an open definition field draft. Review and save it from Assets > Definitions before closing.",definitionEditField_.c_str());
+            if (textEditing_)
+                ImGui::TextColored(theme::vec(theme::Muted),
+                    "%s has an open text draft. Review and save it from Assets > Text before closing.",textEditName_.c_str());
             if (!dialogueStaged_.empty())
                 ImGui::TextColored(theme::vec(theme::Muted),
                     "%zu lip sync line edit%s staged. Export them from Assets > Dialogue before closing.",
@@ -3724,34 +4215,41 @@ void App::drawUnsavedPrompt() {
         ImGui::PopTextWrapPos();
         ImGui::Dummy(ImVec2(0, S(10)));
         const float w = (S(390) - 2 * S(6)) / 3.0f;
-        const bool canSave = closePending_ ? (doc_.dirty() || worldPendingCount() > 0) && !worldFuture_.valid() : doc_.dirty();
-        const bool reviewDialogue=closePending_ && !canSave && !dialogueStaged_.empty() &&
+        const bool canSave = closePending_ ? (hasUnsavedEdits() || worldPendingCount() > 0) && !worldFuture_.valid() : hasUnsavedEdits();
+        const bool reviewDefinition=closePending_ && !canSave && definitionEditing_ && !worldFuture_.valid();
+        const bool reviewText=closePending_ && !canSave && !definitionEditing_ && textEditing_ && !worldFuture_.valid();
+        const bool reviewDialogue=closePending_ && !canSave && !definitionEditing_ && !textEditing_ && !dialogueStaged_.empty() &&
             !worldFuture_.valid();
-        if (theme::primaryButton(reviewDialogue ? "Review dialogue" :
+        if (theme::primaryButton(reviewDefinition ? "Review definition" : reviewText ? "Review text" : reviewDialogue ? "Review dialogue" :
                                  closePending_ ? "Save work" : "Save draft",
-                                 ImVec2(w, S(32)), canSave || reviewDialogue)) {
-            if(reviewDialogue) {
+                                 ImVec2(w, S(32)), canSave || reviewDefinition || reviewText || reviewDialogue)) {
+            if(reviewDefinition) {
+                closePending_=false;setTexturesMode(true);setAssetsTab(6);
+            } else if(reviewText) {
+                closePending_=false;setTexturesMode(true);setAssetsTab(5);
+            } else if(reviewDialogue) {
                 closePending_=false;
                 setTexturesMode(true);
                 setAssetsTab(4);
                 setDialogueEditing(true);
             } else
             if (closePending_) {
-                const bool draftSaved = !doc_.dirty() || saveDocument();
+                const bool draftSaved = !hasUnsavedEdits() || saveDraft();
                 if (draftSaved && worldPendingCount() > 0) {
                     worldApply();
                     closeSaveWaiting_ = worldFuture_.valid();
                 }
                 if (draftSaved && !hasUnsavedEdits() && worldPendingCount() == 0 &&
-                    !worldFuture_.valid() && dialogueStaged_.empty()) quit_ = true;
-            } else if (saveDocument() && !hasUnsavedEdits()) {
+                    !worldFuture_.valid() && dialogueStaged_.empty() && !textEditing_ && !definitionEditing_) quit_ = true;
+            } else if (saveDraft() && !hasUnsavedEdits()) {
                 const std::string t = pendingSelect_; pendingSelect_.clear(); discardEdits_ = true; selectMap(t);
             }
         }
         auto_.registerWidget("btn_unsaved_save");
         ImGui::SameLine(0, S(6));
-        ImGui::BeginDisabled(worldFuture_.valid());
+        ImGui::BeginDisabled(worldFuture_.valid() || recoveryFuture_.valid());
         if (theme::dangerButton("Discard", ImVec2(w, S(32)))) {
+            retireRecovery();
             if (closePending_) quit_ = true;
             else { const std::string t = pendingSelect_; pendingSelect_.clear(); discardEdits_ = true; selectMap(t); }
         }
@@ -3762,7 +4260,7 @@ void App::drawUnsavedPrompt() {
         auto_.registerWidget("btn_unsaved_cancel");
         if (doc_.hasTerrain() && doc_.terrainDirty()) {
             ImGui::PushFont(fontSmall_);
-            theme::hint("Terrain edits are written with 'Write terrain into the game' (or into a pack) in the Edit panel.");
+            theme::hint("Save draft keeps terrain work for later. Write terrain applies it to the game or pack.");
             ImGui::PopFont();
         }
         if (pendingSelect_.empty() && !closePending_) ImGui::CloseCurrentPopup();
@@ -3829,7 +4327,7 @@ void App::drawEditPanel(float pad, float inner, float cardInner) {
             struct Tool { int mode; const char* label; };
             static const std::vector<Tool> sculpt = {{0, "Raise"}, {1, "Lower"}, {2, "Flatten"}, {3, "Smooth"}, {16, "Noise"}, {9, "Path"}};
             static const std::vector<Tool> paint = {{6, "Ground"}, {7, "Replace"}, {8, "Flood"}, {10, "Environ."}, {11, "Sound"}};
-            static const std::vector<Tool> pass = {{4, "Walkable"}, {5, "Blocked"}, {12, "Camera ok"}, {13, "Camera no"}};
+            static const std::vector<Tool> pass = {{4, "Walkable"}, {5, "Blocked"}, {12, "Camera ok"}, {13, "Camera no"}, {17, "Shore"}};
             static const std::vector<Tool> region = {{14, "Copy"}, {15, "Paste"}};
             const std::vector<Tool>* groups[4] = {&sculpt, &paint, &pass, &region};
             int cat = 0;
@@ -3841,9 +4339,11 @@ void App::drawEditPanel(float pad, float inner, float cardInner) {
                 if (!inside) terrainMode_ = (*groups[cat])[0].mode;
             }
             auto_.registerWidget("seg_terrain_category");
+            const bool separateShore = cat == 2 && cardInner < S(260);
             std::vector<const char*> labels;
             std::vector<int> modes;
             for (const auto& t : *groups[cat]) {
+                if (separateShore && t.mode == 17) continue;
                 if ((t.mode == 10 || t.mode == 11) && !doc_.hasGameMap()) continue;   // older .lev: no game-map grid
                 labels.push_back(t.label); modes.push_back(t.mode);
             }
@@ -3851,6 +4351,10 @@ void App::drawEditPanel(float pad, float inner, float cardInner) {
             for (size_t i = 0; i < modes.size(); ++i) if (modes[i] == terrainMode_) pick = int(i);
             if (theme::segmented("##tmode", pick, labels, cardInner) && pick >= 0) terrainMode_ = modes[size_t(pick)];
             auto_.registerWidget("seg_terrain_mode");
+            if (separateShore) {
+                if (theme::chip("Shore", terrainMode_ == 17)) terrainMode_ = 17;
+                auto_.registerWidget("chip_tool_shore");
+            }
         }
         {
             if (terrainMode_ == 14 || terrainMode_ == 15) {
@@ -3885,6 +4389,19 @@ void App::drawEditPanel(float pad, float inner, float cardInner) {
             }
         }
         {
+            if (terrainMode_ == 17) {
+                theme::label("Shore points");
+                if (theme::chip("On", shoreSet_)) shoreSet_ = true;
+                auto_.registerWidget("chip_shore_on");
+                ImGui::SameLine();
+                if (theme::chip("Off", !shoreSet_)) shoreSet_ = false;
+                auto_.registerWidget("chip_shore_off");
+                ImGui::Checkbox("Show shore points", &shoreOverlayShow_);
+                auto_.registerWidget("check_shore_overlay");
+                ImGui::PushFont(fontSmall_);
+                theme::hint("Paint shore-point flags; Shift reverses On/Off. Red marks set cells. Saved with terrain. The visible water shoreline comes from water generation.");
+                ImGui::PopFont();
+            }
             if (terrainMode_ == 12 || terrainMode_ == 13) {
                 ImGui::PushFont(fontSmall_);
                 theme::hintMore("Where the camera may go: matters on cliffs, walls and water edges.", "Where the camera may pass (the .lev's camera-passability byte; vanilla Survey > Passability). Walkable cells are always camera-passable -- the vanilla saver ORs them -- so this matters on blocked ground: cliffs, walls, water edges.");
@@ -3902,43 +4419,67 @@ void App::drawEditPanel(float pad, float inner, float cardInner) {
                 ImGui::PopFont();
             }
             if (terrainMode_ == 10) {
-                theme::label("Environment theme");
-                ImGui::SetNextItemWidth(cardInner);
-                if (ImGui::BeginCombo("##envslot", atmosName(envSlot_).c_str())) {
-                    for (size_t i = 0; i < atm.size(); ++i) {
-                        if (i != 0 && atm[i].name.empty()) continue;
-                        if (ImGui::Selectable((atmosName(int(i)) + "##env" + std::to_string(i)).c_str(), int(i) == envSlot_)) envSlot_ = int(i);
-                    }
-                    ImGui::EndCombo();
-                }
-                auto_.registerWidget("combo_env_slot");
-                ImGui::SetNextItemWidth(cardInner);
-                ImGui::InputTextWithHint("##envsearch", "Add an environment from the game (UNDERTREES, HAUNTED...)", envSearch_, sizeof envSearch_, ImGuiInputTextFlags_CharsUppercase);
-                auto_.registerWidget("input_env_search");
-                if (envSearch_[0] && ctx_.ready()) {
-                    ImGui::PushStyleColor(ImGuiCol_ChildBg, theme::vec(theme::Bg0));
-                    ImGui::BeginChild("##envlist", ImVec2(cardInner, S(100)), ImGuiChildFlags_None);
-                    ImGui::PopStyleColor();
-                    ImGui::PushFont(fontSmall_);
-                    if (envDefs_.empty()) envDefs_ = ctx_.definitions({"ENVIRONMENT_THEME_DAY"});
-                    for (const auto& [name, type] : envDefs_) {
-                        if (!contains(name, envSearch_)) continue;
-                        if (ImGui::Selectable(name.c_str())) {
-                            const auto idx = ctx_.definitionIndex(name);
-                            const int slot = idx ? doc_.addEnvironmentTheme(name, *idx) : -1;
-                            if (slot >= 0) { envSlot_ = slot; pushLog("environment " + name + " in atmos slot " + std::to_string(slot), 0); }
-                            else pushLog("environment: no free atmos slot (or no game-map grid)", 1);
+                if (theme::chip("Paint", !envSmear_)) envSmear_ = false;
+                auto_.registerWidget("chip_environment_paint");
+                ImGui::SameLine();
+                if (theme::chip("Smear", envSmear_)) envSmear_ = true;
+                auto_.registerWidget("chip_environment_smear");
+                ImGui::Checkbox("Show colours", &environmentOverlayShow_);
+                auto_.registerWidget("check_environment_overlay");
+                if (!envSmear_) {
+                    theme::label("Environment theme");
+                    ImGui::SetNextItemWidth(cardInner);
+                    if (ImGui::BeginCombo("##envslot", atmosName(envSlot_).c_str())) {
+                        for (size_t i = 0; i < atm.size(); ++i) {
+                            if (i != 0 && atm[i].name.empty()) continue;
+                            const auto colour = i == 0 ? editor::Document::OverlayColour{} : ctx_.defColourField(atm[i].name, "EditorColour").value_or(editor::Document::OverlayColour{});
+                            if (ImGui::ColorButton(("##envcolour" + std::to_string(i)).c_str(), ImVec4(colour[0]/255.f, colour[1]/255.f, colour[2]/255.f, 1),
+                                                   ImGuiColorEditFlags_NoTooltip | ImGuiColorEditFlags_NoDragDrop, ImVec2(S(14), S(14)))) { envSlot_ = int(i); ImGui::CloseCurrentPopup(); }
+                            auto_.registerWidget(("colour_environment_" + std::to_string(i)).c_str());
+                            ImGui::SameLine();
+                            if (ImGui::Selectable((atmosName(int(i)) + "##env" + std::to_string(i)).c_str(), int(i) == envSlot_)) envSlot_ = int(i);
                         }
+                        ImGui::EndCombo();
                     }
-                    ImGui::PopFont();
-                    ImGui::EndChild();
+                    auto_.registerWidget("combo_env_slot");
+                    ImGui::SetNextItemWidth(cardInner);
+                    ImGui::InputTextWithHint("##envsearch", "Add an environment from the game (UNDERTREES, HAUNTED...)", envSearch_, sizeof envSearch_, ImGuiInputTextFlags_CharsUppercase);
+                    auto_.registerWidget("input_env_search");
+                    if (envSearch_[0] && ctx_.ready()) {
+                        ImGui::PushStyleColor(ImGuiCol_ChildBg, theme::vec(theme::Bg0));
+                        ImGui::BeginChild("##envlist", ImVec2(cardInner, S(100)), ImGuiChildFlags_None);
+                        ImGui::PopStyleColor();
+                        ImGui::PushFont(fontSmall_);
+                        if (envDefs_.empty()) envDefs_ = ctx_.definitions({"ENVIRONMENT_THEME_DAY"});
+                        for (const auto& [name, type] : envDefs_) {
+                            if (!contains(name, envSearch_)) continue;
+                            if (ImGui::Selectable(name.c_str())) {
+                                const auto idx = ctx_.definitionIndex(name);
+                                const int slot = idx ? doc_.addEnvironmentTheme(name, *idx) : -1;
+                                if (slot >= 0) { envSlot_ = slot; pushLog("environment " + name + " in atmos slot " + std::to_string(slot), 0); }
+                                else pushLog("environment: no free atmos slot (or no game-map grid)", 1);
+                            }
+                        }
+                        ImGui::PopFont();
+                        ImGui::EndChild();
+                    }
                 }
             } else {
+                theme::label("Sound colours");
+                ImGui::SetNextItemWidth(cardInner);
+                ImGui::Combo("##soundoverlay", &soundOverlayShow_, "Off\0All sounds\0This sound only\0");
+                auto_.registerWidget("combo_sound_overlay");
                 theme::label("Sound theme");
                 ImGui::SetNextItemWidth(cardInner);
                 if (ImGui::BeginCombo("##soundidx", soundName(soundIndex_).c_str())) {
-                    for (size_t i = 0; i <= snd.size(); ++i)
+                    for (size_t i = 0; i <= snd.size(); ++i) {
+                        const auto colour = i == 0 ? editor::Document::OverlayColour{} : ctx_.defColourField(snd[i - 1], "EditColour").value_or(editor::Document::OverlayColour{});
+                        if (ImGui::ColorButton(("##soundcolour" + std::to_string(i)).c_str(), ImVec4(colour[0]/255.f, colour[1]/255.f, colour[2]/255.f, colour[3]/255.f),
+                                               ImGuiColorEditFlags_NoTooltip | ImGuiColorEditFlags_NoDragDrop, ImVec2(S(14), S(14)))) { soundIndex_ = int(i); ImGui::CloseCurrentPopup(); }
+                        auto_.registerWidget(("colour_sound_" + std::to_string(i)).c_str());
+                        ImGui::SameLine();
                         if (ImGui::Selectable((soundName(int(i)) + "##snd" + std::to_string(i)).c_str(), int(i) == soundIndex_)) soundIndex_ = int(i);
+                    }
                     ImGui::EndCombo();
                 }
                 auto_.registerWidget("combo_sound");
@@ -3973,8 +4514,10 @@ void App::drawEditPanel(float pad, float inner, float cardInner) {
             }
             ImGui::PushFont(fontSmall_);
             theme::hint(terrainMode_ == 10
-                ? "Paints the environment theme (an ENVIRONMENT_THEME_DAY def) on the map's 4x4-cell grid, blended like ground themes. Ctrl+click samples it. Saved with the terrain."
-                : "Paints the background sound (birds, sea, village) on the map's 4x4-cell grid. The list is the sounds this map names; one added from the game joins it (the .lev after the list is re-laid, every offset shifted). Ctrl+click samples it. Saved with the terrain.");
+                ? envSmear_
+                    ? "Blends each reached cell with its eight neighbours while you paint. Small brushes outline the cells; increase Radius if none are reached. Ctrl+click samples an environment."
+                    : "Each touched 4x4 cell takes the chosen environment in one application. Small brushes outline the cells they affect. Ctrl+click samples an environment. Saved with the terrain."
+                : "Paints background sound (birds, sea, village) on the map's 4x4-cell grid. Small brushes outline the cells they affect. Ctrl+click samples a sound. Saved with the terrain.");
             ImGui::PopFont();
         }
         if (terrainMode_ == 7 || terrainMode_ == 8) {
@@ -4009,6 +4552,17 @@ void App::drawEditPanel(float pad, float inner, float cardInner) {
             ImGui::PopFont();
         }
         if (terrainMode_ == 6) {
+            if (theme::chip("Paint", !paintSmear_)) paintSmear_=false;
+            auto_.registerWidget("chip_ground_paint");
+            ImGui::SameLine();
+            if (theme::chip("Smear", paintSmear_)) paintSmear_=true;
+            auto_.registerWidget("chip_ground_smear");
+            if (paintSmear_) theme::hint("Blend the existing ground themes with their neighbours. No target theme is needed.");
+        }
+        if (terrainMode_ == 6 && !paintSmear_) {
+            ImGui::Checkbox("Full stamp", &paintStamp_);
+            auto_.registerWidget("check_paint_stamp");
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("Sets every considered vertex fully to this theme in one application. Switch off for soft blending.");
             // ground theme picker: the map's LEV palette (slot -> ENGINE_THEME name), named slots
             const forge::lev::File* lev = doc_.level();
             const char* current = "(pick a ground theme)";
@@ -4078,8 +4632,8 @@ void App::drawEditPanel(float pad, float inner, float cardInner) {
         drawPenControls(cardInner);
         // the brush size where a tool has one (flood / copy / paste do not); strength where it blends
         const bool usesRadius = terrainMode_ != 8 && terrainMode_ != 14 && terrainMode_ != 15;
-        const bool usesStrength = usesRadius && terrainMode_ != 9 && terrainMode_ != 11 && terrainMode_ != 4 && terrainMode_ != 5 &&
-                                  terrainMode_ != 12 && terrainMode_ != 13 && terrainMode_ != 7 && !isVanillaPen(terrainMode_);
+        const bool usesStrength = usesRadius && terrainMode_ != 9 && terrainMode_ != 10 && terrainMode_ != 11 && terrainMode_ != 4 && terrainMode_ != 5 &&
+                                  terrainMode_ != 12 && terrainMode_ != 13 && terrainMode_ != 17 && terrainMode_ != 7 && !(terrainMode_ == 6 && paintStamp_) && !isVanillaPen(terrainMode_);
         char val[48];
         if (usesRadius) {
             std::snprintf(val, sizeof val, brushRadius_ < 2 ? "%.2f cells" : "%.0f cells", brushRadius_);
@@ -4091,7 +4645,23 @@ void App::drawEditPanel(float pad, float inner, float cardInner) {
             if(ImGui::SliderFloat("##radius", &sizeExponent, -2.0f, std::log2(60.0f), ""))
                 brushRadius_=forge::heightpen::sizeToRadius(sizeExponent);
             auto_.registerWidget("slider_radius");
-            if(ImGui::IsItemHovered()) ImGui::SetTooltip("Drag left for precise edits, right for broad strokes.\n0.25 cells reaches a single height vertex; [ and ] change size.");
+            if (ImGui::IsItemHovered()) {
+                if (terrainMode_ == 4 || terrainMode_ == 5 || terrainMode_ == 12 || terrainMode_ == 13 || terrainMode_ == 17)
+                    ImGui::SetTooltip("Rounded vertex pen; small brushes show the affected regular cells.");
+                else if (terrainMode_ == 10 && envSmear_)
+                    ImGui::SetTooltip("Blends each reached 4x4 cell with its neighbours. The minimum effective radius is 1; small brushes outline the cells.");
+                else if (terrainMode_ == 10)
+                    ImGui::SetTooltip("Drag left for precise edits, right for broad strokes; [ and ] change size.\nThe pen uses a truncated vertex and strict radius. Small brushes outline affected environment cells.");
+                else if (terrainMode_ == 11)
+                    ImGui::SetTooltip("Drag left for precise edits, right for broad strokes; [ and ] change size.\nEach touched vertex paints its containing 4x4 sound cell. Small brushes outline those cells.");
+                else if (terrainMode_ == 6 && paintSmear_)
+                    ImGui::SetTooltip("Average a frozen 3x3 neighbourhood into three distinct themes. Minimum radius 1; the fractional radius is truncated. Small brushes show affected vertices.");
+                else if ((terrainMode_ == 6 && paintStamp_) || terrainMode_ == 7)
+                    ImGui::SetTooltip("Drag left for precise edits, right for broad strokes; [ and ] change size.\nThe pen uses a truncated vertex and strict radius. Small brushes show considered vertices.");
+                else if (terrainMode_ <= 3 || terrainMode_ == 9 || terrainMode_ == 16)
+                    ImGui::SetTooltip("Drag left for precise edits, right for broad strokes; [ and ] change size.\nExact-step Raise/Lower and Flatten can reach one vertex at 0.25 cells.\nHeld height keys ask for a larger Radius when their footprint is empty.");
+                else ImGui::SetTooltip("Drag left for precise edits, right for broad strokes; [ and ] change size.");
+            }
         }
         if (usesStrength) {
             std::snprintf(val, sizeof val, "%.1f", brushStrength_);
@@ -4101,14 +4671,17 @@ void App::drawEditPanel(float pad, float inner, float cardInner) {
             auto_.registerWidget("slider_strength");
         }
         // how to use the brush, per tool (Shift only inverts raise/lower and walkable/blocked; Replace has its own hint above)
+        if (terrainMode_!=14 && terrainMode_!=15) theme::hint("Hold Space to pin the brush at its last ground point.");
         const char* how = nullptr;
         if ((terrainMode_ == 0 || terrainMode_ == 1) && penExactStep_) how = "Click or drag: every block under the brush moves by the step once per stroke (a terrace). Shift swaps raise and lower. One undo step per stroke.";
+        else if (terrainMode_ == 6 && paintSmear_) how = "Click or drag to blend neighbouring ground themes. One application per click; Repeat while held blends again. One undo step per stroke.";
         else if (terrainMode_ == 0 || terrainMode_ == 1) how = "Hold LMB on the ground to sculpt; Shift swaps raise and lower. Each stroke is one undo step.";
-        else if (terrainMode_ == 2) how = "Hold LMB: the ground under the brush moves toward the target height, never past it. Ctrl+click samples the target. One undo step per stroke.";
+        else if (terrainMode_ == 2) how = "Hold LMB: the ground under the brush moves toward the target height, never past it. Ctrl+drag samples the target. One undo step per stroke.";
         else if (terrainMode_ == 3) how = "Hold LMB: bumps and pits move toward their neighbours; straight slopes stay. One undo step per stroke.";
-        else if (terrainMode_ == 16) how = "Hold LMB: random blocks under the brush jump up and down (nothing happens where the ground under the brush averages sea level; no block goes below 0). One undo step per stroke.";
+        else if (terrainMode_ == 16) how = "Hold LMB: random vertices inside the square jump up and down. Ground averaging sea level stays; no vertex goes below 0. One undo step per stroke.";
         else if (terrainMode_ == 4 || terrainMode_ == 5) how = "Hold LMB on the ground to paint; Shift swaps walkable and blocked. Switch the view to Walkable to see it. Each stroke is one undo step.";
-        else if (terrainMode_ == 6 || terrainMode_ == 10 || terrainMode_ == 11 || terrainMode_ == 12 || terrainMode_ == 13)
+        else if (terrainMode_ == 6 && paintStamp_) how = "Sets each considered vertex fully to the theme in one application. Small brushes show the vertices. Each stroke is one undo step.";
+        else if (terrainMode_ == 6 || terrainMode_ == 10 || terrainMode_ == 11 || terrainMode_ == 12 || terrainMode_ == 13 || terrainMode_ == 17)
             how = "Hold LMB on the ground to paint. Each stroke is one undo step.";
         if (usesRadius && how) {
             ImGui::PushFont(fontSmall_);
@@ -4589,7 +5162,7 @@ void App::drawEditFooter(float pad, float inner) {
     const bool toPack = !packDest_.empty();
     // with the combined write on offer, the single writes are the secondary choice
     const bool both = dirty && doc_.hasTerrain() && doc_.terrainDirty() && !terrainDeployFuture_.valid();
-    auto writeButton = [&](const std::string& label, ImVec2 size) { return both ? theme::ghostButton(label.c_str(), size) : theme::primaryButton(label.c_str(), size); };
+    auto writeButton = [&](const std::string& label, ImVec2 size) { return both ? theme::ghostButton(label.c_str(), size, true) : theme::primaryButton(label.c_str(), size, true, true); };
     if (doc_.hasTerrain() && doc_.terrainDirty() && !terrainDeployFuture_.valid()) {
         // Repair objects stranded by a draft from before automatic terrain following.
         ImGui::SetCursorPosX(pad);
@@ -4602,10 +5175,10 @@ void App::drawEditFooter(float pad, float inner) {
             // one action for the common case: the ground and the objects standing on it changed together
             ImGui::SetCursorPosX(pad);
             if (toPack) {
-                if (theme::primaryButton(("Write terrain and objects into pack " + packLabel(packDest_)).c_str(), ImVec2(inner, S(42)))) startWriteBoth();
+                if (theme::primaryButton(("Write terrain and objects into pack " + packLabel(packDest_)).c_str(), ImVec2(inner, S(42)), true, true)) startWriteBoth();
                 auto_.registerWidget("btn_write_both");
             } else if (!confirmWriteBoth_) {
-                if (theme::primaryButton("Write terrain and objects into the game", ImVec2(inner, S(42)))) confirmWriteBoth_ = true;
+                if (theme::primaryButton("Write terrain and objects into the game", ImVec2(inner, S(42)), true, true)) confirmWriteBoth_ = true;
                 auto_.registerWidget("btn_write_both");
                 if (ImGui::IsItemHovered()) ImGui::SetTooltip("Writes the terrain first, then the placed objects once the terrain write succeeded.\nIf the terrain write fails, nothing else is written and both edits stay in the draft.");
             } else {
@@ -4621,7 +5194,7 @@ void App::drawEditFooter(float pad, float inner) {
         }
         ImGui::SetCursorPosX(pad);
         if (terrainDeployFuture_.valid()) {
-            theme::primaryButton(jobLabel(writeObjectsAfterTerrain_ ? "Saving terrain, then objects" : "Saving terrain").c_str(), ImVec2(inner, S(36)), false);
+            theme::primaryButton(jobLabel(writeObjectsAfterTerrain_ ? "Saving terrain, then objects" : "Saving terrain").c_str(), ImVec2(inner, S(36)), false, true);
         } else if (toPack) {
             // into a pack nothing in the game changes: no confirmation
             if (writeButton("Write terrain into pack " + packLabel(packDest_), ImVec2(inner, S(36)))) startTerrainDeploy();
@@ -4664,13 +5237,14 @@ void App::drawEditFooter(float pad, float inner) {
         if (r > 0) deployDocument();
     }
     ImGui::SetCursorPosX(pad);
-    if (theme::ghostButton(dirty ? "Save draft" : "Draft saved", ImVec2(dirty ? half : inner, S(32))) && dirty) saveDocument();
+    const bool draftDirty = hasUnsavedEdits();
+    if (theme::ghostButton(draftDirty ? "Save draft" : "Draft saved", ImVec2(draftDirty ? half : inner, S(32))) && draftDirty) saveDraft();
     auto_.registerWidget("btn_save");
     if (ImGui::IsItemHovered()) {
-        if (writesLoose()) ImGui::SetTooltip("Writes data/Levels/FinalAlbion/%s.tng. This install has no FinalAlbion.wad, so the game READS this file:\na draft saved here is live on the next visit. A one-time backup of any existing file is kept as .forge-orig.", doc_.mapName().c_str());
-        else ImGui::SetTooltip("Keeps a working copy as data/Levels/FinalAlbion/%s.tng (the game never reads it; FableForge reopens it).\nA one-time backup of any existing file is kept as .forge-orig.", doc_.mapName().c_str());
+        if (writesLoose()) ImGui::SetTooltip("Saves a separate terrain draft for FableForge. Objects use %s.tng, which the game reads in this loose install.\nWrite terrain applies the terrain draft and rebuilds its visible meshes.", doc_.mapName().c_str());
+        else ImGui::SetTooltip("Keeps object and terrain drafts for reopening in FableForge.\nTerrain stays separate from the game files until Write terrain; objects use %s.tng.", doc_.mapName().c_str());
     }
-    if (dirty) {
+    if (draftDirty) {
         ImGui::SameLine(0, S(6));
         if (theme::dangerButton("Revert all", ImVec2(half, S(32)))) revertDocument();
         auto_.registerWidget("btn_revert");
@@ -4688,8 +5262,7 @@ bool App::setEntranceHere() {
     if (!documentLoaded()) { pushLog("entrance: no level document", 1); return false; }
     if (!doc_.worldSlot()) { pushLog("entrance: " + doc_.mapName() + " is not placed in FinalAlbion.wld", 1); return false; }
     if (gameWriteBlocked("entrance")) return false;
-    float focus[3]; camera_.focus(focus);
-    float pos[3] = {focus[0], -focus[2], focus[1]};
+    float pos[3]; cameraPlacementPoint(pos);
     if (const auto h = doc_.groundHeight(pos[0], pos[1])) pos[2] = *h;
     float d[3]; camera_.dir(d);
     const float fwd[2] = {-d[0], d[2]};   // face the camera, like a placed object
@@ -4723,8 +5296,7 @@ void App::drawEntranceCard(float pad, float inner, float cardInner) {
 bool App::placeEmitter(const std::string& effectName, const std::string& scriptName) {
     if (!documentLoaded()) { pushLog("editor: no level document", 1); return false; }
     if (effectName.empty()) { pushLog("editor: pick an effect first", 1); return false; }
-    float focus[3]; camera_.focus(focus);
-    float pos[3] = {focus[0], -focus[2], focus[1]};
+    float pos[3]; cameraPlacementPoint(pos);
     if (const auto h = doc_.groundHeight(pos[0], pos[1])) pos[2] = *h + 0.5f;   // half a unit up, where retail puts most flames
     try {
         const size_t n = doc_.placeEmitter(pos, effectName, scriptName);
@@ -4802,8 +5374,7 @@ bool App::placePreset(const std::string& name) {
     editor::Document::Fragment frag;
     std::string err;
     if (!editor::loadPreset(hit->file, frag, err)) { pushLog("preset: " + err, 2); return false; }
-    float focus[3]; camera_.focus(focus);
-    const float at[3] = {focus[0], -focus[2], focus[1]};
+    float at[3]; cameraPlacementPoint(at);
     try {
         const auto placed = doc_.paste(frag, at, true);
         if (placed.empty()) return false;
@@ -4877,17 +5448,13 @@ ID3D11ShaderResourceView* App::defThumbnail(const std::string& def, bool& pendin
     uint32_t modelId = 0;
     const int code = ctx_.graphicModelId(def, modelId);
     if (code <= 0 || !modelId) { defThumbs_[def] = nullptr; return nullptr; }
-    if (!thumbBankOpen_) {
-        std::string err;
-        const auto graphics = graphicsBigPath();
-        thumbBankOpen_ = foliageexport::openMeshBank(graphics, err);
-        if (!thumbBankOpen_) { pushLog("thumbnails: " + err, 1); defThumbs_[def] = nullptr; return nullptr; }
-    }
     std::string merr;
-    const auto geo = foliageexport::cachedMesh(modelId, merr);
+    const auto bank=foliageexport::acquireMeshBank(graphicsBigPath(),merr);
+    if (!bank) { pushLog("thumbnails: " + merr, 1); defThumbs_[def] = nullptr; return nullptr; }
+    const auto geo = foliageexport::cachedMesh(bank, modelId, merr);
     if (!geo) { defThumbs_[def] = nullptr; return nullptr; }
     std::vector<std::string> warnings;
-    const foliageexport::Mesh m = foliageexport::makeMesh(modelId, foliageexport::meshName(modelId), def, *geo, true, ctx_, thumbImages_, thumbTextureToImage_, warnings);
+    const foliageexport::Mesh m = foliageexport::makeMesh(modelId, foliageexport::meshName(bank, modelId), def, *geo, true, ctx_, thumbImages_, thumbTextureToImage_, warnings);
     ID3D11ShaderResourceView* srv = renderer_.thumbnail(def, m, thumbImages_, 96);
     defThumbs_[def] = srv;
     return srv;
@@ -5122,7 +5689,7 @@ void App::drawWholeMapWindow() {
     char label[96];
     std::snprintf(label, sizeof label, "Raise every height by %.2f", wholeRaise_);
     if (row("##wraise", wholeRaise_, 0.5f, "%.2f", label, "btn_wholemap_raise",
-            "Adds this to every height (negative lowers). With 'Move objects too', every placed object rises by the same amount,\nlike the vanilla EditRaiseZ, so nothing ends up buried or floating.") && wholeRaise_ != 0.0f)
+            "Adds this to every height (negative lowers). With 'Move objects too', every placed object rises by the same amount.\nCamera coordinate bases and spline keys follow the original editor's height rules.") && wholeRaise_ != 0.0f)
         wholeMapRaise(wholeRaise_, wholeRaiseThings_);
     ImGui::Checkbox("Move objects too##wraiseth", &wholeRaiseThings_);
     auto_.registerWidget("check_wholemap_things");
@@ -5444,11 +6011,113 @@ void App::drawFitWindow() {
     close();
 }
 
+namespace {
+bool inBudgetArea(const std::array<float,4>& box, float x, float y) {
+    return x >= box[0] && x < box[2] && y >= box[1] && y < box[3];
+}
+}
+
+void App::clearBudgetAreas() {
+    budgetAreas_.clear(); budgetThings_.clear();
+    budgetAreaDrag_ = false; budgetAreaPressUid_ = 0;
+    budgetDirty_ = true;
+}
+
+bool App::addBudgetArea(float x0, float y0, float x1, float y1) {
+    if (!documentLoaded() || !std::isfinite(x0) || !std::isfinite(y0) ||
+        !std::isfinite(x1) || !std::isfinite(y1)) return false;
+    const std::array<float,4> box{std::min(x0,x1),std::min(y0,y1),std::max(x0,x1),std::max(y0,y1)};
+    budgetAreas_.push_back(box);
+    for (size_t i=0;i<doc_.thingCount();++i) {
+        editor::Frame f;
+        if (doc_.frameOf(i,f) && inBudgetArea(box,f.pos[0],f.pos[1]) && doc_.uidOf(i)) budgetThings_.insert(doc_.uidOf(i));
+    }
+    budgetDirty_ = true;
+    return true;
+}
+
+void App::budgetAreaInput(const ImVec2& origin, const ImVec2& size) {
+    if (!editMode_ || !budgetOpen_ || budgetScope_ != 3 || !documentLoaded() || size.x <= 0 || size.y <= 0) {
+        budgetPicking_=false; budgetAreaDrag_=false; budgetAreaPressUid_=0; return;
+    }
+    if (!budgetPicking_ || ImGui::IsPopupOpen(nullptr,ImGuiPopupFlags_AnyPopupId|ImGuiPopupFlags_AnyPopupLevel)) {
+        budgetAreaDrag_=false; budgetAreaPressUid_=0; return;
+    }
+    auto& io=ImGui::GetIO();
+    if (ImGui::IsKeyPressed(ImGuiKey_Escape)) {
+        clearBudgetAreas(); budgetPicking_=false; return;
+    }
+    if (io.KeyAlt || ImGui::IsMouseDown(ImGuiMouseButton_Right) ||
+        ImGui::IsMouseDown(ImGuiMouseButton_Middle)) {
+        budgetAreaDrag_=false; budgetAreaPressUid_=0; return;
+    }
+    const float u=(io.MousePos.x-origin.x)/size.x, v=(io.MousePos.y-origin.y)/size.y;
+    float point[3];
+    const bool hit=viewportHovered_ && groundUnderCursor(u,v,point);
+    auto uidAtPointer=[&]() -> uint64_t {
+        if (thingsStale()) return 0;
+        float rayOrigin[3],direction[3],distance;
+        renderer_.screenRay(u,v,rayOrigin,direction);
+        const int instance=renderer_.pick(rayOrigin,direction,distance);
+        const int glyph=glyphThingAt(io.MousePos.x,io.MousePos.y);
+        const int thing=glyph>=0 ? glyph : instance<0 ? -1 : renderer_.instance(size_t(instance)).thing;
+        return thing>=0 && size_t(thing)<doc_.thingCount() ? doc_.uidOf(size_t(thing)) : 0;
+    };
+    if (ImGui::IsMouseClicked(ImGuiMouseButton_Left) && hit) {
+        cancelCarry(); clickArmed_=false;
+        if (!io.KeyShift) clearBudgetAreas();
+        budgetAreaStart_={point[0],point[1]}; budgetAreaEnd_=budgetAreaStart_;
+        budgetAreaPressUid_=uidAtPointer(); budgetAreaDrag_=true;
+    }
+    if (!budgetAreaDrag_) return;
+    if (hit) budgetAreaEnd_={point[0],point[1]};
+    if (ImGui::IsMouseReleased(ImGuiMouseButton_Left)) {
+        if (hit) {
+            addBudgetArea(budgetAreaStart_[0],budgetAreaStart_[1],budgetAreaEnd_[0],budgetAreaEnd_[1]);
+            if (budgetAreaPressUid_ && uidAtPointer()==budgetAreaPressUid_) budgetThings_.insert(budgetAreaPressUid_);
+            budgetDirty_=true;
+        }
+        budgetAreaDrag_=false; budgetAreaPressUid_=0;
+    }
+}
+
+void App::drawBudgetOverlay(const ImVec2& origin, const ImVec2& size) {
+    if (!editMode_ || !budgetOpen_ || budgetScope_!=3 || !documentLoaded()) return;
+    const ImU32 colour=IM_COL32(245,195,90,230);
+    for (const auto& box:budgetAreas_) drawGroundRect(origin,size,box[0],box[1],box[2],box[3],colour);
+    if (budgetAreaDrag_) drawGroundRect(origin,size,budgetAreaStart_[0],budgetAreaStart_[1],budgetAreaEnd_[0],budgetAreaEnd_[1],IM_COL32(255,255,255,230));
+    auto* dl=ImGui::GetWindowDrawList();
+    if (budgetPicking_) {
+        const auto cursor=ImGui::GetCursorScreenPos();
+        const ImVec2 top(origin.x+theme::S(12),origin.y+theme::S(70));
+        const float width=std::min(theme::S(320),size.x-theme::S(24));
+        dl->AddRectFilled(top,ImVec2(top.x+width,top.y+theme::S(54)),IM_COL32(18,23,34,225),theme::S(6));
+        ImGui::SetCursorScreenPos(ImVec2(top.x+theme::S(6),top.y+theme::S(4)));
+        ImGui::PushFont(fontSmall_);
+        ImGui::TextColored(theme::vec(theme::Text),"%s",width < theme::S(240) ? "Drag/click; Shift adds" : "Drag or click; Shift adds more");
+        const float buttonWidth=std::min(theme::S(70),(width-theme::S(18))/2);
+        ImGui::SetCursorScreenPos(ImVec2(top.x+theme::S(6),top.y+theme::S(23)));
+        if (theme::ghostButton("Done",ImVec2(buttonWidth,theme::S(26)))) { budgetPicking_=false; budgetAreaDrag_=false; }
+        auto_.registerWidget("btn_budget_pick_done");
+        ImGui::SameLine();
+        if (theme::ghostButton("Clear",ImVec2(buttonWidth,theme::S(26)))) clearBudgetAreas();
+        auto_.registerWidget("btn_budget_pick_clear");
+        ImGui::PopFont();
+        ImGui::SetCursorScreenPos(cursor);
+    }
+    for (uint64_t uid:budgetThings_) {
+        const auto index=doc_.indexOfUid(uid); editor::Frame f;
+        if (!index || !doc_.frameOf(*index,f)) continue;
+        const float point[3]={f.pos[0],f.pos[2]+.15f,-f.pos[1]}; float u,v;
+        if (renderer_.projectVisible(point,u,v)) dl->AddCircle(ImVec2(origin.x+u*size.x,origin.y+v*size.y),theme::S(8),colour,16,theme::S(2));
+    }
+}
+
 // ------------------------------------------------------------ budget survey
 // The vanilla Surveys > Engine tab (inventory 11b; forge/budget.hpp has its rules):
 // things, triangles, vertices and texture memory for an area. Vanilla surveys a
-// dragged box or clicked things; here the area is the whole map, the selection, or a
-// radius around where the camera looks.
+// dragged box or clicked things; Forge also offers whole-map, selected and
+// view-radius scopes. Area picks retain UIDs while plant costs use the boxes.
 
 void App::drawBudgetCard(float pad, float inner, float cardInner) {
     using theme::S;
@@ -5464,6 +6133,7 @@ void App::runBudgetSurvey() {
     namespace bg = forge::budget;
     budgetDirty_ = false;
     if (!documentLoaded()) return;
+    budgetRevision_ = doc_.revision();
     float focus[3]; camera_.focus(focus);
     const float cx = focus[0], cy = -focus[2];
     std::set<int> sel;
@@ -5473,6 +6143,10 @@ void App::runBudgetSurvey() {
     auto inScope = [&](float x, float y, int thing) {
         if (budgetScope_ == 1) return thing >= 0 && sel.count(thing) > 0;
         if (budgetScope_ == 2) return (x - cx) * (x - cx) + (y - cy) * (y - cy) <= r2;
+        if (budgetScope_ == 3) {
+            if (thing >= 0) return budgetThings_.contains(doc_.uidOf(size_t(thing)));
+            return std::any_of(budgetAreas_.begin(),budgetAreas_.end(),[&](const auto& box) { return inBudgetArea(box,x,y); });
+        }
         return true;
     };
     std::vector<bg::Item> items;
@@ -5490,11 +6164,13 @@ void App::runBudgetSurvey() {
     if (budgetScope_ != 1)
         for (const auto& d : localDetail_)
             if (inScope(d.x, d.y, -1)) items.push_back({d.name, bg::kLocalDetail, d.mesh});
-    auto mesh = [](uint32_t id) {
+    std::string bankError;
+    const auto bank=foliageexport::acquireMeshBank(graphicsBigPath(),bankError);
+    auto mesh = [bank](uint32_t id) {
         bg::MeshCost m;
-        m.name = foliageexport::meshName(id);
+        m.name = foliageexport::meshName(bank, id);
         std::string err;
-        const auto g = foliageexport::cachedMesh(id, err);
+        const auto g = foliageexport::cachedMesh(bank, id, err);
         if (!g) return m;
         m.ok = true;
         // what the renderer draws: the collision hull on texture-less materials is not
@@ -5511,7 +6187,7 @@ void App::runBudgetSurvey() {
             for (uint32_t v : {t.a, t.b, t.c}) if (v < used.size() && !used[v]) { used[v] = 1; ++m.vertices; }
         }
         for (const auto& mt : g->materials)
-            for (int32_t t : {mt.diffuseTexture, mt.bumpTexture, mt.reflectionTexture, mt.alphaMapTexture})
+            for (uint32_t t : {mt.diffuseTexture, mt.bumpTexture, mt.reflectionTexture, mt.alphaMapTexture})
                 if (t > 0) m.textures.push_back(uint32_t(t));
         return m;
     };
@@ -5537,6 +6213,7 @@ void App::runBudgetSurvey() {
 void App::drawBudgetWindow() {
     using theme::S;
     namespace bg = forge::budget;
+    if (budgetOpen_ && budgetScope_ == 3 && budgetPicking_) return;
     const std::string sub = "Level / " + doc_.mapName() + " - Survey things, geometry and texture memory in this area.";
     if (!beginToolWindow("##budgetwin", "Budget survey",
                          sub.c_str(),
@@ -5545,8 +6222,17 @@ void App::drawBudgetWindow() {
     bool changed = false;
 
     theme::label("Area");
-    changed |= theme::segmented("##budget_scope", budgetScope_, {"Whole map", "Selected", "Around the view"}, inner);
+    changed |= theme::segmented("##budget_scope", budgetScope_, {"Whole map", "Selected", "Around the view", "Areas"}, inner);
     auto_.registerWidget("seg_budget_scope");
+    if (budgetScope_ == 3) {
+        if (theme::ghostButton("Pick areas in view",ImVec2(inner,S(28)))) { budgetPicking_=true; cancelCarry(); }
+        auto_.registerWidget("btn_budget_pick");
+        theme::hint("Drag on the ground or click a thing. Shift keeps earlier picks. Esc clears the survey.");
+        if (theme::ghostButton("Clear areas", ImVec2(S(120),S(26)))) clearBudgetAreas();
+        auto_.registerWidget("btn_budget_clear_areas");
+        ImGui::SameLine();
+        ImGui::TextColored(theme::vec(theme::Muted),"%zu area(s)",budgetAreas_.size());
+    }
     if (budgetScope_ == 1 && selectedThing_ < 0) theme::hint("Select things in the view (Ctrl+click adds more).");
     if (budgetScope_ == 2) {
         ImGui::SetNextItemWidth(inner - S(96));
@@ -5575,7 +6261,7 @@ void App::drawBudgetWindow() {
     auto_.registerWidget("toggle_budget_copies");
     if (ImGui::IsItemHovered()) ImGui::SetTooltip("Off: a model used many times counts once (it is loaded once).\nOn: every copy counts (what gets drawn). Vanilla: 'Count all duplications'.");
 
-    if (changed || budgetDirty_ || !budgetHasReport_) runBudgetSurvey();
+    if (changed || budgetDirty_ || !budgetHasReport_ || budgetRevision_ != doc_.revision()) runBudgetSurvey();
     const bg::Report& r = budgetReport_;
 
     // the four numbers
@@ -5664,13 +6350,13 @@ void App::drawBudgetWindow() {
         std::error_code ec;
         const fs::path dir = settings_.outDir;
         fs::create_directories(dir, ec);
-        const char* scopeName[] = {"whole map", "selection", "around the view"};
+        const char* scopeName[] = {"whole map", "selection", "around the view", "areas"};
         const fs::path file = dir / (doc_.mapName() + "_budget.txt");
         std::ofstream out(file, std::ios::binary);
         bg::Options o;
         o.include = budgetInclude_;
         o.countAllDuplications = budgetAllDuplicates_;
-        out << bg::toText(r, doc_.mapName() + " (" + scopeName[std::clamp(budgetScope_, 0, 2)] + ")", o);
+        out << bg::toText(r, doc_.mapName() + " (" + scopeName[std::clamp(budgetScope_, 0, 3)] + ")", o);
         const bool ok = bool(out);
         budgetSaved_ = ok ? file.string() : std::string();
         pushLog(ok ? "budget report: " + file.string() : "budget report: cannot write " + file.string(), ok ? 3 : 2);

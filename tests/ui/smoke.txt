@@ -9,6 +9,11 @@ assert_state install_valid 1
 select Greatwood_1
 wait_ready
 wait_loaded
+wait_foliage
+# Isolate terrain-mode comparisons from asynchronously arriving canopy/objects.
+# Dedicated foliage/placed-object workflows exercise those layers separately.
+set preview_foliage 0
+set preview_things 0
 frames 3
 assert_state preview_loaded 1
 assert_state preview_textured 1

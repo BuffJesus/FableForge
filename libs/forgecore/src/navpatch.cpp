@@ -17,10 +17,17 @@ constexpr float kRootSize = 32.0f;
 struct Cursor {
     const std::vector<uint8_t>& b;
     size_t p;
+    size_t limit=SIZE_MAX;
     void need(size_t n, const char* what) const {
-        if (p + n > b.size()) throw std::runtime_error(std::string("nav: truncated ") + what);
+        const size_t end=std::min(b.size(),limit);
+        if (p>end || n>end-p) throw std::runtime_error(std::string("nav: truncated ") + what);
     }
     uint8_t u8(const char* what) { need(1, what); return b[p++]; }
+    bool flag(const char* what,bool strict) {
+        const auto value=u8(what);
+        if(strict && value>1)throw std::runtime_error(std::string("nav: noncanonical ")+what);
+        return value!=0;
+    }
     uint32_t u32(const char* what) {
         need(4, what);
         uint32_t v; std::memcpy(&v, b.data() + p, 4); p += 4; return v;
@@ -145,15 +152,14 @@ std::vector<uint8_t> emitSection(const RetailSection& sec, int rootsX, int roots
 
 } // namespace
 
-RetailNav parseNavigation(const lev::File& file) {
-    const auto& bytes = file.originalBytes();
-    const int w = file.width(), h = file.height();
+static RetailNav readNavigation(const std::vector<uint8_t>& bytes,size_t navigationOffset,
+                                int w,int h,bool strict) {
     if (w <= 0 || h <= 0 || w % 32 != 0 || h % 32 != 0)
         throw std::runtime_error("nav: map dimensions must be positive multiples of 32");
     const size_t rootsPerLayer = size_t(w / 32) * size_t(h / 32);
 
-    Cursor dir{bytes, file.navigationOffset()};
-    dir.u32("directory end");
+    Cursor dir{bytes, navigationOffset};
+    const auto directoryEnd=dir.u32("directory end");
     const uint32_t count = dir.u32("section count");
     if (count > 256) throw std::runtime_error("nav: implausible section count");
     struct Toc { std::string name; uint32_t offset; };
@@ -167,19 +173,31 @@ RetailNav parseNavigation(const lev::File& file) {
         toc.push_back({std::move(name), dir.u32("section offset")});
     }
 
+    if(strict && dir.p!=directoryEnd)throw std::runtime_error("nav: directory end mismatch");
+    size_t nextSection=dir.p;
+    std::unordered_set<std::string> sectionNames;
+
     RetailNav nav;
     for (const auto& entry : toc) {
+        if(strict && (entry.offset!=nextSection || entry.name.empty() ||
+           entry.name.find('\0')!=std::string::npos || !sectionNames.insert(entry.name).second))
+            throw std::runtime_error("nav: invalid section ownership");
         Cursor c{bytes, entry.offset};
         RetailSection sec;
         sec.name = entry.name;
-        c.u32("block end");
+        const auto blockEnd=c.u32("block end");
+        if(strict) {
+            if(blockEnd<c.p || blockEnd>bytes.size())throw std::runtime_error("nav: invalid section end");
+            c.limit=blockEnd;
+        }
         sec.version = c.u32("block version");
         // CNavQuadTree::LoadFromFile (FableWin 0x0328a760): < 5 is refused; above 5 a node starts with
         // its switchable byte, above 6 a leaf carries its preference byte (default 0x40). v7 = v8 bytes;
         // six dev-tree levels are v7, ten v6 (DarkwoodVillage, HobbeCave ...); retail is all v8
         if (sec.version < 5 || sec.version > 8) throw std::runtime_error("nav: unsupported block version " + std::to_string(sec.version));
         sec.width = c.f32("width"); sec.height = c.f32("height");
-        if (std::lround(sec.width) != w || std::lround(sec.height) != h)
+        if (!std::isfinite(sec.width) || !std::isfinite(sec.height) ||
+            (strict ? sec.width!=w || sec.height!=h : std::round(sec.width)!=w || std::round(sec.height)!=h))
             throw std::runtime_error("nav: block dimensions differ from the LEV");
         sec.regionCount = c.u32("region count");
         const uint32_t positions = c.u32("position count");
@@ -191,18 +209,20 @@ RetailNav parseNavigation(const lev::File& file) {
         if (sec.layerCount > 16) throw std::runtime_error("nav: implausible layer count");
         const int32_t total = c.i32("node total");
         if (total < 0 || size_t(total) > bytes.size()) throw std::runtime_error("nav: implausible node total");
+        if(strict && size_t(total)>(c.limit-c.p)/(sec.version>5?3:2))
+            throw std::runtime_error("nav: node count exceeds section storage");
         sec.nodes.reserve(size_t(total));
         size_t rootsSeen = 0; uint8_t layer = 0;
         for (int32_t i = 0; i < total; ++i) {
             RetailNode n;
-            n.switchable = sec.version > 5 ? c.u8("switchable") != 0 : false;
-            n.root = c.u8("root") != 0;
-            n.blocked = c.u8("blocked") != 0;
+            n.switchable = sec.version > 5 ? c.flag("switchable",strict) : false;
+            n.root = c.flag("root",strict);
+            n.blocked = c.flag("blocked",strict);
             if (!n.switchable && n.blocked) {
                 if (!n.root) throw std::runtime_error("nav: blocked marker below the root level");
                 n.marker = true; n.layer = layer;
             } else {
-                n.leaf = c.u8("leaf") != 0;
+                n.leaf = c.flag("leaf",strict);
                 n.level = c.u8("level");
                 n.layer = c.u8("layer");
                 n.cx = c.f32("cx"); n.cy = c.f32("cy");
@@ -232,9 +252,44 @@ RetailNav parseNavigation(const lev::File& file) {
             sec.nodes.push_back(std::move(n));
         }
         if (c.u32("end symbol") != kEndSymbol) throw std::runtime_error("nav: missing end symbol in section " + sec.name);
+        if(strict) {
+            if(c.p!=blockEnd)throw std::runtime_error("nav: section end mismatch");
+            std::unordered_set<int32_t> indices;
+            for(const auto& node:sec.nodes) {
+                if(node.layer>=sec.layerCount)throw std::runtime_error("nav: node layer out of range");
+                if(node.marker)continue;
+                if(node.index<=0 || !indices.insert(node.index).second)
+                    throw std::runtime_error("nav: invalid or duplicate local node index");
+                if(node.leaf && (node.region<0 || uint32_t(node.region)>=sec.regionCount))
+                    throw std::runtime_error("nav: local region index out of range");
+            }
+            for(const auto& node:sec.nodes) {
+                if(node.marker)continue;
+                auto link=[&](int32_t index) {
+                    if(index!=0 && !indices.contains(index))throw std::runtime_error("nav: local node link out of range");
+                };
+                if(node.leaf)for(int32_t index:node.neighbours)link(index);
+                else for(int32_t index:node.children)link(index);
+            }
+            for(size_t at=8;at<sec.positions.size();at+=12) {
+                uint32_t positionLayer;std::memcpy(&positionLayer,sec.positions.data()+at,4);
+                // Unbuilt shipped sections retain layer-zero action points
+                // with no layers or nodes (HeroGuild_Filler_01, for example).
+                if(positionLayer>=std::max(1u,sec.layerCount))throw std::runtime_error("nav: action-point layer out of range");
+            }
+        }
+        nextSection=c.p;
         nav.sections.push_back(std::move(sec));
     }
+    if(strict && nextSection!=bytes.size())throw std::runtime_error("nav: trailing storage outside sections");
     return nav;
+}
+
+RetailNav parseNavigation(const lev::File& file) {
+    return readNavigation(file.originalBytes(),file.navigationOffset(),file.width(),file.height(),false);
+}
+RetailNav validateNavigationStorage(const std::vector<uint8_t>& bytes,size_t navigationOffset,int width,int height) {
+    return readNavigation(bytes,navigationOffset,width,height,true);
 }
 
 std::vector<uint8_t> emitNavigation(const lev::File& file, const RetailNav& nav) {

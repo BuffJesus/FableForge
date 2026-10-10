@@ -567,6 +567,11 @@ and an unchanged document; screenshot `walkthrough/w21_show_in_palette.png`.
 #### Snap to grid behaves differently from vanilla: relative 0.5-unit steps instead of cell centres on the ground
 *weakness, effort S, value low*
 
+2026-10-02: the saved placement option below now covers placement, paste and
+carry with native cell centres. The existing gizmo Snap remains separate and
+relative; changing its translation behavior is deferred. Terrain pens and
+track-node placement keep their mode-specific rules.
+
 **Vanilla:** With Options > Snap To Grid on, GetCurrentPointedAtPos 0x0204b2d0 passes the pointer through FindNearestSnappedPos 0x02049280. That gives x = int(x) + 0.5, y = int(y) + 0.5, z = GetGroundSizeZAt: the centre of the 1-unit cell, sitting on the ground. Placement and carry therefore land things on a world-aligned cell grid.
 
 **Fix:** 1) Add a helper next to snapSelectedToGround in gui/editor.cpp, porting FindNearestSnappedPos 0x02049280:
@@ -614,6 +619,14 @@ Effort S, user value low.
 Effort: M (copy mode plus UI card about 1 day; the lock toggle is S). Value: high, because every edge sculpt currently produces a visible in-game seam.
 
 #### Shift does a different job: vanilla Shift freezes the pen on the last point, FableForge Shift swaps raise and lower
+
+2026-10-02: last-point pinning implemented on Space, preserving Forge's Shift
+inversion/theme bindings. Native Update confirms successful hover refreshes the
+stored point. Stock/loose normal/compact held-pin, moved-camera height/shore,
+release, context cancellation and undo checks pass. The original binding proposal
+below is superseded: Alt is already used for viewport orbit. Map-local XY/cursor
+height differs from native stored XYZ. See HANDOFF_WORLD_UI for evidence.
+
 *weakness, effort S, value med*
 
 **Vanilla:** CEditInputProcessPaintMap::ProcessInput 0x0294dbe0 checks DIK_LSHIFT/RSHIFT (0x2a/0x36) on every event and calls PaintInputStickWithLastPoint(1) 0x02991680, which sets CEditControlCentre+0xaf8. While that is set, GetCurrentPointedAtPos 0x0204b2d0 returns the stored last point (+0x8dc) and does not ray-cast. The pen stays on one spot while the mouse moves or the ground rises under it. Releasing Shift calls Stick(0). The same Shift flag (+0x2c) is passed to PaintInputPaintMap (river) and PaintInputPickupTheme (Ctrl+Shift picks the theme to replace).
@@ -638,7 +651,11 @@ Effort: M (copy mode plus UI card about 1 day; the lock toggle is S). Value: hig
 Effort S. Value med.
 
 #### The -/= height keys follow the moving ray instead of a frozen point, and they work in every Terrain tool, not just Height mode
-*weakness, effort S, value med*
+*resolved 2026-10-02: sculpt-only keys latch their starting ground point,
+continue when the pointer leaves the viewport, and finish one undo step on
+release or tool exit. Paths is included: contrary to the original proposal
+below, native PaintInputPaintMap dispatches GetDrawPathsFlag before the other
+Land pens. See HANDOFF_WORLD_UI and tools/test_height_keys.py.*
 
 **Vanilla:** ProcessInput 0x0294dbe0, on a key-down of DIK_MINUS/DIK_EQUALS (0x0c/0x0d): only when GetEditMode()==3 (PAINT_MAP, the Height Toolbox), it calls PaintInputStickWithLastPoint(1) and then PaintInputPaintMapHeightAddition 0x02993840. On key-up it calls Stick(0) and then InsertUndoPartition (0x0294dd93..ddf9). The column therefore grows on one fixed spot, and the keys do nothing in theme, environment or other modes.
 
@@ -664,7 +681,10 @@ Effort S. Value med.
 **Effort:** S. **Value:** med.
 
 #### Ctrl eyedropper for height works only in Flatten, and only on a single click
-*weakness, effort S, value med*
+*resolved 2026-10-02: continuous Ctrl-drag sampling in all six sculpt tools,
+with a visible Paint height value. Real mouse tests at normal/compact sizes
+cover Ctrl+Shift, unchanged documents and active-stroke undo. See
+HANDOFF_WORLD_UI and tools/test_height_pick.py. Original analysis follows.*
 
 **Vanilla:** ProcessInput routes any LMB press or held event in Height mode with Ctrl down (0x1d/0x67) to PaintInputPickupHeight 0x029940d0 instead of the pen, whichever Land pen is selected (Change Height, Smear, Noise, Draw Paths, Paint Height). With the Land tab selected, it sets the Paint Height box (SetLeftAltitude) from CWorldMap::GetGroundSizeZAt. It samples on press and on every held event, so a Ctrl-drag keeps updating the value.
 
@@ -718,8 +738,11 @@ Effort S (about 30 lines, gui only, plus one test). Value medium.
 tab's *Whole-map heights...* tool window, automation `terrain_raise_all` / `terrain_scale_pct` /
 `terrain_set_all` / `wholemap_open`. Raise with objects moves every thing's physics position by d
 (CEditRaiseZOnThing 0x0298e5a0 re-read); scale and set keep Forge's grounded-follow rule instead
-of vanilla's leave-in-place. Not ported: CEditRaiseZOnThing's second call on a thing's
-CTCCameraPointDefinitionBase (vtable +0x8c with d), whose effect on the camera point is unread.
+of vanilla's leave-in-place. Camera height handling is now included: base SetHeightDeltaZ
+0x024f4900 changes CoordBase when UsingRelativeCoords is true; the serialized parent-relative
+base accounts for the simultaneous physics move. Spline override 0x025cea00 also raises
+each key Position, preserving directions and timings. Core flag/undo cases and independent
+retail scratch output comparisons pass (`tools/test_wholemap_cameras.py`).
 Unit tests in `test_lockedthings.cpp`; `tests/ui/wholemap_heights.txt`.
 
 **Vanilla:** Console editor commands ConsoleEditRaiseZ 0x0204cc40, ConsoleEditResizeZPercent 0x0204c980 and ConsoleEditSetZ 0x0204cae0 run CEditWorldMap::EditRaiseZ 0x02973e20, EditResizeZPercent 0x02973c50 and EditSetZ 0x02973d40 over every editable map. Per map: CEditMap::EditRaiseZ 0x029a8d10 does h + d, EditResizeZPercent 0x029a8ac0 does h * factor, EditResetAllZ sets h = v, each clamped to [0, 2048-1e-4]. EditRaiseZ also moves every thing in the map up by d (CEditRaiseZOnThing 0x0298e5a0: physics position z += d, including camera-point TCs). Each call does Backup first.
@@ -741,7 +764,19 @@ Leave the vanilla world-level loop over every editable map (skipping index 0) ou
 Effort S. Value med (the common case is lifting a map to meet its neighbour, or taming a fractal result).
 
 #### The brush circle does not show the vanilla pens' real footprint
-*weakness, effort S, value low*
+*resolved for small pens 2026-10-02: Change Height (exact-step Raise/Lower) and Paint
+Height (Flatten) use a rounded-centre ring and actual affected-vertex dots for
+radii <=4, including single-vertex brushes. Their distance predicate is shared
+with the core footprint query and verified against actual pen output. Smooth
+now shows its strict integer-radius disc too; contrary to the proposal below,
+the rejected outer boundary makes its vertex set symmetric, with no half-cell
+offset. Noise now outlines its actual possible poke square, using offsets
+smaller than ceil(radius), clipped to the map. Height keys show their distinct
+fractional/truncated vertices at radii <=4; at 0.25/0.5 the footprint is empty
+and the cursor requests a larger Radius. The query shares the actual pen's
+sample visitor, retaining repeated corner applications in the pen. Larger
+disc outlines remain approximations. Historical proposal follows; its Smooth
+offset and Noise extent assumptions were corrected by native evidence.*
 
 **Vanilla:** Every ported pen acts on a hard disc around the pointer rounded to a block (fistp): Change Height and Paint Height use d < r + 0.5. Smear uses offsets [-r, r-1] with r = trunc(max(r,1)), so its footprint is asymmetric (EditSmoothPenUndoable 0x0297b3c0, EditChangeHeightPenUndoable 0x02975710).
 
@@ -765,7 +800,9 @@ Effort S. Value med (the common case is lifting a map to meet its neighbour, or 
 Effort: S (about 60-100 lines, plus a test). Value: low. It only matters at radius 1-3, because the slider minimum is 1.
 
 #### The Speed slider (the step for -/=) is visible only in Flatten
-*weakness, effort S, value low*
+*resolved 2026-10-02: the shared Speed slider is visible in all six sculpt
+tools, with the actual height-key step in its tooltip. Real slider endpoint
+checks and zero/nonzero key strokes are in tools/test_height_keys.py.*
 
 **Vanilla:** The Height Toolbox always shows Size and Speed (OPACITY_SLIDER, GetOpacity 0x02907840). Speed feeds Paint Height, Smear and the -/= step (PaintInputPaintMapHeightAddition 0x02993840), so the user can tune the key step whichever Land pen is selected.
 
@@ -779,6 +816,14 @@ fillPen and the HeightKey path need no changes, because they already read penSpe
 
 #### Theme Smear (ENGINE tab) missing: the vanilla blend pen
 *gap, effort M, value high*
+
+**2026-10-02 evidence correction:** the proposed algorithm below is incomplete.
+Fresh full disassembly clamps radius to >=1, thresholds only class indices
+0..2, shifts selected classes forward (allowing duplicates), and normalizes
+shared weights in place. LEV slots must also be resolved to definition-class
+ordering. The literal selection probe and addresses are in HANDOFF_WORLD_UI.
+Do not treat this proposal as a verified safe port; native quirk compatibility
+versus a corrected Forge blending contract remains to be resolved.
 
 **Vanilla:** On the ENGINE tab, Smear routes PaintInputEngineThemeMap 0x02993a80 (the GetSmearFlag branch, mode 4) to CEditWorldMap::EditPlaceEngineThemeBlendPenUndoable 0x0297c510. r = (int)brush size. For each vertex (x,y) in the 2r x 2r box from (cx-r, cy-r) with hypot(r-i, r-j) < r, and stride 1 for ENGINE: take the 3x3 neighbourhood (offset table DAT_04ac5558, in-map cells only). Sum the blend byte of each of the 3 slots per theme; theme 0 contributes nothing, and weights under 16 are dropped. Keep the 3 heaviest themes by insertion sort and set blend = weight*255/sum(top3), adding the rounding remainder to the first. Everything is computed from the pre-pass state into a scratch buffer and written in a second pass (Jacobi), then UpdateOverlayAtmos runs for atmos. In vanilla this is the ONLY way to get soft transitions between ground themes.
 
@@ -798,72 +843,96 @@ fillPen and the HeightKey path need no changes, because they already read penSpe
 5. Tests: add a check to tests/test_export.cpp on a 5x5 lev. Centre (2,2) is theme A=255, with neighbours of theme B=255 on the left column and theme C with a weight under 16. Assert the centre's top-3 order, that blends sum to 255, that the remainder lands on slot 0, that C is dropped, and that the Jacobi rule holds (a neighbour smeared in the same pass sees the pre-pass values). Also add a tests/ui/theme_smear.txt script with a screenshot.
 Effort M, value high.
 
-#### No sound or environment overlay (vanilla Show all / Show selected sounds, atmos colour overlay)
-*gap, effort M, value high*
+#### Sound and environment survey colours
+*resolved 2026-10-02; runtime sound/lighting preview remains separate*
 
-**Vanilla:** Survey > Sounds has Off / Show all sounds / Show selected sound (EditShowAllSounds 0x029a9d50, EditShowSelectedSounds 0x029a9db0, then CEditMap::SoundOverlayInfo 0x029aa550). Every height cell is tinted with its game cell's SOUND_THEME def EditColour (CSoundThemeDef+0x40). For 'selected', only cells whose sound equals the chosen layer are tinted, and the rest are transparent. Painting an environment theme refreshes UpdateOverlayAtmos 0x02971d80: per cell, sum over 3 slots of ENVIRONMENT_THEME_DAY EditorColour (+0x74 in FableWin) times blend/255, at alpha 0x80.
+Sound now offers Off / All sounds / This sound only. Environment has an
+independent overlay toggle. A game-cell texture keeps 4x4-cell boundaries sharp;
+only the active map's ground is tinted, in all four view modes. Paint, fill,
+palette additions and undo invalidate the overlay, including active strokes.
+Colour chips in the theme pickers select their themes.
 
-**Fix:** Effort M, value high. Port the behaviour of SoundOverlayInfo 0x029aa550 and UpdateOverlayAtmos 0x02971d80.
+Fresh disassembly corrects the old proposal: `SoundOverlayInfo` 0x029aa550
+copies all four `EditColour` bytes (FableWin definition +0x44, not +0x40),
+preserving alpha. Native layer 0 means all; Forge uses -1 for all and 0 for
+selected None, which stays transparent. `UpdateOverlayAtmos` 0x02971d80 uses
+float(strength)/255, truncates each RGB channel after each slot's addition,
+then sets alpha 128. Slot 0 is black; rounding the final sum was incorrect.
+Forge clamps malformed overfull accumulations to 255. Missing sound colours
+are transparent; missing atmosphere colours contribute black.
 
-1) Read the colours from defs. ctx_.defIntField(name, field) (src/terrainexport.cpp:507) already decodes a 4-byte field by name, and CRGBColour is 4 bytes. Add a helper in src/terrainexport.cpp, Context::defColourField(name, field) -> optional<array<uint8_t,4>>, which unpacks the byte order the same way defedit.cpp:149 does. Use field 'EditColour' on SOUND_THEME defs and 'EditorColour' on ENVIRONMENT_THEME_DAY defs. Use the field names, not the FableWin offsets 0x44/0x74, which differ from Ego_r's 64/108. Cache the colours per def name in the editor and drop the cache when soundDefs_/envDefs_ reload.
+`Context::defColourField` decodes named fields in RGBA byte order. The embedded
+schema now includes SOUND_THEME / CSoundThemeDef / ENVIRONMENT_THEME_DAY from
+the repository schema; the previous ground/object-only slice could not resolve
+these definitions. Definition offsets are evidence, never retail read offsets.
+Full targeted exports: `build/survey-overlay-native-full.txt`; executable
+identity and validation boundaries are recorded in HANDOFF_WORLD_UI.
 
-2) Build the overlay in Document (src/leveledit.cpp/.hpp). Add two functions, each filling one RGBA per height cell (cellsX x cellsY), with each height cell mapped to its 4x4 game-map cell the way environmentAndSoundAt already does:
-   - soundOverlay(int layer, colourFn, vector<uint32_t>& out). Get s = the cell's sound index. If layer==0: s>0 gets colour(soundThemes[s-1]), anything else gets 0 (transparent). If layer!=0: s==layer gets its colour, anything else gets 0.
-   - atmosOverlay(colourFn, out). Start with rgb=0. For the 3 slots, add EditorColour(atmosPalette[idx]) * strength/255 to rgb, with idx 0 counting as black. Round, clamp to 8 bits, and set A=0x80.
+Reflections and runtime audible/lighting previews remain separate work.
 
-3) Renderer (gui/renderer.cpp/.hpp):
-   - Add an optional per-vertex overlay colour. Either extend the terrain vertex, which already carries walkable at renderer.cpp:891, with a packed RGBA (update the input layout), or bind a second vertex stream.
-   - Add Renderer::updateOverlay(const uint32_t* rgba, int cellsX, int cellsY) and a flag overlayOn.
-   - In the pixel shader (around renderer.cpp:72-91, next to the Walkable branch), blend lerp(base, overlay.rgb, overlay.a) on top of any view mode.
+#### Ground full stamp and environment assignment
+*resolved 2026-10-02; soft Ground blending remains available*
 
-4) UI (gui/editor.cpp, the terrainMode_ 10/11 block at 2601-2679):
-   - While Environ. (10) is active, show the atmos overlay automatically. While Sound (11) is active, show the sound overlay.
-   - Under the sound combo (editor.cpp:2646), add a segmented 'Show: Off / All sounds / This sound only'. 'This sound only' passes soundIndex_ as the layer. These are vanilla Survey > Sounds Off / Show all / Show selected.
-   - Add a compact legend: each sound this map names, with its EditColour chip (and the atmos palette entries for Environ.). Clicking a chip selects that sound or slot.
-   - Rebuild the overlay after every paint stroke, fill, or add-from-game, the way vanilla EditSetSound 0x029a97c0 re-runs SoundOverlayInfo. Rebuilding only the dirty box is enough, as UpdateOverlayAtmos does with its C2DBoxI. Rebuild it on undo too.
+Environment always assigns {target,0,0}/{255,0,0} to touched game cells,
+with target 0 clearing. Ground now offers **Full stamp** beside its existing
+soft brush (soft remains the default). Full stamp sets that same full blend
+at each considered height vertex, ignores Strength/time and refuses theme 0.
+Both use the verified strict radius around a truncated integer vertex; the
+historical lround proposal was incorrect. Small stamp cursors show considered
+vertices and the unused Strength slider is hidden.
 
-5) Automation (gui/automation.cpp:241): add overlay=sound|sound:<n>|atmos|off so headless screenshots can check it.
+`EditPlaceEngineThemeUndoable` 0x029799d0 rejects ENGINE target 0 at
+0x029799f1..0x02979a0b, tests strict squared distance, writes slot 0 and clears
+slots 1/2, then writes blends 255/0 (third implicit). The existing
+`themeBrushVertices` query shares this geometry with Replace/Environment.
+Core fixtures check full assignment with zero strength/dt, repeats, strict
+boundaries, corners, empty brushes, saved LEV values and exact undo; GUI tests
+exercise both application modes, real clicks and small cursors.
+Native exports and validation boundaries are in HANDOFF_WORLD_UI.
 
-Leave out the Reflections overlay here (ReflectionsOverlayInfo 0x029aad40 is a separate survey).
+Ground Smear remains deferred pending a contract for the native class-selection
+quirks described above; adding the stamp does not invent a smoothing algorithm.
 
-#### Ground and environment Paint is a soft airbrush; vanilla Paint is a hard stamp
-*weakness, effort S, value high*
+#### Environment Smear (vanilla Blur on the atmos grid)
+*implemented 2026-10-02; current-map boundary*
 
-**Vanilla:** EditPlaceEngineThemeUndoable 0x029799d0: for every vertex with (x-cx)^2+(y-cy)^2 < r^2 (integer cursor, editable map, script-brush mask), slot0 = theme, slots 1-2 = 0, blend0 = 255, blend1 = 0. One application gives full coverage. For ENGINE it does nothing if theme == 0 (X0-NULL). With ATMOS_THEME the same loop writes the game cell under each vertex. Soft edges come from Smear.
+Environ. offers Paint / Smear. Smear hides the palette/search, keeps Ctrl sampling
+and Show colours, and blends immediately in place on each brush event. Strength
+and elapsed time do not affect it. Small cursors outline unique reached cells;
+empty footprints ask for a larger Radius. Saving and undo share the atmos draft.
 
-**Fix:** 1. Add `bool hardEdge = false;` to editor::TerrainBrush (src/leveledit.hpp, next to exactStep at about :91) with the comment "vanilla EditPlaceEngineThemeUndoable 0x029799d0 stamp". Set `b.hardEdge = penHardTheme_;` in App::fillPen (gui/editor.cpp:1709).
+Fresh disassembly of Blur 0x0297b910 through 0x0297c13a corrects the historical
+proposal: the float world pointer is truncated, r=max(size,1), and integer y/x
+counters run 0..floor(2r) inclusive. Coordinates trunc(cx-r+j), trunc(cy-r+i)
+must be globally divisible by four. Distance is sqrtf(float((r-j)^2+(r-i)^2))
+<= r. Fractional counters can revisit a cell, especially at world zero; repeated
+applications are preserved while the cursor alone deduplicates. The document's
+world origin participates in sampling.
 
-2. In Document::applyBrush Mode::Theme (src/leveledit.cpp:475), when brush.hardEdge is set:
-   - If themeIndex == 0, return. Vanilla skips ENGINE theme 0.
-   - Set `icx = int(std::lround(brush.x))` and `icy` the same way. Vanilla's cursor is a C2DCoordI, so the circle is centred on an integer vertex.
-   - For y from max(0, ftol(icy - r)) to min(h, icy + r), and x likewise: if `float(sqr(x-icx) + sqr(y-icy)) < r*r` (strict), call `level_->setThemeBlendAt(x, y, {theme,0,0}, {255,0,0})`, then mirror it into working_->themeIndex/themeStrength as the existing loop does.
-   - Increment terrainRev_ and return.
-   Put the helper in libs/forgecore terrain.cpp as `size_t stampTheme(lev::File&, int cx, int cy, float r, uint8_t theme)` so the automation path and tests can reuse it.
+Each cell sums all three slots from its 3x3 game-cell neighbourhood, including
+None and zero-weight keys. The atmosphere getter returns palette bytes, not
+definition IDs. Highest weight wins, with higher palette index first on ties.
+Only the top three weights normalize; strengths 0/1 truncate weight*255/sum and
+strength 2 takes the remainder. Unused index slots stay unchanged. Later cells
+read earlier writes. Ground Smear remains deferred.
 
-3. Mode::Environment (leveledit.cpp:492), hard branch: loop over the same integer vertices inside r^2 (strict `<`). Map each one to its game cell with gx = x/4, gy = y/4, clamped to the game-map size. Set `atmosIndex[g] = {theme,0,0}` and `atmosStrength[g] = {255,0,0}`. Theme 0 is allowed here, because vanilla allows ATMOS with 0. A cell is written if any of its vertices is under the pen, which matches vanilla's footprint better than the current cell-centre test.
-
-4. Add modes 6 and 10 to App::isVanillaPen (gui/app.hpp:600) when penHardTheme_ is set, so the existing penApplied_ gate (editor.cpp:1704) applies the stamp once per click and every frame with Spray. Since the stamp is idempotent, per-frame application during a drag also works. The main goal is to stop dt scaling.
-
-5. drawPenControls (editor.cpp:1718) currently returns early unless m is 0/1/2/3/16. Extend it to 6 and 10 with a `Hard edge (vanilla)` checkbox (`auto_.registerWidget("check_pen_hard")`) and the tooltip "Vanilla Paint: every point under the brush becomes 100% this theme in one click. Use Smear for soft edges." Hide the Strength slider when it is on. Add the checkbox to docs/AUTOMATION.md.
-
-6. Default: keep it off until the Smear pen (EditPlaceEngineThemeBlendPenUndoable 0x0297c510 / Blur) is ported. After that, make it on by default, because Paint plus Smear is the vanilla workflow.
-
-7. Add a forgecore test: stamping one vertex inside r gives exactly {t,0,0}/{255,0,0}, a vertex at exactly r stays unchanged, and theme 0 does nothing.
-
-Effort: S. Value: high.
-
-#### Environment Smear missing (vanilla Blur on the atmos grid)
-*gap, effort S, value med*
-
-**Vanilla:** On the ENVIRONMENT tab (mode 5), Smear calls CEditWorldMap::Blur 0x0297b910. r = max(brush size, 1). It visits game-map cells (height coords divisible by 4) with hypot <= r and, for each, reads the 3x3 GAME cells around it (offset*4). It sums the atmos blend of all 3 slots per atmos theme, including slot value 0 ('none'), in a multimap. It then sorts by summed weight descending, writes the top 3 into slots 0..2 and sets blend[k] = round(w_k*255/sum_top3) for k = 0,1. It works in place (Gauss-Seidel) and refreshes UpdateOverlayAtmos.
-
-**Fix:** 1) libs/forgecore: add `size_t blurAtmos(std::vector<std::array<uint8_t,3>>& idx, std::vector<std::array<uint8_t,3>>& str, int gw, int gh, float cx, float cy, float radius)` to forge/terrain.hpp/.cpp. It works on game-cell units: the centre game cell is (cx/4, cy/4) and r = max(radius,1) in height cells, so it visits the game cells whose height-coord offset satisfies hypot <= r. Visit order is row-major (y outer, x inner), in place, to match vanilla's Gauss-Seidel update order. For each cell, sum str[n][k] per idx[n][k] over the 3x3 neighbourhood (offsets -1..1 game cells, centre included) x 3 slots. Keep idx 0 ('none') as a real key and skip neighbours outside [0,gw)x[0,gh) (vanilla reads across the world map, but we have one map). Sort by weight descending. For equal weights, put the higher theme index first: vanilla's std::multimap reverse iteration returns the later-inserted key, and insertion runs in ascending theme order. Write the top 3 (fewer if fewer distinct themes; pad unused slots with index 0 / strength 0). Set s0 = round(w0*255/S) and s1 = round(w1*255/S), where S is the top-3 sum, and s2 = 255 - s0 - s1 (vanilla writes only blends 0 and 1; slot 2 is implicit). If S == 0, leave the cell as it is (vanilla would divide by zero). Return the count of changed cells. Add a unit test in tests/test_export.cpp: a hard two-theme border is softened, a uniform area is left unchanged, and the ordering holds.
-2) src/leveledit.hpp:84: add Mode::EnvSmear. In src/leveledit.cpp:492, handle EnvSmear beside Environment. Call blurAtmos on working_->atmosIndex/atmosStrength with brush.x/y/radius, ignore dt/strength (vanilla Blur has no opacity), and bump terrainRev_ when n > 0. The existing mirror at leveledit.cpp:419-429 and the dirty check at :942 already cover atmos, so saving and undo work unchanged. Use the same spray semantics as the other pens: one application per brush event while LMB is held.
-3) gui/editor.cpp: in the Environ. tool panel (~2604-2676), add a Paint | Smear segmented toggle (a new member such as envSmear_). Make the mode mapping at ~1577 return M::EnvSmear when terrainMode_==10 && envSmear_. Hide the theme picker and add-from-game search while in Smear mode. Leave Ctrl+click sampling as it is. Tooltip: "Blends each 4x4 cell's environment with its 8 neighbours (vanilla ENVIRONMENT Smear)".
-4) Optional: add an `env smear x y r` verb to docs/AUTOMATION.md if the automation language exposes environment paint. Effort S, value med.
+Forge operates within the current map; absent neighbours contribute key 0,
+weight 0. Native Blur can read adjacent world maps. Malformed zero-sum cells
+stay unchanged; nonfinite/unrepresentable pen inputs are refused. Native runtime
+equivalence has not been exercised. See HANDOFF_WORLD_UI for evidence and checks.
 
 #### Sound and environment brush footprint too small: game-cell-centre test instead of the vanilla height-cell pen
 *weakness, effort S, value med*
+
+Sound corrected 2026-10-02: `Document::soundBrushCells` maps the rounded height
+disc to unique sound cells; small cursors outline those cells. Native
+`SoundsInput` 0x02052230 uses half-even rounding, and `EditSetSounds`
+0x02971010 derives its loop bounds from that rounded centre, contrary to the
+historical proposal below. The setter 0x029a97c0 divides by four and skips an
+already-set sound. Environment is also corrected, using its own truncated
+strict squared-radius pen (0x029799d0), mapped to unique game cells. It stamps
+full coverage and allows 0 to clear; it does not inherit Sound's rounded
+`distance - 0.5` test or the proposed strength-weighted blend.
 
 **Vanilla:** EditSetSounds 0x02971010 uses a cursor rounded to the nearest vertex (GFFloatToLongNear in SoundsInput 0x02052230). It loops over height cells in [floor(c-r), ceil(c+r)] and, for each with hypot - 0.5 < r, calls EditSetSound on the game cell containing it. The game cell under the cursor is always painted, even at radius 1. Env paint (0x029799d0 with ATMOS) likewise maps every vertex in the pen to its game cell.
 
@@ -926,13 +995,17 @@ There is no hf_ reset and no themeRev_ bump, because heights and ground themes a
 Effort S, value low-med. Clearing or reseeding a map's ambience is occasional, but painting a whole map by hand is tedious.
 
 #### Replace / Flood Replace miss vanilla's water-family match and hold-by-index rule
-*weakness, effort S, value med* -- **DONE 2026-10-02 except step 6's pen footprint**:
+*weakness, effort S, value med* -- **DONE 2026-10-02**:
 `ThemeEntry::noWaterThemeDef` (verified: each WATER_* ladder shares its _0 def's index, e.g.
 WATER_BWLAKE_* = 1933, non-water 0), `replaceThemesInBlend`, `Document::setThemeFamilies` /
 `replaceMatchSet`, any-strength matching, `to` = 0 refused, the Replace pen uses the match set,
 and the card names the family before Replace all. Unit tests (family, zero-strength flood,
 to = 0) and `tests/ui/replace_water_family.txt` (BanditCampResidential: BWLAKE and WWLAKE
-ladders). Still open: the pen's integer centre and strict `<` footprint (step 6).
+ladders). The pen now shares its strict vertex query with the cursor. Fresh
+caller evidence corrects step 6's historical rounding proposal: `ToC2DCoordI`
+0x01addc10 truncates coordinates via `_ftol2_sse`; it does not use half-even
+rounding or `floor(x+0.5)`. Radius 1 considers only the truncated centre vertex.
+Forge's existing duplicate-slot weight merge remains unchanged.
 
 **Vanilla:** EditReplaceEngineThemeUndoable 0x0297a6c0, EditFloodReplaceEngineThemeUndoable 0x02979ff0 and IsPosValidFloodReplaceSite 0x02979e00 treat a slot as matching when its theme index == theme_to_replace, OR when both the slot's and the replace theme's CEngineThemeDef NoWaterThemeDef (+0x78) are non-zero and equal. Picking one depth theme of a water ladder therefore replaces the whole family (W1..Wn). A slot matches whatever its blend (strength 0 included). Only the index is rewritten and blends are kept. The pen uses integer vertices with a strict (dx^2+dy^2) < r^2.
 
@@ -963,66 +1036,99 @@ ladders). Still open: the pen's integer centre and strict `<` footprint (step 6)
 
 Coordinate the family rule with the water lane, since it only affects depth themes. Effort S (about half a day). Value med.
 
-#### Budget survey cannot survey a dragged box or clicked things
-*weakness, effort M, value low*
+#### Budget area survey
+*implemented 2026-10-02; current-map bank estimates*
 
-**Vanilla:** Survey > Engine: OnEngineSurveyLMBPressed/Held/Released 0x0204f4c0..0x0204f5a0. Dragging with LMB adds a box (AddAreaToEngineSurvey 0x02051310), and the things inside join the survey. Clicking a thing adds it (AddThingToEngineSurvey 0x02051180). Shift keeps the earlier picks, several areas can accumulate, and the picks are drawn (DrawEngineSurveySelections 0x0204e220).
+Budget > Areas offers Pick areas in view, drag boxes, Shift accumulation,
+clicked-object capture, Done and Clear. Escape clears the survey. Boxes are
+minimum-inclusive/maximum-exclusive; object UIDs are captured when a box is
+added, rather than retested against old boxes after movement. Press/release
+matching adds a clicked object independently of rectangle size. Selection,
+gizmos and terrain painting are suppressed during picking; camera navigation
+remains available. Map changes clear picks, and edits refresh the report.
 
-**Fix:** Port OnEngineSurveyLMB* (0x0204f4c0..0x0204f5a0) and AddAreaToEngineSurvey (0x02051310) as a fourth scope, "Area". Effort S-M, value low-med.
-1) gui/app.hpp near line 562: add `std::vector<std::array<float,4>> budgetAreas_; bool budgetAreaDrag_ = false; float budgetAreaStart_[2]{};`. Change the comment to mark scope 3 as "areas". In gui/automation.cpp:269, raise the clamp to 0..3. Add automation keys `budget_area=x0,y0,x1,y1` (appends) and `budget_clear_areas`, and document them in docs/AUTOMATION.md.
-2) Input: add `App::budgetAreaInput(origin,size)` and call it from app.cpp:1817, next to terrainInput. It runs only when `budgetOpen_ && budgetScope_==3 && editMode_ && viewportHovered_`, and it runs before handleViewportInput so that LMB does not also select or move gizmos. Alternatively, handleViewportInput can early-out on LMB in that state. Ray the ground the same way terrainInput does (renderer_.screenRay + rayTerrain, editor.cpp:1595-1600), keeping a local hit in map coordinates (x, -z).
-   - On press, as in vanilla OnEngineSurveyLMBPressed with its shift flag: if Shift is not held, clear budgetAreas_. Then set budgetAreaDrag_ and the start point.
-   - On release: normalise the rectangle (min/max) and push it. If it is degenerate (below about 0.5 units), treat the release as a click. In that case pick the thing under the cursor with the existing viewport pick and add it to a `std::set<int> budgetThings_`. This mirrors AddThingToEngineSurvey, which Shift also accumulates. Then set budgetDirty_.
-3) runBudgetSurvey (editor.cpp:3926): in inScope, when budgetScope_==3, return true if thing>=0 is in budgetThings_ or if (x,y) is inside any budgetAreas_ box. Local detail (editor.cpp:3943) stays included for scope 3 and is point-tested against the boxes. Vanilla uses the renderer's area stats here, so point-in-box is the bank-data equivalent.
-4) Drawing: add `App::drawBudgetOverlay(origin,size)` and call it next to drawBrushCursor (app.cpp:1819). drawBrushCursor early-outs outside terrain mode, so the overlay needs its own call. For scope 3, outline every box with drawGroundRect (editor.cpp:1791) and draw the live drag box. For scope 2, drape a 48-segment circle of radius budgetRadius_ around camera_.focus, reusing the loop from editor.cpp:1813-1825. Pick one budget colour. This stands in for DrawEngineSurveySelections 0x0204e220.
-5) Window (editor.cpp:4000): make the segment list {"Whole map","Selected","Around the view","Areas"}. For Areas, add the hint "Drag on the ground to add a box; Shift+drag keeps earlier boxes; click a thing to add it", plus a "Clear areas" ghost button that clears both containers and sets budgetDirty_. Update scopeName[] at editor.cpp:4125 and change its clamp to 0..3.
+Native Press/Held/Release 0204f4c0/0204f570/0204f5a0, AddThing 02051180,
+AddArea 02051310 and ContainsPoint 01f95410 establish these rules; ProcessInput
+0295c650 establishes Shift/Escape behavior. Current-map local detail uses the
+union of boxes. Existing LOD0/texture bank estimates remain; native renderer
+statistics and cross-map survey are separate work. See HANDOFF_WORLD_UI for
+export provenance, independent boundary checks and normal/compact UI evidence.
 
-#### Reflections survey (shore-point flag brush) not ported
-*gap, effort S, value low*
+#### Walkable / Camera survey pen footprint
+*corrected 2026-10-02*
 
-**Vanilla:** Survey > Reflection: ReflectionsInput 0x02052620, where LMB sets and the modifier-click clears, calls EditSetReflections 0x029712e0 (height cells with hypot - 0.5 < r) and then CEditMap::EditSetReflection 0x029a9860, which toggles CHeightMapCell+9 bit 2. PDB egor names that bit ShorePoint, and it is persisted as the .lev cell byte +19. The overlay is ReflectionsOverlayInfo 0x029aad40, red at alpha 0x80 where set.
+The four Passability pens share Shore's native rounded world-pointer disc:
+sqrtf(float(dx*dx+dy*dy))-0.5 < radius, clipped to regular cells. This replaces
+Forge's cell-centre distance test, which could miss radius-0.25 clicks. Small
+cursors show 1/9/21 affected vertices at radii 0.25/1/2. Strength/time are
+ignored and repeated unchanged applications leave the revision unchanged.
+Existing Shift inversion for Walkable/Blocked remains; camera controls stay
+separate. Stroke undo, navigation patching and the saver's walkable/camera OR
+remain on their established paths.
 
-**Fix:** Effort S, value low.
+Read-only export `build/passability-pen-native-full.txt` covers PassabilityInput
+02051d50, EditSetPassability 02970060, EditSetCameraPassability 02970630 and
+per-map setters 029a9630/029a9940. The caller uses GFFloatToLongNear; the two
+world pens use inclusive floor/ceil bounds, the same float-distance test as
+Shore, and editable-map filters. Forge remains scoped to this map. See
+HANDOFF_WORLD_UI for independent byte-delta fixtures and normal/compact checks.
 
-1. forgecore: add `bool File::shorePointAt(int x,int y) const { return cell(x,y)[19]!=0; }` and `void setShorePointAt(int,int,bool)` in libs/forgecore/src/lev.cpp, next to preferredPathAt (about line 400). Declare both in lev.hpp.
+#### Reflections survey (shore-point flag brush)
+*implemented 2026-10-02; authored flags only*
 
-2. Document state, in src/leveledit.hpp:
-   - Add `std::vector<uint8_t> shorePoint;` to TerrainState, beside cameraPassable (line 64).
-   - Extend `enum class Mode` (line 84) with ShoreSet and ShoreClear.
+Terrain > Passability > Shore offers On / Off, Shift inversion and Show shore
+points. It uses the rounded native vertex pen, excludes extra boundary vertices,
+ignores Strength/time, and records one undo step per stroke. Red {255,0,0,128}
+marks set regular cells in Textured, Wireframe, Height and Walkable views.
+The flags save with terrain; visible water shoreline generation remains separate.
 
-3. Load and save, in src/leveledit.cpp:
-   - Resize and fill the vector from shorePointAt where cameraPassable is loaded (lines 219 and 240).
-   - Write it back in the save loop (about line 410) only for cells whose value changed. Unlike +16 there is no OR with walkable: vanilla stores the bit as painted.
-   - Add `shorePoint` to the equality and dirty checks at lines 573 and 940.
+Read-only native evidence: ReflectionsInput 0x02052620 rounds the float world
+point through GFFloatToLongNear. EditSetReflections 0x029712e0 visits inclusive
+floor/ceil pen bounds and tests sqrtf(float(dx*dx+dy*dy))-0.5 < radius, filtered
+to editable world-map cells. EditSetReflection 0x029a9860 changes CHeightMapCell
++9 bit 2 only when needed. ReflectionsOverlayInfo 0x029aad40 emits red/alpha128
+for set cells, transparent otherwise. SaveToFile 0x02234c60 serializes that bit
+at record offset +19 (0x02235748..51). Forge patches that byte only when its
+boolean value changes; noncanonical true bytes survive unrelated edits.
 
-4. Brush: copy the CameraPass/CameraBlock block at leveledit.cpp:451-461 into a ShoreSet/ShoreClear block. Use vanilla's pen test from EditSetReflections 0x029712e0: a cell is inside when hypot(dx,dy) - 0.5 < r. Before porting, confirm that test by disassembling 0x029712e0 with scratchpad/cmp/fwdis.py. Write only cells whose value changes, as EditSetReflection 0x029a9860 does, so undo stays minimal.
-
-5. GUI, in gui/editor.cpp:
-   - Put "Shore point on / off" tools in the Terrain tab's passability group next to the camera brush, sharing its radius slider. LMB sets. Vanilla clears with a modifier-click (ReflectionsInput's bool arg), so map clearing to the ShoreClear tool or to the same modifier the camera brush uses.
-   - Add a toggleable overlay that tints set cells red at alpha 0x80, matching ReflectionsOverlayInfo 0x029aad40.
-   - Add a tooltip saying this is the editor's shore-point/reflection flag stored in the .lev, and that the game's water shoreline comes from the water generator.
-
-6. Automation: add `shore set|clear x y r` alongside the camera-pass verb in docs/AUTOMATION.md and its dispatcher.
-
-7. Gate before calling it a gameplay feature: scan Fable.exe (retail) for reads of the loaded ShorePoint bit. Look in the CHeightMapCell loader and ConvertFromOld (FableWin 0x022423a0) for the +19 to +9 bit-2 transfer, then look for consumers of `[cell+9]` bit 2. If there are none, ship it as a data-parity/inspection tool (the overlay is useful because about 160 retail maps carry the flag) and label it editor-only.
-
-### World map + regions + map popup + map vi...
+See HANDOFF_WORLD_UI for disassembly provenance, independent byte deltas,
+normal/compact clicks, overlay pixels and exact undo. Forge edits only this map;
+no native execution or in-game shoreline equivalence has been claimed.
 
 #### No way to save terrain work without writing it into the game; Ctrl+S covers only objects
-*weakness, effort M, value high*
+*weakness, effort S-M, value high*
 
-**Vanilla:** Ctrl+S, F6 and toolbar SAVE_ALL all call SaveAllIfChanged 0x0204b550, which saves the world file and every changed editable level (.lev and .tng) as working files. F7 saves all and then reloads the world. Writing the game data (STB/nav) is a separate load-time step (GenerateOfflineDataForWorld).
+2026-10-02: implemented. Save draft, Ctrl+S and F6 atomically stage pending
+objects and terrain; F7 saves then reopens. The map-switch prompt can save
+terrain-only work. Reopening restores `.lev.forge-draft` beside the level files.
+The game ignores this suffix in stock and loose layouts. TNG saves retain their
+existing loose/external-world game-running guard and recovery metadata.
 
-**Fix:** 1) Add App::saveAll() in gui/editor.cpp, next to saveDocument(). The game's shared Levels folder is involved, so first call gameWriteBlocked("save") and return if it blocks. Then: if doc_.dirty(), call saveDocument(). If doc_.hasTerrain() && doc_.terrainDirty(), call doc_.saveTerrainLoose(saveRoot(), err, &notes) and pushLog each note plus "saved <map>.lev (draft)". It writes the same data/Levels/FinalAlbion/<map>.lev path that deployTerrain later rewrites, so no new folder and no change to resolveLevPath are needed: app.cpp:596 already reopens a loose .lev first. After saving, refresh the MapEntry's loosePath the same way the .tng draft path does, so the next open picks up the draft. Handle an external (other-world) map the same way saveDocument does at editor.cpp:1466.
-2) Change the Ctrl+S / F6 handler at editor.cpp:2370 to call saveAll() when hasUnsavedEdits() (app.hpp:849) instead of saveDocument() when doc_.dirty().
-3) In drawEditFooter (editor.cpp:3226), have 'Save draft' use hasUnsavedEdits() and saveAll(). In the Unsaved-changes modal (editor.cpp:2478), enable the button on hasUnsavedEdits(), call saveAll(), and remove the hint at 2486-2489.
-4) Add F7 = saveAll() and then re-select or reload the current map (selectMap(selectedName_) with discardEdits_ set) to match vanilla's save-and-reload.
-5) Automation: have save_level (gui/automation.cpp:489) call saveAll(), or add a save_all command, and document it in docs/AUTOMATION.md.
-Caveats to show in the tooltip: (a) on a loose install with no FinalAlbion.wad, the game reads the loose .lev. It is therefore live on the next visit, like the .tng draft already is, but FinalAlbion_RT.stb is not re-baked. Warn that heights shown in game will not match until 'Write terrain into the game' re-bakes the STB. (b) saveTerrainLoose patches nav walkability in the .lev at save time, which matches what deploy would do anyway. (c) deployTerrain's hadLoose / backup logic (leveledit.cpp:1082-1085) then sees a FableForge-created loose file. That is fine because saveTerrainLoose already runs backupOnce and markCreated first, but check that Restore (app.cpp:423) still deletes the created .lev.
-Optional, lower priority: World-tab pending edits (gui/world.cpp:600-625) have the same problem. Serialising worldPending_ / worldOwnerEdits_ / worldSeesEdits_ into a sidecar JSON under saveRoot and restoring it in loadWorld could follow later.
-Effort: S-M (mostly wiring; the save function exists). Value: high.
+This supersedes the old proposal to call `saveTerrainLoose` as a draft save:
+that path replaces active loose LEVs and resets the game's bake baseline.
+Separate authoring and game baselines retain height/theme/foliage deltas and
+keep Write terrain available after saving. Pack exports preserve unsaved draft
+state; game writes retire the cache in their file transaction. Serialization
+or destination failure leaves both edits pending. See HANDOFF_WORLD_UI.
 
-#### No user backups (Create backup file) and no editor autosave
+World-tab pending edits and timed crash recovery remain separate follow-ups.
+
+#### Current-map recovery and snapshots complete; whole-world snapshots pending
+2026-10-02: timed current-map crash recovery is implemented. The default
+five-minute steady-clock timer captures a private object/terrain snapshot to
+one editor archive under install/map-scoped app data. Reopen offers Recover /
+Discard; recovery is one undoable edit. Successful saves or explicit Discard
+retire the archive; failed saves keep it. Manual Snapshot now uses this rotating
+archive. Ctrl+B / Create dated snapshot and Saved snapshots now provide retained
+current-map history, undoable Restore and confirmed Delete. Whole-world snapshots
+and restoration of pending World-tab edits remain separate work. See HANDOFF_WORLD_UI for native trigger /
+backup evidence and stock/loose, normal/compact checks.
+
+The original proposal below is historical for implemented current-map capture;
+Document::saveRecovery / recover preserve objects, terrain and authored nav state
+in one archive. Reuse this path for future multi-map capture; WLD/BWD and pending
+World-tab restoration need their own staged transaction.
+
 *gap, effort M, value high*
 
 **Vanilla:** The toolbar BACKUP button calls CreateBackupFile 0x0204b690: SetSaveToBackupFiles(true) (CEditWorldMap+0x17d), SaveAllLevels(1,0), then the flag is cleared. CEditWorldMap::SaveSingleLevel 0x0296e150 then appends '.backup' to the .lev and .tng names (strings 0x4349e0c/0x4349e14), which gives a manual snapshot of every editable level. Autosave: console var EnableEditorAutosave binds CEditWorldMap+0x17c (ctor 0x0296a5d4). CEditWorldMap::Update counts frames in +0x178, and every 0x34BC (13,500) frames it saves each changed (vtable+0x2c) editable map through SaveSingleLevel under a name with '_a' inserted before the extension (0x0296a9bc-0x0296aa0e, 'Name_a.lev'). The real files are never overwritten. Whole-world snapshots also exist: CEditWorld::BackupWorldAndAllMapsToFile 0x0207f9a0 / Restore 0x0207fce0.
@@ -1050,7 +1156,9 @@ Effort: S-M (mostly wiring; the save function exists). Value: high.
 
 5. Automation (docs/AUTOMATION.md): add `autosave_now`, `assert_autosave_exists 0|1`, `snapshot`, `restore_snapshot <i>`. Add a test that sculpts, calls autosave_now, reopens, recovers and checks assert_heights_changed 1.
 
-Effort: M (about 1 day; the async copy and dialogs already have patterns in editor.cpp). Value: high. Terrain edits currently have no crash safety at all, and loose-install drafts have no restore point short of retail.
+Remaining effort: M for whole-world snapshots and World-tab restore. Timed
+current-map recovery, saved terrain drafts and retained dated restore points
+are implemented above.
 
 #### World tab cannot create, remove or rename regions or set their display name, def, minimap or world-map flag
 *gap, effort M, value high*
@@ -1124,6 +1232,10 @@ Effort M (mostly refactoring existing bake/install code plus TNG UID remapping).
 Discard and Cancel. Pending World writes wait for success before exit and survive
 failure with undo history. Native close, map-switch and failed-write UI scripts
 pass; terrain still uses its separate explicit save action.
+2026-10-09: open text drafts now keep the close prompt active, including async
+exit completion guards. Review text returns to its draft; Cancel, explicit
+Discard, refusal retention and mixed text/lip-sync review order pass at both
+window sizes. The new scoped gate does not force concurrent world completion.
 
 **Vanilla:** File > Exit (MENU_ITEM_FILE_QUIT) and Alt+X both call SaveAllIfChanged(1,0) 0x0204b550 before OnExit (menu handler 0x02947fc0). Vanilla never loses edits on exit.
 
@@ -1312,8 +1424,13 @@ Effort S (about 80-120 lines, all in gui/editor.cpp plus a few members in gui/ap
 
 Effort S (roughly 60-80 lines). Value med.
 
-#### Editor session (last map, tab/mode, camera) is not restored
-*weakness, effort S, value med*
+#### Editor session (last map, tab/mode, camera) restored
+*resolved 2026-10-02: install/map-scoped startup restores camera, View/Edit,
+editing tab and terrain tool. Invalid camera data, missing maps, different
+installs and automation isolation are checked on stock/loose sources at both
+sizes. World overview camera and external-world reopen remain separate.*
+
+The following proposal is historical for the implemented current-map session.
 
 **Vanilla:** SaveSettings 0x0203d9c0 / LoadSettings 0x0203cdc0 write StartEditorSettings ViewMode EditMode CamPos CamViewDir EngineGridFlag SnapToGridFlag Showing{Creatures,Buildings,Objects,HolySites,Villages} ShowDetailMode EditingScriptBrush EndEditorSettings, so the editor reopens in the same mode and camera.
 
@@ -1371,7 +1488,11 @@ the double-click), disabled while moves are pending or without a terrain chunk. 
 **Fix:** 1) gui/world.cpp, Selected-map card, after the owner combo block (before theme::endCard() at ~line 515): add two buttons. (a) ghostButton "Open in editor", which runs the same sequence as the double-click at world.cpp:321-328 (worldDragging_=false; setWorldMode(false); selectMap(box->name); setEditMode(true); pushLog). (b) ghostButton "Fit to neighbours...", which runs that sequence, then setEditTab(1) (the Terrain tab, app.hpp:364) and setFitOpen(true) (app.hpp:548). Register the buttons as widgets btn_world_open and btn_world_fit. Disable both while worldPending_ is non-empty (the same guard as the double-click), with a tooltip saying "Write or put back pending moves first". Fit reads neighbour heights from the written layout (loadWorldLayout in startFitNeighbourLoad, editor.cpp:3525), so unwritten moves would give wrong seams. Also disable Fit when box->inStb is false or the map has no terrain. Tooltip: reuse editor.cpp:3733 plus "changes height data", which stands in for vanilla's confirm text; the Fit window's Now/Fitted preview and explicit Fit button (editor.cpp:3882) already act as the confirmation, so no modal is needed. 2) No change to drawFitWindow is needed. It opens once documentLoaded() is true, because fitOpen_ persists across the asynchronous map load, and it reloads neighbours through the fitNeighboursFor_ != doc_.mapName() check (editor.cpp:3745). Keep the vanilla defaults and do not reset fitParams_. 3) Optional: an automation verb world_fit <map> in gui/automation.cpp next to fit_open (line 326) that does the same sequence, so the flow can be screenshot-tested; then update the ROADMAP row 22 note. Out of scope: the "several fillers at once" part of row 22 and the pack entry point.
 
 #### Options > Snap To Grid (cell-centre placement) has no equivalent
-*gap, effort S, value low*
+*gap, effort S, value low* — **DONE 2026-10-02**: saved *Snap to cell centres*
+placement option; new things, fragment/preset anchors, special things and carry
+snap before ground sampling. Carry snaps after the grab offset. Fixed height,
+emitter offset, paste spacing and one-step undo are preserved. Normal/compact
+real-control checks pass (`tools/test_placement_grid.py`); details in HANDOFF_WORLD_UI.
 
 **Vanilla:** Options > &Snap To Grid â†’ SetSnapToGridFlag 0x0203d5d0. GetCurrentPointedAtPos 0x0204b3f8 then calls FindNearestSnappedPos 0x02049280: x,y are truncated to int (_ftol), +0.5 is added (constant 0x401de04 = 0.5), and z = GetGroundSizeZAt. The pointer is snapped to the centre of the 1-unit cell, on the ground, for placement and pointer-driven edits. Persisted as SnapToGridFlag in editor settings.
 
@@ -1631,6 +1752,13 @@ Effort S. Value med.
 **Fix:** 1) State: add `std::set<std::string> hiddenKinds_` to App (app.hpp, next to hiddenSections_ at app.hpp:403), holding upper-case thing types: CREATURE, BUILDING, OBJECT, HOLY_SITE, VILLAGE. Vanilla groups types this way; switches, markers and other kinds stay under OBJECT unless SetThingDrawing at 0x02036ee0 shows another mapping, so disassemble that function first to confirm which type ids each menu item covers. 2) Rule: widen thingHiddenBySection (editor.cpp:1415), or add thingHidden(per,t) that wraps it, so it also returns true when `hiddenKinds_.count(doc_.summary(t).type)`. Point every caller at it: applySectionVisibility (editor.cpp:795), trackNodeAt (editor.cpp:815) and the selected_visible probe (app.cpp:1339). Set sectionsDirty_=true on every toggle so applySectionVisibility runs again. Hidden kinds then stop being drawn and picked through the existing instance.visible path, with no renderer change. 3) UI: keep the 'Objects' chip as the master toggle and give it a small right-click popover (or a caret next to it) at app.cpp:1933, with checkboxes Creatures / Buildings / Objects / Holy sites / Villages. Call auto_.registerWidget for each checkbox, and when any kind is hidden, show a partial state on the chip, such as 'Objects (3/5)'. 4) Persistence: write the set into the settings key/value dump (the pattern at app.cpp:1264, e.g. `hidden_kinds=CREATURE,VILLAGE`) and read it back on load, as vanilla's ShowingX settings keys do. Never write it into the level. 5) Automation: add a `show_kind <TYPE> 0|1` command in automation.cpp beside the section-visibility command at automation.cpp:292. Effort S, value low.
 
 #### The camera view is not remembered between sessions; no camera bookmarks and no FOV control
+
+2026-10-02: last-map camera/session persistence and View > Map camera FOV
+control are implemented. Slider limits, typed degrees, reset and exact restart
+restoration pass stock/loose at normal/compact sizes. Each map now retains its complete camera and rendering mode across
+revisits and restart, scoped to the current install. Named bookmarks remain open. Native degrees-to-turn setter and Forge's
+radian conversion are recorded separately in HANDOFF_WORLD_UI.
+
 *gap, effort S, value low*
 
 **Vanilla:** SaveSettings 0x0203d9c0 / LoadSettings 0x0203cdc0 persist CamPos, CamViewDir, EditMode, ViewMode and the grid/snap/show flags (StartEditorSettings ... EndEditorSettings). The console has EditSetCameraPos, EditSetCameraToFace, EditSetCameraFOV and EditLoadCamera. The CameraPoint tab can take a camera from the clipboard (c:\cameras.bin), so a framed view can be reused as a camera point.
@@ -2217,11 +2345,13 @@ existing scratch mesh-import test still passes.
 Out of scope: live in-engine ReloadSoundBanks, because FableForge does not host the running engine.
 
 #### Def field editor in the GUI (Assets > Definitions)
-*gap, effort M, value high*
+*partial, effort M, value high*
 
 **Vanilla:** Dev defs are text: 198 .def and .tpl files in Data/Defs of the dev tree. The editor build can recompile them live: CDefinitionManager::RecompileDefType 0x0305b560, RecompileAllDefs 0x0305b5f0, ClearDefsForRecompile 0x0305f440, ConsoleResetDefinitions 0x018cdb70, ConsoleResetScriptDefinitions 0x018cdc30, CMainGameComponent::ValidateDefinitions 0x018a3ffa. Thing Properties can jump to a thing's def. Retail ships only CompiledDefs (game.bin, names.bin, script.bin, frontend.bin).
 
-**Fix:** Add a fourth Assets segment, "Definitions", beside the three at gui/textures.cpp:109, handled by a new drawDefinitionsCard (gui/defs.cpp) dispatched like drawModelImportCard.
+**Current:** Assets > Definitions browses all three banks with a searchable type/group tree, confirmed fields and raw fallback. Native indices identify records and groups. It edits scalar, boolean, vector, colour and short printable ASCII string drafts with recovery and stale-source guards. CWideString CLI edits accept valid UTF-8. CDefString drafts choose existing owning-pool byte offsets or -1, with search and duplicate-name choices. Object properties and group/member links navigate definitions; confirmed OBJECT Graphic and ENGINE_THEME texture fields open native-ID previews. Drafts protect navigation and close/install changes.
+
+**Remaining:** Complete the additional field, reference and clone workflows below; GUI Unicode authoring and unsupported inline strings remain pending.
 
 (1) Left pane: a tree of definitions grouped by type (OBJECT, BUILDING, CREATURE, and so on), with GroupDef (THING_GROUP) subgroups, from ctx_.groupedDefinitions. Reuse drawDefPalette's search box. Include a bank switch for game.bin, frontend.bin and script.bin.
 
@@ -2230,7 +2360,7 @@ Out of scope: live in-engine ReloadSoundBanks, because FableForge does not host 
 - C2DVector and C3DVector become DragFloat2 and DragFloat3.
 - CRGBColour becomes a ColorEdit4.
 - CWideString and CCharString become text inputs.
-- CDefString becomes a text-ref picker.
+- CDefString stores a signed names-table offset, including -1 for no reference. Its existing-name picker is implemented and source-validated; it keeps duplicate and unused pool names and refuses invalid changed offsets.
 - Fields known to hold def references (by schema name or type) become a def combo from ctx_.definitions.
 - Graphic and mesh ids get a "show in Models" link. Texture ids get a thumbnail and "open in Textures", reusing texRows_.
 - Types defedit::setField rejects are shown read-only with their hex bytes, and marked "not editable yet". The editor must not guess an encoding for them.
@@ -2252,6 +2382,40 @@ Formats: compiled .bin defs only. FableForge already reads and writes them (defd
 Effort M; value high.
 
 #### Text and string editor in the GUI (Assets > Text)
+
+**2026-10-09 browser and bounded content editing implemented:** Assets > Text provides language
+selection, name/ID/content search, readable/copyable strings, metadata/tags and
+group member links. Save-folder changes and per-language fallback refresh the
+index; malformed entries and ambiguous lookups remain visible. Both desktop and
+small-window workflows pass, and all 28,913 retail English entries load with zero
+string/group decode errors (2,105 groups). Narrator preview independently matches
+all 379 retail header names. TSV export matches all 28,913 original entries and
+metadata, including quotes/tabs/newlines and per-entry errors. Existing string
+content can be edited with confirmation into an existing destination bank, keeping
+metadata and one-time originals. Both-size edit/restore, stale-edit refusal and
+unknown-payload preservation checks pass. New string from donor copies headers,
+retains the donor and allocates a free ID; both-size refusal/restore checks and a
+retail-copy addition preserve every original record. Folder destinations can now
+create a bank copy with transactional creation tracking and Restore removal;
+both-size guards and an independent 28,913-record retail-copy check pass.
+The speaker picker changes payload speaker and narrator index together for edits
+and donor additions; both-size real-control/refusal/Restore/folder-copy and
+retail-copy checks pass. Speech-bank references and existing-string identifiers
+now have bounded ASCII inputs, empty-value support, stale guards and exact Restore;
+legacy original bytes remain read-only. Both-size controls and retail-copy checks
+preserve every header. Ordered tag name/position edits, append and selected removal
+now pass both-size real controls, signed boundaries, legacy/stale preservation and
+exact Restore, plus an independent 28,913-entry retail-copy delta check. Pack
+destinations now use the existing tree composer: both-size authored metadata/new
+strings merge with unrelated sibling edits. Explicit tracked-folder CLI recovery
+works without game.bin and retains running-owner/alias guards. New narrator
+creation and quest-card definition jumps remain pending.
+Single-byte metadata/tag display and JSON/TSV export now pass both-size full-byte
+checks and complete retail comparison, preserving source bytes. CLI JSON labels
+its metadata byte encoding; unsupported original fields remain read-only.
+Property-grid jumps now cover
+readable objects and information-display front/back text; quest-card definition
+links remain pending. The proposal below retains the broader editing scope.
 *gap, effort S-M, value high*
 
 **Vanilla:** The dev console has WriteAllTextToFile 0x018d91d0, which dumps all strings. PlayCurrentSpeech 0x029203b0 plays a thing's text line. The runtime reports 'No lipsync bank entry for speech index' when a line lacks lipsync. The strings live in lang/English/text.big (28,913 entries: type 0 string, 1 group, 2 narrator).
@@ -2282,8 +2446,20 @@ lip sync and resolves the linked subtitle through `*snds.bin` and `text.big`.
 The planned Sounds/Text pages still need indexed browsing,
 editing and a jump from the selected thing.
 
-#### Model import is static-only and cannot replace an existing mesh
+#### Model import is static-only; complex donor replacement remains pending
 *weakness, effort L, value med*
+
+**2026-10-09 bounded replacement implemented:** CLI `mesh-replace` and Models
+**Replace geometry...** retain the existing mesh identity, material records,
+texture references and collision entry while replacing geometry and bounds.
+Supports BIGB type-1 donors with one LOD, canonical material slots, no helpers,
+bones, cloth, animated blocks or safe-radius override. The input must retain
+material slot count/order. In-place backup and separate output-root writes are
+covered by tiny-install checks. The preview refreshes without losing the base
+definition/texture context. Collision rebuilding, complex donors, recipe steps,
+before/after comparison and an in-game probe remain pending. The original
+proposal below describes that remaining broader scope; its flags are not the
+current command interface.
 
 **Vanilla:** Vanilla previews an arbitrary .bbm on any thing, animated meshes included (CEnginePrimitiveAnimatingMeshFromFile), so artists iterate without rebuilding banks.
 
@@ -2468,3 +2644,135 @@ by EgoCore, not full engine or upstream feature parity.
 (4) Later: clone and edit (effort L). Round-trip entries with EgoCore Particles/ParticleParser.h and ParticleCompiler.h (C:\Users\Cornelio\Documents\EgoCoreInspect\EgoCore-master\EgoCore\Particles). Oracle the layout against FableWin's CParticleEmitter::WriteBinary (0x2f0dbb0) and the CPSC*::WriteBinary family, and write through the existing forgecore BIG writer into a mod-pack copy of effects.big, never the install.
 
 Format status: FableForge reads effects.big partially and read-only (emitter, sprite, mesh, light and offset fields; unknown components stop the walk). EgoCore has a full parser and compiler. FableTLC has tools/parse_effects.py. Nothing in FableForge writes the format today.
+
+### 2026-10-09 Definitions browser foundation
+
+Assets > Definitions now browses game/frontend/script banks with name/type/index filtering, confirmed typed fields, raw fallback, refresh and an object-property jump. This phase is read-only; definition field editing, grouping and cloning remain pending. Both window sizes pass the dedicated fixture check and source preservation; text browsing and text close-prompt neighbor checks pass. Retail game.bin exposes 14,764 records; OBJECT_QUEST_CARD_TEMPLATE shows 19 fields matching CLI decoding, with every compiled bank hash unchanged. Evidence: `build/definition-browser-ui-u6mgkrtz` and `C:/Users/Cornelio/AppData/Local/FableForgeEvidence/20261009/retail-definition-browser-kcj8_wl8`. The Definitions checkpoint is validated: `dist/development/20261009-definitions/FableForge-0.18.1-rc.1-win64.zip`, SHA256 `a76c7ac5b13dcf0f498a8681545cd5d4701b166309292c18c724ccf2374b64d5`. Extracted package evidence `package-smoke-_k74g4bl`: 109 file identities, 127 documentation links and 19 selected workflows pass; 88 not run, zero skipped. The superseded text-close snapshot was removed after retaining its metadata on C.
+
+### 2026-10-09 Definition field selector correction
+
+The CLI field editor previously accepted a numeric prefix such as `0junk` and edited record zero. `defs set-field` now requires an exact unique name or a complete unsigned record index; duplicate names refuse before creating output. Numeric names take priority, and unnamed records use explicit indices. The new test exercises ten refusals and four valid writes, independently checking every record payload and unchanged source hashes. Evidence: `build/definition-selector-before-qo7mn_5b`, `build/definition-selector-_ft2qwgt`; raw diagnostic reconstruction neighbor check passes. Validated checkpoint: `dist/development/20261009-def-selector/FableForge-0.18.1-rc.1-win64.zip`, SHA256 `6b256f1fa40684aeccab98b4aaab723e5c1c5eb7667c3243ef9e794b59a6ba5a`. Extracted evidence `package-smoke-fffj9jcr`: 109 identities, 127 links and four affected workflows pass; 104 not run, zero skipped. The earlier 19-workflow browser checkpoint remains recorded in C evidence; its superseded D snapshot was removed.
+
+### 2026-10-09 Definition publication correction
+
+`defs set-field` now prepares and verifies edited records before publication. Separate outputs preserve the source name table byte-for-byte, including historical headers. Existing destination pools must match all record identities; missing pools copy the original bytes. Standard bank outputs use original backups or creation markers and rollback. Destination-owner checks include physical folder aliases and occur before preparation and publication. Nineteen publication/recovery checks pass, plus selector and raw-decoding neighbors. Evidence: `build/definition-publication-before-y8obqfiz`, `build/definition-publication-q_gsptyc`. No native install writes. Validated checkpoint: `dist/development/20261009-def-publication/FableForge-0.18.1-rc.1-win64.zip`, SHA256 `c84778d82f650915a40b84c78d352f047759f72e75c440e18b6ecf95762942dd`. Extracted evidence `package-smoke-ed3rikn7`: 109 identities, 127 links and five affected workflows pass; 104 not run, zero skipped. Superseded selector snapshot metadata was retained on C before removing the old D folder.
+
+### 2026-10-09 Fixed-width definition edit preservation
+
+The generic field writer now refuses a scalar/vector/colour edit when its tag-delimited byte range has an unexpected size. This prevents discarding opaque derived-class trailers. The existing finite/subnormal float parser is preserved. Twenty-seven canonical/refusal cases, core tests, publication, selector and raw-decoding neighbors pass. A retail bank copied to C verifies one float delta across all 14,764 records, exact identity table and names preservation, unsupported DieOffTimer refusal, and byte-exact Restore. Real compiled banks remain unchanged. Evidence: `build/definition-layout-before-rcuh_xir`, `build/definition-layout-ivclrzsy`, `C:/Users/Cornelio/AppData/Local/FableForgeEvidence/20261009/retail-definition-edit-copy-neandq92`. Validated checkpoint: `dist/development/20261009-def-layout/FableForge-0.18.1-rc.1-win64.zip`, SHA256 `7bf0c3abbf11c71b843db2c149ab62a18a52cf7598ff1ec643eb90affc36437b`. Extracted evidence `package-smoke-9247y0a7`: 109 identities, 127 links and six affected workflows pass; 104 not run, zero skipped. Superseded publication snapshot metadata was retained on C before deleting the old D folder.
+
+### 2026-10-09 GUI definition scalar drafts
+
+Assets > Definitions now edits confirmed int32, uint32, float and bool fields through a one-field draft with explicit Save confirmation. Other fields remain inspectable. Stale payload/name-pool snapshots, invalid values, changed destinations and unsupported widths refuse while retaining the draft. Existing banks retain originals; new output-folder or pack banks retain creation markers. No-op edits write nothing. Definition drafts participate in close/install-switch protection and can coexist with text drafts. Game-bank edits refresh the current asset context without publishing map edits; context paths use UTF-8 conversion.
+
+Twenty-four GUI cases pass across both window sizes, including exact Restore, stale payloads, all supported scalar kinds, retained opaque fields, pack/folder destinations and mixed text drafts. Browsing and text browser/close-prompt neighbors pass. A GUI float edit on a C-hosted retail copy independently preserves every other payload and all 14,764 identities, keeps names exact, and restores the original bank exactly. Evidence: `build/definition-edit-ui-ttq8_cdo`, `build/definition-edit-ui-95l3wgbx`, `build/definition-browser-ui-msaxu2x8`, `C:/Users/Cornelio/AppData/Local/FableForgeEvidence/20261009/retail-definition-edit-ui-copy-h1rswvxt`. Native install unchanged. Validated checkpoint: `dist/development/20261009-def-edit/FableForge-0.18.1-rc.1-win64.zip`, SHA256 `2f7a26bf1d2ac80b807eacde73bdd254b40f16c2b34ae8793638322c87cb5910`. Extracted evidence `package-smoke-07npuqzg`: 109 identities, 127 links and 23 selected workflows pass; 88 not run, zero skipped. Its GUI definition check includes 28 cases, including numeric-name re-selection and missing/malformed pack refusal. The superseded layout checkpoint metadata was retained on C before removal from D. Grouping, references, strings/vectors and cloning remain pending.
+
+### 2026-10-09 Definition group navigation and exact no-op drafts
+
+Game-bank `GroupDef` navigation now follows a unique four-byte scalar only when its target is a *_GROUP record in the same loaded bank. Numeric target names cannot redirect the jump. Navigation is deferred until the next frame and disabled while a definition draft is open. Frontend/script references remain uninterpreted. Both window sizes pass valid, wrong-type, absent, out-of-range, wrong-width, numeric-name and draft-protection cases. Retail OBJECT_QUEST_CARD_TEMPLATE resolves entry 7439, GO_GAMEPLAY, with native bank hashes unchanged.
+
+Unchanged scalar drafts now bypass re-encoding after stale-source checks, retaining exact existing boolean/NaN representations. The prior noncanonical-boolean no-op normalized a byte; the new regression preserves it and creates no backups. All 32 definition editing cases and browsing neighbors pass. Evidence: `build/definition-groups-ui-6a9oucua`, `build/definition-edit-bool-noop-before-20261009.log`, `build/definition-group-exact-noop-edit-check-20261009.log`, `C:/Users/Cornelio/AppData/Local/FableForgeEvidence/20261009/retail-definition-group-read-od6qop7c`. Validated checkpoint: `dist/development/20261009-def-groups/FableForge-0.18.1-rc.1-win64.zip`, SHA256 `c9c23675db1e625cfac360e81afca721b9e773b3b06691f99a84e9e0cca20126`. Extracted evidence `package-smoke-4v8m8pvw`: 109 identities, 127 links and seven affected workflows pass; 105 not run, zero skipped. Only this validated snapshot remains on D; predecessor metadata is retained on C.
+
+### 2026-10-09 Definition boolean checkbox
+
+Boolean field drafts now use a checkbox; other supported scalars retain the value input. Actual checkbox clicks and confirmation update only the selected byte at both window sizes. Existing noncanonical true bytes and NaN payloads remain exact on unchanged drafts. Six focused checks pass in `build/definition-edit-ui-704x4hzk`. The full definition UI gate now includes 34 cases. Validated checkpoint: `dist/development/20261009-def-checkbox/FableForge-0.18.1-rc.1-win64.zip`, SHA256 `fd8259f0de4dc7f0474d9c369521e6c62e3bc06b2e8d3fc03678954480240d97`. Extracted evidence `package-smoke-93az6sxx`: 109 identities, 127 links and three affected workflows pass, including all 34 editing cases; 109 workflows not run, zero skipped. Superseded group snapshot metadata was retained on C before removing its D folder.
+
+### 2026-10-09 Definition group members
+
+Selecting a game-bank group now shows a virtualized list of records with confirmed GroupDef references to it. Membership is decoded in the existing background bank job, with unsupported records omitted; member clicks queue explicit indices for the next frame and remain disabled during drafts. Both window sizes pass object-to-group-to-member navigation, numeric names, malformed references, group-reference editing and refreshed membership after byte-exact Restore. Existing original backups remain exact. Browser neighbors pass, and retail OBJECT_QUEST_CARD_TEMPLATE returns from GO_GAMEPLAY with all compiled bank hashes unchanged. Evidence: `definition-groups-ui-0esvvm0x`, `definition-groups-ui-dertrtju`, `definition-browser-ui-9cvznq8s`, `retail-definition-members-read-x0z97k56`, under `C:/Users/Cornelio/AppData/Local/FableForgeEvidence/20261009`. The first write fixture used invalid per-class identities; publication correctly refused before writes. The corrected fixture and backup-retention assertion pass. Validated checkpoint: `dist/development/20261009-def-members/FableForge-0.18.1-rc.1-win64.zip`, SHA256 `2e309d6df70ba1d9ec4bbb07a4f66a7c6c5f72a177e3c37328ab7afb636b71fd`. Extracted evidence `package-smoke-pl269e6u`: 109 identities, 127 links and three affected workflows pass, including 34 editing cases; 109 not run, zero skipped. Superseded checkbox snapshot metadata was retained on C before removal from D.
+
+### 2026-10-09 Definition vector drafts
+
+Confirmed C2DVector (8 bytes) and C3DVector (12 bytes) fields now display coordinates and offer X/Y/Z number inputs through the existing field draft, confirmation, stale-source and recovery path. The unchanged-draft comparison uses a round-trip float representation, retaining exact NaN payloads, signed zero and subnormals. Core writer encoding is unchanged. Unexpected widths stay read-only and invalid/nonfinite edits refuse before writes. Thirty-two cases pass at both sizes, including real coordinate clicks, one-component byte deltas, precision-sensitive neighboring values, exact no-ops and malformed/truncated values. Eight scalar neighbors pass. A C-hosted retail copy verifies DollCentreOffset.x on HERO_POSTCARD1, all 14,764 record identities and unrelated payloads, exact names, backup and Restore; native hashes stay unchanged. Evidence: `definition-vector-ui-2cmck173`, `definition-edit-ui-s_i99r6g`, `retail-definition-vector-copy-xq2603ui`, under `C:/Users/Cornelio/AppData/Local/FableForgeEvidence/20261009`. The definition_vectors workflow is registered for package and broad checks. Validated checkpoint: `dist/development/20261009-def-vectors/FableForge-0.18.1-rc.1-win64.zip`, SHA256 `72c01fe77fe02d31a4d2872dd80bc10fc62dbffd02a5d91a5370255c8897e397`. Extracted evidence `package-smoke-ok0zey4g`: 109 file identities, 127 documentation links and four affected workflows pass, including 32 vector and 34 scalar cases; 109 not run, zero skipped. Superseded member snapshot metadata was retained on C before removing its D folder.
+
+### 2026-10-09 Native colour byte-order correction
+
+The existing CRGBColour writer treated physical bytes as RGBA, swapping red/blue for the game. Native FableWin evidence establishes BGRA: Initialise 018A0C60 stores R at +2/G at +1/B at +0/A at +3; CPersistTraits binary output 019C5E28 calls WriteColour 03083120, which writes GetB/GetG/GetR/GetA to successive bytes. ReadColour 03082170 reconstructs the same order; binary input 019C5E02 copies that value. Debug executable SHA256 `a9d6d0977d9d7fc8242da4292ae7ed92e926ca80364a95c003d9b9f689e41845`; PDB names independently identify the getters and I/O functions. Public r,g,b,a input now writes B,G,R,A for CRGBColour; the explicitly named ColourRGBA layout stays RGBA. Existing fixed-width guards and float handling remain. No GUI colour editing yet.
+
+The corrected layout regression fails on the prior tool (`build/definition-colour-before-20261009.log`) and passes after correction. Nine colour inputs/refusals, 27 fixed-width layout cases and core tests pass. A copied retail PLAYER_HERO edit validates BGRA red with alpha 128, every other payload and all 14,764 identities, exact names/original backup and Restore; actual native hashes stay unchanged. Evidence on C: `definition-colour-native-proof`, `definition-colour-cjauuk6w`, `definition-layout-82qsk7ng`, `retail-definition-colour-copy-mil4w1nw`, under `C:/Users/Cornelio/AppData/Local/FableForgeEvidence/20261009`. The definition_colour workflow is registered. Validated checkpoint: `dist/development/20261009-def-colour-order/FableForge-0.18.1-rc.1-win64.zip`, SHA256 `f7b189d9d2767dbae7bdd4784883bf31a733387e143b93498fdd0edc0f621869`. Extracted evidence `package-smoke-u95d_gex`: 109 identities, 127 links and five affected workflows pass; 109 not run, zero skipped. Superseded vector snapshot metadata was retained on C before removal from D.
+
+### 2026-10-09 Definition colour drafts
+
+Confirmed four-byte CRGBColour fields now display RGBA values and offer a swatch picker, alpha control and four labelled byte-channel inputs. Source BGRA bytes are converted to public RGBA and saved through the corrected native writer, existing stale/destination guards and recovery path. Unchanged drafts write nothing; unexpected widths stay read-only, and invalid direct drafts refuse. Twenty cases pass across both sizes, including actual R/B/A input, opening/closing the popup, a real saturation/value selection followed by Save, exact extreme-colour no-ops and malformed value/layout refusals. The 32 vector neighbors pass. Small-window draft/picker screenshots were inspected. A retail copy GUI edit changes exactly PLAYER_HERO's red byte, preserves every other payload and all 14,764 identities/names, and restores byte-for-byte; native hashes remain unchanged. C evidence: `definition-colour-ui-gag1xb2l`, `definition-vector-ui-f790czg7`, `retail-definition-colour-ui-copy-1xzmouo0`, under `C:/Users/Cornelio/AppData/Local/FableForgeEvidence/20261009`. The definition_colour_edit workflow is registered. Validated checkpoint: `dist/development/20261009-def-colour-ui/FableForge-0.18.1-rc.1-win64.zip`, SHA256 `c3c2ece76263e9390f19349825a5fa4b0d6bfb51aee306a4dce35753911b0c22`. Extracted evidence `package-smoke-2yb67txb`: 109 identities, 127 links and six affected workflows pass, including 20 colour, 32 vector and 34 scalar UI cases; 109 not run, zero skipped. Superseded colour-order snapshot metadata was retained on C before removal from D.
+
+### 2026-10-09 Inline definition text and terminator preservation
+
+Supported CCharString fields now offer printable ASCII drafts up to 127 characters through the existing confirmation, source/destination guards and recovery path. Old values must be one complete terminated printable string fitting the draft; non-ASCII, embedded terminators, missing terminators, trailers and longer strings stay read-only. Actual InputText filters Unicode and nonprintable characters, and the writer path independently validates new drafts. Canonical string encoding is established in FableTLC docs/formats/DEFS.md (native Transfer<CCharString> 01895D30 / writer 0189C530 and retail CFireheartMinigameDef entry 10516). Wide strings/name-table references remain unedited.
+
+Review found the shared writer accepted OLD\0OPAQUE and discarded the trailer; baseline `definition-string-trailer-before-mcx_cgh3` confirms it. Core CCharString edits now require exactly one final NUL and reject embedded NUL input, while allowing complete legacy/high-byte originals in explicit CLI replacement. Ten CLI canonical/refusal cases, 24 GUI cases at both sizes and core tests pass. GUI checks cover real longer/shorter/empty/max-length saves, exact no-ops, Unicode filtering and protected legacy/opaque values. A retail copy GUI resize of MoonFX on unnamed entry 10516 preserves every other payload and all 14,764 identities/names, retains an exact original and restores byte-for-byte; real native hashes remain unchanged. C evidence: `definition-string-ui-pj_ub1vc`, `definition-string-layout-wa5xnstt`, `retail-definition-string-ui-copy-2umra_sy`, under `C:/Users/Cornelio/AppData/Local/FableForgeEvidence/20261009`. definition_strings and definition_string_layout workflows are registered. Validated checkpoint: `dist/development/20261009-def-strings/FableForge-0.18.1-rc.1-win64.zip`, SHA256 `5bf5295529bf7a018f6e148eceaed682757c233f1566ff3da49516f11a3fe9de`. Extracted evidence `package-smoke-30yl8rp0`: 109 identities, 127 links and ten affected workflows pass; 107 not run, zero skipped. Superseded colour UI snapshot metadata was retained on C before removing its D folder.
+
+### 2026-10-09 Native wide-string correction and ASCII drafts
+
+The old CWideString writer prepended a u16 character count and omitted a final zero unit. Direct FableWin evidence disproves that layout: CPersistTraits binary output 01895C50 calls WriteNullTerminatedWString 030830D0, which writes (GetLength+1)*2 bytes from the string pointer. Binary input 01895BC0 uses the stream's wide-string read method. PDB names identify the writer and GetLength; debug executable SHA256 remains `a9d6d0977d9d7fc8242da4292ae7ed92e926ca80364a95c003d9b9f689e41845`. Retail UI TextValue samples independently show literal UTF-16LE text followed by a zero unit, without a count. Entry 5983 PC_PHOTOJOURNAL_CAPTURE_DESCRIPTION decodes cleanly with zero leftover; TextValue is field 3.
+
+Core CWideString now writes ASCII as native NUL-terminated UTF-16LE, requires one complete even-length original value and refuses missing/embedded terminators, trailers and non-ASCII new input. Complete Unicode originals may be explicitly replaced with ASCII through CLI; no-op/GUI browsing preserves their bytes. The public header grammar is corrected. GUI exposes only complete printable ASCII originals fitting 127 characters; Unicode, long and unsupported originals remain read-only. Actual input uses the same ASCII filter and independently validated draft path. The prior wrong encoding is captured in `definition-wide-before-l2fkyu21`.
+
+Thirteen CLI cases, 24 GUI cases at both sizes and core tests pass. A retail copy GUI TextValue resize validates native UTF-16 termination, every other payload and all 14,764 identities/names, exact original and Restore; actual native hashes stay unchanged. C evidence: `definition-wide-native-proof`, `definition-wide-ui-3tmln7it`, `definition-wide-layout-nhra58sw`, `retail-definition-wide-ui-copy-03pi4qjo`, under `C:/Users/Cornelio/AppData/Local/FableForgeEvidence/20261009`. definition_wide and definition_wide_layout are registered. Unicode authoring remains pending; it is refused instead of guessing a conversion. Validated checkpoint: `dist/development/20261009-def-wide/FableForge-0.18.1-rc.1-win64.zip`, SHA256 `59504874daef972f3e0b7934393171a99195f1954dc6c9c74d0216956aa14ba8`. Extracted evidence `package-smoke-nrzmu1tx`: 109 identities, 127 links and thirteen affected workflows pass; 106 not run, zero skipped. Superseded inline-string snapshot metadata was retained on C before removing its D folder.
+
+### 2026-10-09 Definition type/group tree
+
+Definitions now group records by type and confirmed game-bank GroupDef target. Search includes group names and indices. Selecting a record opens its ancestors and reveals its virtualized row; drafts protect navigation. Four cases at both window sizes pass, including 128 records, search and bank switching. Group edit/Restore and browser neighbors pass. Evidence on C: definition-tree-ui-38i20mhg, definition-groups-ui-j___a6e7 and definition-browser-ui-jjmsrp1o. The first large-list check exposed premature clearing of the scroll request, now fixed. definition_tree is registered. Retail read-only navigation passes with all bank hashes unchanged (retail-definition-tree-read-q6u27wdm). Validated checkpoint: `dist/development/20261009-def-tree/FableForge-0.18.1-rc.1-win64.zip`, SHA256 `6e2389e2bb7300b4cc76ff88e523c5f7f820328d9451a8b39be84198691727e7`. Extracted package-smoke-wf7mwbop passes 109 file identities, 127 links and four selected workflows; 116 not run, zero skipped. Earlier package-smoke-dzlaq6jv passed six checks but its final selection audit failed because text_close was mistyped; it is retained as partial evidence, not a completed gate. Superseded wide snapshot metadata retained on C before removal.
+
+### 2026-10-09 Object definition model link
+
+Clean game-bank OBJECT Graphic fields with the confirmed 17-byte CEngineGraphic layout now open Models by their native bank ID at bytes 4..7. Other fields, banks and unsupported widths remain inspectable. The link shares the existing strict model-ID selector, preserving the current preview on missing/ambiguous IDs, and stays disabled during a definition draft or asset operation. Native binary output 0200af00 and input 0200ae90 confirm the kind/index/float/float/byte sequence; the stream writes four-byte kind and index. Existing uidef and FMP model links use the same slot.
+
+Eight scratch GUI cases at both window sizes pass: actual numeric-name collision, missing/ambiguous targets, truncated graphics, draft protection and bank switching. The four tree neighbors pass. Retail OBJECT_BARREL_UNBREAKABLE opens model 4075 MESH_BARREL_UNBREAKABLE_01; compiled banks, graphics.big and textures.big hashes remain unchanged. C evidence: definition-graphic-native-proof, definition-model-ui-8i5k3my2 and retail-definition-model-read-1cjv2wcs. definition_model is registered. Validated checkpoint: `dist/development/20261009-def-model/FableForge-0.18.1-rc.1-win64.zip`, SHA256 `830cdfa971aff612a6961d6e2cc8f59e49dfeac7a20e54bd51dab7e7f1b9fc77`. Extracted package-smoke-fm_04lu1 passes 109 file identities, 127 links and four selected workflows; 117 not run, zero skipped. Superseded tree checkpoint metadata retained on C before removal.
+
+### 2026-10-09 Wide-string UTF-8 authoring in CLI
+
+CWideString CLI edits now accept valid UTF-8 and encode native NUL-terminated UTF-16LE, including supplementary characters. The strict converter already used by text.big is shared in forge/unicode.hpp; text.big delegates to it. Malformed UTF-8, embedded NULs and malformed original UTF-16 surrogates refuse. Original termination/trailer guards remain. GUI wide drafts retain their bounded printable ASCII contract. Native wide-string layout evidence is unchanged; this extends conversion, not the wire format.
+
+Twenty CLI cases pass, including accents, mixed scripts, supplementary/maximal code points and malformed originals. The new Unicode unit target checks independently specified bytes, invalid/overlong UTF-8, surrogates, boundaries and an overflowing cursor. Four focused CTest targets (Unicode, BIG writer, dialogue text and core) pass; the complete suite was not rerun. All 24 existing wide GUI cases pass. A retail copy TextValue edit preserves all 14,764 identities, every other payload, the table header and exact names; native banks remain unchanged. C evidence: definition-wide-layout-eoebsew2 and retail-definition-wide-unicode-copy-cdfp0teg. Validated checkpoint: `dist/development/20261009-def-unicode/FableForge-0.18.1-rc.1-win64.zip`, SHA256 `5df203ad95f664ed273d712c2c0faede502b989f61d27113b365bc05abfcad1b`. Extracted package-smoke-zann_j8d passes 109 file identities, 127 links and six selected workflows; 115 not run, zero skipped. Superseded model-link checkpoint metadata retained on C before removing its D folder.
+
+### 2026-10-09 Terrain-theme texture links
+
+Clean game-bank ENGINE_THEME records now offer Open texture for the six positive, complete int32 texture fields used by terraintex::ThemeLibrary. Zero/negative IDs, other integers, malformed widths and other banks do not infer links. Navigation resolves the explicit GBANK_MAIN_PC ID and then the unique exact symbol through the existing texture browser. Missing IDs, duplicate IDs and duplicate symbols preserve the current selection. Definition drafts and active asset operations protect navigation.
+
+Sixteen scratch cases at both sizes pass, covering numeric names, missing/ambiguous IDs, duplicate symbols, a different texture bank, truncation, sentinel IDs and draft protection. Eight model-link neighbors pass. Retail GROUND_BLEACHEDLONGGRASS opens independently resolved main-bank ID 4260 UNASSIGNED_SAND_FINE; native definition and texture hashes remain unchanged. C evidence: definition-texture-ui-xw0rw7hg, definition-model-ui-jc41ao7j and retail-definition-texture-read-i3ggftsr. Two initial launches failed (texture automation reported PASS but the process did not return success; model preview failed); exact fixture replays and fresh complete runs passed without source changes. Initial evidence qyz1um1k/bezygjxu remains retained; cause unisolated. Future checks retain process exit codes explicitly. definition_texture is registered. Validated checkpoint: `dist/development/20261009-def-texture/FableForge-0.18.1-rc.1-win64.zip`, SHA256 `7dd5618dd8e6cf7651b0446124eacb8e85acbfe2d23f9372f78efd2c54fb69b1`. Extracted package-smoke-9rgrm4e7 passes 109 identities, 127 links and five selected workflows; 117 not run, zero skipped. The initial failures did not recur in the packaged checks. Superseded Unicode checkpoint metadata retained on C before removing its D folder.
+
+### 2026-10-09 Definition group ordering and identity labels
+
+Definition groups now sort by their names with native index as the tie-breaker; the unconfirmed bucket stays first. Group headings and search rows show the native group index alongside its name, distinguishing numeric, duplicate and unnamed groups. Eight tree cases pass at both sizes, including widget-position ordering for reversed names and duplicate-name ties, native selection, group search, draft protection and virtualized records. Group edit/Restore neighbors pass. C evidence: definition-tree-ui-b0xxw1xt and definition-groups-ui-a7vn4lxb. Validated checkpoint: `dist/development/20261009-def-tree-sort/FableForge-0.18.1-rc.1-win64.zip`, SHA256 `d4155b940c9d155c48246057bd489487ff02e3d1366c7d5e481ef30e417848d0`. Extracted package-smoke-3wfnk8cd passes 109 identities, 127 links and three selected workflows; 119 not run, zero skipped. Superseded texture checkpoint metadata retained on C before removal.
+
+### 2026-10-09 Definition integer bounds
+
+The shared integer writer now checks explicit int32/uint32 bounds after parsing with 64-bit intermediates, and unsigned fields reject a negative sign. CDefString uses signed parsing for negative input while retaining unsigned/hex bit representations; its documentation now identifies a signed names-table offset rather than a definition-entry index. Existing -1 sentinel support was verified before the change; the defect was acceptance of negative unsigned values and out-of-range negative references that wrapped into valid-looking values. The prior extracted tool fails the new regression at uint32 -1, saving 4294967295. Baseline C evidence: definition-integer-before-hxlf81va and definition-integer-bounds-q3o8v0d8.
+
+Twenty-two CLI bounds/compatibility cases, 27 layout cases, core tests and six scalar GUI neighbors pass. Retail input underflow refuses before creating output; valid -1 preserves all 14,764 records, the table and exact names, with native hashes unchanged. C evidence: definition-integer-bounds-ytt1tbne, definition-layout-kb65z92g, definition-edit-ui-2at7c7__ and retail-definition-integer-copy-acm0g8h3. definition_integer_bounds is registered. Validated checkpoint: `dist/development/20261009-def-int-bounds/FableForge-0.18.1-rc.1-win64.zip`, SHA256 `9be7ec0a17da1776d140577b475b4282dde33743170c70d20d63500a1e3f5027`. Extracted package-smoke-edqz1anu passes 109 identities, 127 links and six selected workflows, including all 34 scalar GUI cases; 117 not run, zero skipped. Superseded tree-sort snapshot metadata retained on C before removing its D folder.
+
+### 2026-10-09 Readable wide-string display
+
+The definition formatter now displays complete valid CWideString values as quoted, escaped UTF-8 instead of hex. Strict conversion requires the terminator to end the complete field range; malformed surrogates, missing terminators, odd widths and trailers retain every raw byte in hex. GUI field previews stop at a UTF-8 boundary at the existing 2048-byte cap, while Copy full value retains the whole formatted string. GUI authoring remains bounded printable ASCII; Latin-accent display was visually verified at both sizes. Broader font coverage and Unicode GUI authoring remain pending.
+
+Thirteen formatter fixtures cover known ASCII/BMP/supplementary bytes, control escaping and raw fallback. Three focused CTest targets (definition decode, core and Unicode) pass. Twenty wide CLI cases validate saved bytes, human-readable new values and typed decoding; source pools/payload neighbors remain exact. Twenty-eight wide GUI cases pass, adding both sides of a UTF-8 truncation boundary; cafe screenshots were inspected. The retail Unicode-copy delta again preserves every other record and native hashes. An initial test log used the Windows default encoding and could not write Greek output; it now writes explicit UTF-8. C evidence: definition-wide-ui-3tlqwta2 and retail-definition-wide-unicode-copy-n8i404ad. Validated checkpoint: `dist/development/20261009-def-wide-display/FableForge-0.18.1-rc.1-win64.zip`, SHA256 `927618380cd3df21dc10a18a8cc4e51460b5c6e0837c4638a2ee1176e453c51b`. Extracted package-smoke-s1j4pbky passes 109 identities, 127 links and six selected workflows; 117 not run, zero skipped. Superseded integer checkpoint metadata retained on C before removing its D folder.
+
+
+## Definition name-offset labels, 2026-10-09
+
+CDefString fields now show the name at a confirmed byte offset in the owning bank's loaded names pool. Duplicate and unused pool records retain their native offsets; invalid, interior, sentinel and malformed references keep their raw value. Labels refresh with the bank and remain read-only. Native CDefString GetString uses buffer + offset + 4, rather than a record ordinal. Retail PC_PHOTOJOURNAL_CAPTURE_DESCRIPTION Font offset 224 resolves to ENG_ARIAL_16.
+
+Twenty-eight scratch cases pass across both window sizes, covering duplicate/unused/empty/numeric names, invalid offsets, bank switching and name-pool refresh. Both-size native read checks, browser and text-close neighbors pass; source hashes remain unchanged. Evidence on C: definition-name-reference-native-proof, definition-name-labels-ui-p194dtte and retail-definition-name-label-read-xey72ggf. definition_name_labels is registered. Validated checkpoint: dist/development/20261009-def-name-labels/FableForge-0.18.1-rc.1-win64.zip, SHA256 bf5e9aa22fe5ed165ca5a072ac02dddf232a7a8e7216c73cffc0b2a233a76081. Extracted package-smoke-vlhl0cvj passes 109 identities, 127 links and five selected workflows; 119 not run, zero skipped. Initial selection used nonexistent text_close; corrected text_close_prompt completes the gate. Superseded wide-display checkpoint metadata retained on C before removing its D folder.
+
+
+## Existing-name reference drafts, 2026-10-09
+
+Four-byte CDefString fields now have an existing-name chooser with explicit byte offsets, duplicate-name choices and No name (-1). Search filters names or offsets and the choice list is virtualized. Saving a changed reference checks the encoded four bytes against exact starts in the captured owning pool; invalid/interior/negative references refuse. An unchanged legacy reference preserves its original bytes. Existing namespace, record, destination, running-game and recovery guards remain in use. No names are appended.
+
+Twenty-six scratch GUI cases pass at both sizes, including real selections, duplicate names, search in a 500-plus-name pool, sentinel and invalid references, unchanged legacy offsets, changed destination/name pool and Restore. Twenty-eight label neighbors passed before adding search. The search popup was visually inspected at 800x600. Both-size retail-copy Font edits preserve all 14,764 record identities, every unrelated payload, bank identity tables, name-pool bytes and native hashes; Restore returns the exact original bank. C evidence: definition-name-picker-ui-jnj2prmr and retail-definition-name-picker-copy-ttovgl3s. Twelve scalar neighbors pass (Save/Restore, destination, stale record, bool, float and uint at both sizes). Validated checkpoint: dist/development/20261009-def-name-picker/FableForge-0.18.1-rc.1-win64.zip, SHA256 ed36368ec189b45b43150cdec2a8b59a424b9ce0b5d8b850cf64bf95870035e9. Extracted package-smoke-9uvd04as passes 109 identities, 127 links and seven selected workflows; 118 not run, zero skipped. Superseded name-label checkpoint metadata retained on C before removing its D folder.
+
+
+## Generic donor-clone foundation, 2026-10-09 (in progress)
+
+forgecore now exposes defedit::cloneEntry by exact unique donor name or native index. It appends an exact payload with a canonical per-type ordinal, leaving previous slots, payloads and loaded name-pool records intact. New names must be nonempty printable ASCII up to 127 bytes and unique among bank records. Ambiguous/missing donors, invalid names, oversized payloads and noncanonical existing ordinals refuse before mutation. Unnamed donors use an index; numeric donor names stay exact names.
+
+The new clone CTest and existing BIN writer target pass. Clone checks include opaque bytes, numeric/unnamed donors, duplicate unused pool strings, rejected names/donors, independent save/reopen record equality and an unchanged name-pool body prefix. CTest inventory is now 54 targets; no full suite run. This is an in-memory API only. Paired publication and user-facing clone controls remain pending. Current validated checkpoint remains def-name-picker.
+
+
+## Paired definition clone CLI, 2026-10-09
+
+forge-tools defs clone <bin> <donor-name-or-index> <new-name> --out <bin> [--names <names.bin>] [--json] publishes one exact donor clone with its appended name pool. Explicit output is required. Existing destination records and raw name pool must match the loaded source; stale or incompatible destinations refuse. The pair uses the existing rollback-capable staging/recovery mechanism, with original backups or creation markers for both files. Clone publication is separate from unchanged-pool field saves.
+
+Thirty-five CLI cases pass: exact/numeric/unnamed/duplicate-index donors, invalid selectors/names, fresh and in-place publication, existing outputs, incompatible/missing pools, orphan recovery, physical aliases, rollback after a locked name-file rename, Restore and running-owner/junction refusal using an owned dummy helper. Original source files remain exact. Both clone/BIN-writer CTest targets pass. A full retail-bank export preserves all 14,764 prior records and identity-table rows, appends the exact donor and one correctly keyed name, and restores creation outputs without changing native hashes. Nineteen field-publication and fourteen selector neighbors pass. C evidence: definition-clone-038ldrlw, retail-definition-clone-export-rdt8kq3r, definition-publication-lz8k6ia0 and definition-selector-a95ictqb. GUI cloning remains pending.
+
+The user explicitly requested GitHub milestone releases/updates on 2026-10-09. Prepare 0.18.1-rc.2 as a prerelease in the isolated C release checkout, preserving the working lane and excluding the separately owned test_dialogueaudio.cpp edits. Existing GitHub rc.1 is retained; do not overwrite it. Source publication, CI and exact RC2 package validation are in progress.

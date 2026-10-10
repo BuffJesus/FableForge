@@ -48,11 +48,39 @@ void roundTrip(const std::vector<uint8_t>& data, const char* what) {
     ++g_roundtrips; g_rtIn += data.size(); g_rtOut += enc.size();
 }
 
+void checkExactRange() {
+    using namespace forge::rangecodec;
+    auto require=[](bool ok,const char* why) {
+        if(!ok) {std::fprintf(stderr,"RANGE FAIL %s\n",why);++g_fail;}
+    };
+    auto refuses=[&](const std::vector<uint8_t>& b,size_t count,size_t stride) {
+        try {decodeExact(b.data(),b.size(),count,stride);return false;}
+        catch(const std::runtime_error&) {return true;}
+    };
+    std::vector<uint8_t> values(7*16);
+    for(size_t i=0;i<values.size();++i)values[i]=uint8_t(i*13);
+    for(auto block:{encodeRaw(values),encodeByteColumns(values.data(),7,16),
+                   encodeFieldColumns(values.data(),7,16,{4,4,2,2,4}),encodeNative(values.data(),7,16)}) {
+        require(decodeExact(block.data(),block.size(),7,16)==values,"exact decode changed bytes");
+        for(size_t n=0;n<block.size();++n)
+            require(refuses({block.begin(),block.begin()+n},7,16),"truncated range block accepted");
+        block.push_back(0);
+        require(refuses(block,7,16),"range suffix accepted");
+        require(decode(block.data(),block.size(),7,16)==values,"ordinary reader lost suffix tolerance");
+    }
+    require(refuses({1},1,1),"missing first descriptor accepted");
+    require(refuses({1,0,33,0x80},1,1),"oversized bit width accepted");
+    require(refuses({0},size_t(-1),2),"output size overflow accepted");
+    require(refuses({1,0x80},1,1),"unwritten output column accepted");
+    require(decodeExact(reinterpret_cast<const uint8_t*>(""),1,0,1).empty(),"empty raw array refused");
+}
+
 void checkEncoderSynthetic() {
     std::vector<uint8_t> v;
     for (size_t n = 0; n <= 40; ++n) { v.assign(n, 'a'); roundTrip(v, "run-of-a"); }
     for (size_t n = 0; n <= 40; ++n) { v.resize(n); for (size_t i = 0; i < n; ++i) v[i] = uint8_t(i * 7 + 3); roundTrip(v, "short-ramp"); }
     v.assign(100000, 0); roundTrip(v, "zeros-100k");
+    v.assign(1024*1024, 0); roundTrip(v, "zeros-1MiB");
     // pseudo-random: incompressible, exercises long literal runs
     uint32_t s = 12345; v.resize(70000); for (auto& b : v) { s = s * 1664525u + 1013904223u; b = uint8_t(s >> 24); } roundTrip(v, "random-70k");
     // periodic with distances that hit each match class and the extended-length paths
@@ -223,16 +251,19 @@ void checkCorrupt() {
 
 } // namespace
 
-int main() {
+int main(int argc,char** argv) {
+    if(argc>2) {std::fprintf(stderr,"usage: fableforge_lzo_tests [read-only install root]\n");return 1;}
     if (lzo_init() != LZO_E_OK) { std::fprintf(stderr, "minilzo init failed\n"); return 1; }
+    checkExactRange();
     checkCorrupt();
     checkEncoderSynthetic();
     fs::path root;
-    try {
+    if(argc==2) root=fs::u8path(argv[1]);
+    else try {
         const auto env = forge::env::Environment::detect();
         if (env.installValid) root = env.installDir;
     } catch (...) {}
-    if (root.empty()) { std::printf("fableforge_lzo_tests: no Fable install, corrupt-input checks only (%d failures)\n", g_fail); return g_fail ? 1 : 0; }
+    if (root.empty()) { std::printf("fableforge_lzo_tests: no Fable install; synthetic/corrupt checks ran, retail corpus skipped (%d failures)\n", g_fail); return g_fail ? 1 : 0; }
 
     const fs::path stbPath = root / "data" / "Levels" / "FinalAlbion_RT.stb";
     const auto archive = forge::stb::Archive::open(stbPath);

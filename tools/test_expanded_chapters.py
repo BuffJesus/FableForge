@@ -1,11 +1,14 @@
 #!/usr/bin/env python3
-"""Build Expanded Chapters plus its separate graphics archive over scratch retail."""
+"""Audit original Expanded Chapters bank identities, text and level/asset composition."""
+import argparse
 import json
 from pathlib import Path
 import re
 import shutil
 import subprocess
 import tempfile
+from mod_content_fixture import accept_stable_overhaul
+from test_gbpack import pristine
 
 
 REPO = Path(__file__).resolve().parent.parent
@@ -14,7 +17,52 @@ RETAIL = Path(r"C:\Programs\Steam\steamapps\common\Fable The Lost Chapters")
 TOOL = REPO / "build/forge-tools.exe"
 
 
+def verify_levels(source, out, work, run, result):
+    wad = out / "data/Levels/FinalAlbion.wad"
+    assert wad.is_file() and not (out / "userst.ini").exists()
+    assert (out / "data/graphics/graphics.big").is_file()
+    assert (out / "data/graphics/pc/textures.big").is_file()
+    assert (out / "data/Levels/FinalAlbion.wld").is_file()
+    assert (out / "data/Levels/FinalAlbion_RT.stb").is_file()
+    extracted = work / "extracted"
+    run("wad", "extract", wad, extracted)
+    source_levels = [path for path in (source / "data/Levels").rglob("*")
+                     if path.is_file() and path.suffix.lower() in (".lev", ".tng")]
+    assert len(source_levels) == 798, len(source_levels)
+    for src in source_levels:
+        rel = src.relative_to(source / "data/Levels")
+        loose = out / "data/Levels" / rel
+        packed = extracted / "Data/Levels" / rel
+        assert packed.is_file(), str(rel)
+        expected = loose.read_bytes() if loose.is_file() else src.read_bytes()
+        assert packed.read_bytes() == expected, f"WAD payload differs: {rel}"
+    built_levels = [path for path in (out / "data/Levels").rglob("*")
+                    if path.is_file() and path.suffix.lower() in (".lev", ".tng")]
+    for loose in built_levels:
+        rel = loose.relative_to(out / "data/Levels")
+        packed = extracted / "Data/Levels" / rel
+        assert packed.is_file() and packed.read_bytes() == loose.read_bytes(), str(rel)
+    summary = re.search(r"FinalAlbion\.wad rebuilt: (\d+) level file\(s\) repacked, (\d+) new level file\(s\) appended", result)
+    assert summary and int(summary.group(1)) + int(summary.group(2)) == len(built_levels), result[-1500:]
+    audit = json.loads(run("assets", "missing-mesh", out,
+                           "docs/re_reference/def_schema.json", "--json"))
+    print("Expanded Chapters original bank/text and level/WAD checks: PASS")
+    print(f"  source WAD payloads checked: {len(source_levels)}")
+    print(f"  all built loose payloads checked: {len(built_levels)}")
+    print(f"  WAD: {summary.group(1)} replaced, {summary.group(2)} appended")
+    print(f"  direct missing mesh references: {len(audit['missing'])}")
+    for line in result.splitlines():
+        if "changes applied" in line or "level TNG merge:" in line:
+            print(" ", line)
+
+
 def main() -> int:
+    global SOURCE
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--corpus', type=Path, default=REPO/'work/nexus_mods/_peek')
+    parser.add_argument('--keep', action='store_true')
+    args = parser.parse_args()
+    SOURCE = args.corpus.resolve()/'ExpandedChapters/FTECv1/Fable The Lost Chapters'
     required = [TOOL, SOURCE / "data/CompiledDefs/game.bin",
                 SOURCE / "data/Levels/FinalAlbion",
                 SOURCE / "data/Levels/FinalAlbion_RT.stb",
@@ -30,13 +78,15 @@ def main() -> int:
 
     work = Path(tempfile.mkdtemp(prefix="expanded_chapters_", dir=REPO / "build"))
     root, out = work / "retail", work / "merged"
+    print('Evidence retained at', work, flush=True)
     try:
         for relative in ("data/CompiledDefs/game.bin", "data/CompiledDefs/names.bin",
                          "data/CompiledDefs/script.bin", "data/CompiledDefs/frontend.bin",
                          "data/Levels/FinalAlbion.wad", "data/Levels/FinalAlbion.wld",
                          "data/Levels/FinalAlbion.bwd", "data/Levels/FinalAlbion.gtg",
+                         "data/lang/English/text.big",
                          "data/graphics/graphics.big"):
-            src = RETAIL / relative
+            src = Path(pristine(str(RETAIL), relative))
             if src.is_file():
                 dest = root / relative
                 dest.parent.mkdir(parents=True, exist_ok=True)
@@ -49,49 +99,12 @@ def main() -> int:
                 raise AssertionError(f"{' '.join(map(str, argv))}\n{proc.stdout[-1500:]}\n{proc.stderr[-1500:]}")
             return proc.stdout
 
-        run("mods", "add", root, SOURCE, "--name", "Expanded Chapters")
-        result = run("mods", "build", root, out)
-        wad = out / "data/Levels/FinalAlbion.wad"
-        assert wad.is_file() and not (out / "userst.ini").exists()
-        assert (out / "data/graphics/graphics.big").is_file()
-        assert (out / "data/graphics/pc/textures.big").is_file()
-        assert (out / "data/Levels/FinalAlbion.wld").is_file()
-        assert (out / "data/Levels/FinalAlbion_RT.stb").is_file()
-        extracted = work / "extracted"
-        run("wad", "extract", wad, extracted)
-        source_levels = [path for path in (SOURCE / "data/Levels").rglob("*")
-                         if path.is_file() and path.suffix.lower() in (".lev", ".tng")]
-        assert len(source_levels) == 798, len(source_levels)
-        for src in source_levels:
-            rel = src.relative_to(SOURCE / "data/Levels")
-            loose = out / "data/Levels" / rel
-            packed = extracted / "Data/Levels" / rel
-            assert packed.is_file(), str(rel)
-            expected = loose.read_bytes() if loose.is_file() else src.read_bytes()
-            assert packed.read_bytes() == expected, f"WAD payload differs: {rel}"
-        built_levels = [path for path in (out / "data/Levels").rglob("*")
-                        if path.is_file() and path.suffix.lower() in (".lev", ".tng")]
-        for loose in built_levels:
-            rel = loose.relative_to(out / "data/Levels")
-            packed = extracted / "Data/Levels" / rel
-            assert packed.is_file() and packed.read_bytes() == loose.read_bytes(), str(rel)
-        summary = re.search(r"FinalAlbion\.wad rebuilt: (\d+) level file\(s\) repacked, (\d+) new level file\(s\) appended", result)
-        assert summary and int(summary.group(1)) + int(summary.group(2)) == len(built_levels), result[-1500:]
-        audit = json.loads(run("assets", "missing-mesh", out,
-                               "docs/re_reference/def_schema.json", "--json"))
-        assert not audit["missing"], audit["missing"][:12]
-        print("Expanded Chapters: PASS")
-        print(f"  source WAD payloads checked: {len(source_levels)}")
-        print(f"  all built loose payloads checked: {len(built_levels)}")
-        print(f"  WAD: {summary.group(1)} replaced, {summary.group(2)} appended")
-        print(f"  direct missing mesh references: {len(audit['missing'])}")
-        for line in result.splitlines():
-            if "changes applied" in line or "level TNG merge:" in line:
-                print(" ", line)
+        result = accept_stable_overhaul(TOOL, root, SOURCE, out, REPO, work/'acceptance')
+        verify_levels(SOURCE, out, work, run, result)
         return 0
     finally:
         assert work.resolve().is_relative_to((REPO / "build").resolve())
-        shutil.rmtree(work)
+        if not args.keep: shutil.rmtree(work)
 
 
 if __name__ == "__main__":

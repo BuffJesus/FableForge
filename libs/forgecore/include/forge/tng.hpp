@@ -23,6 +23,22 @@
 
 namespace forge::tng {
 
+// Native ScriptName values are unquoted ASCII identifiers. NULL is valid;
+// optional placement APIs normalize an empty name to NULL before writing.
+bool isScriptName(std::string_view name);
+// Lexical contract shared by fields consumed through native ReadAsString.
+bool isUnquotedIdentifier(std::string_view name);
+// Top-level ScriptName on all types, creature OverridingBrainName, and Switch
+// TriggeredByThing/EnvironmentDef. Other fields retain their raw storage rules.
+bool isIdentifierProperty(std::string_view thingType, std::string_view key);
+
+
+// Section names are read as text up to ';', not as identifier tokens. New
+// headers require a nonempty name without leading/trailing whitespace or ';',
+// CR, LF or NUL. Numeric names, internal spaces and day/night suffixes remain
+// unchanged; surrounding whitespace would be trimmed when reindexing the file.
+bool isSafeSectionName(std::string_view name);
+
 inline constexpr size_t kNoLine = std::numeric_limits<size_t>::max();
 
 struct Property {

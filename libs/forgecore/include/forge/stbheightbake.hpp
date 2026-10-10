@@ -49,6 +49,9 @@ struct HeightfieldBakeOptions {
     // positions (0 off across GuildExterior's 448), so re-sample each vertex in
     // place; they are handed back in `deferred` (needs deferOversizedPatches).
     bool rebakeLodPatches = false;
+    // Physical foreground directory offset from the owning landscape descriptor.
+    // Existing retail/authored layouts use 0x800; its count comes from the LEV.
+    size_t foregroundDirectoryOffset = 0x800;
 };
 
 // A patch the bake could not write in place: its frame's start offset in the

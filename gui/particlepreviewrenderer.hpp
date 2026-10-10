@@ -38,7 +38,7 @@ public:
     bool meshFrameBounds(const particlepreview::DrawMesh&, float lo[3], float hi[3]) const;
     // frameCount is the number of equal-height frames stacked vertically.
     // Nominal sprite size is its width; frame aspect scales its height once.
-    bool setTexture(int32_t id, const terrainexport::Image&, uint32_t frameCount = 1);
+    bool setTexture(uint32_t id, const terrainexport::Image&, uint32_t frameCount = 1);
     ID3D11ShaderResourceView* render(int width, int height, const Camera&,
                                    const std::vector<particlepreview::DrawSprite>&,
                                    const float background[3],bool grid=false);
