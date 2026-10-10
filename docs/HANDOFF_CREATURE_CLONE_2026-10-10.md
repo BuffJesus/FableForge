@@ -579,3 +579,25 @@ widget registry retains prior frames, not because invalid links were rendered.
 Added explicit clear_widget_registry and assert_widget_absent commands and
 corrected AUTOMATION.md's prior inaccurate this-frame assertion description.
 Registered the synthetic gate; no broad-suite or packaged-navigation claim.
+
+## Body mesh binding preparation
+
+Starting from pushed navigation checkpoint 21315c4. The active schema exposes
+CCreatureDef fields only after its composite prefix: there is no ordinary
+Graphic field to patch. Existing counted RandomAppearanceMorph parsing in
+forgecore/fmplinks already validates body-part/alternative model words, texture
+pairs and skeletal name offsets; expression meshes share the MeshEntry domain
+but are not body meshes. Prior original nonempty-array evidence is recorded in
+HANDOFF_NAV's 2026-10-05 recovery (9,935 audited words across 186 records), not
+new gameplay or native-disassembly proof in this turn.
+
+CreaturePrefixLayout now exposes bodyModels {bodyPart, alternative, offset}
+alongside its unchanged reference enumeration. It reuses the complete bounded
+prefix parser, preserves native indices including empty body parts, and excludes
+facial-expression meshes. No writer or asset mutation added. Targeted fmplinks
+and defrelocate CTests pass; the mixed-domain fixture tests body-only membership
+and an empty leading body part without renumbering. No broad-suite claim.
+Next: independently audit these typed slots on retail components, then expose
+body model selection/binding with exact four-byte deltas, mesh identity/type
+validation, stale-source/destination protection and paired recovery. Skinned
+custom import and runtime skeleton compatibility remain outstanding scope.

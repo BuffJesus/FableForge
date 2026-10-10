@@ -295,7 +295,10 @@ CreaturePrefixLayout creaturePrefixLayout(std::span<const uint8_t> bytes) {
     for (size_t row = 0; row < prefix.wounds; ++row)
         for (size_t slot = 0; slot < 6; ++slot)
             result.references.push_back({prefix.woundRows + row * 44 + 8 + slot * 4, 0, Destination::TextureEntry});
-    for (const auto& body : prefix.bodies) for (const auto& model : body) {
+    for (size_t bodyPart=0;bodyPart<prefix.bodies.size();++bodyPart)
+    for (size_t alternative=0;alternative<prefix.bodies[bodyPart].size();++alternative) {
+        const auto& model=prefix.bodies[bodyPart][alternative];
+        result.bodyModels.push_back({bodyPart,alternative,model.mesh});
         result.references.push_back({model.mesh, 0, Destination::MeshEntry});
         for (const auto texture : model.textures) {
             result.references.push_back({texture, 0, Destination::TextureEntry});

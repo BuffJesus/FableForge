@@ -241,6 +241,18 @@ int main() {
             forge::defdecode::decode(prefixRecord, prefixSchema).prefix);
         check(enumerated.references.size() == 14 && !enumerated.structuralWords.empty(),
               "creature prefix enumerates verified reference domains and structural words");
+        check(enumerated.bodyModels.size()==1 && enumerated.bodyModels[0].bodyPart==0 &&
+              enumerated.bodyModels[0].alternative==0 && enumerated.bodyModels[0].offset==meshAt,
+              "body model slots exclude facial-expression meshes and preserve native indices");
+        auto shiftedBody=prefix;
+        const size_t bodyCountAt=meshAt-4;
+        shiftedBody.insert(shiftedBody.begin()+bodyCountAt,4,0);
+        shiftedBody[bodyCountAt-4]=3;
+        const auto shiftedLayout=forge::fmplinks::creaturePrefixLayout(
+            forge::defdecode::decode({"CCreatureDef","SHIFTED_BODY",0,shiftedBody},prefixSchema).prefix);
+        check(shiftedLayout.bodyModels.size()==1 && shiftedLayout.bodyModels[0].bodyPart==1 &&
+              shiftedLayout.bodyModels[0].offset==meshAt+4,
+              "empty leading body part is not renumbered in body model slots");
         auto relocatable = prefixRecord;
         for (size_t n = 0; n < 4; ++n) relocatable.data[skeletonAt+n] = uint8_t(500000u >> (8*n));
         auto relocatedExpected = relocatable.data;
