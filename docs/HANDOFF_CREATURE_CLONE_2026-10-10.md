@@ -731,3 +731,25 @@ in EDITOR.md/tool help (generated CLI.md describes forge.exe, not forge-tools).
 Neighboring private-clone CLI regression passes all 28 cases in packet
 `creature-private-cli-56lfcfgv` using the same rebuilt executable. No broad-suite
 claim; next is GUI body-binding drafts and save/cancel/stale-source coverage.
+
+Body-binding GUI draft integration implemented. Verified CCreatureDef body slots
+offer Bind body/alternative actions; a draft captures source bytes, definition
+bank, graphics directory/path, slot and destination. Existing save/cancel/close
+protection applies. Save requires a complete uint32 model ID, unchanged sources/
+graphics, canonical type-5 edit and typed publication. Valid no-op saves write
+nothing. Confirmation warns about shared users and unverified compatibility.
+The initial UI uses an explicit model-ID field; a named model chooser remains
+useful follow-up, alongside the larger custom skinned-import scope.
+
+GUI build and twelve both-size cases pass in `creature-body-binding-ui-jizkwumk`:
+save with independent exact intended record delta and Restore, cancel, invalid ID,
+no-op, destination change and close review. All native compiled/graphics hashes
+remain unchanged; no asset copies. First packet 8oxqjg_n failed because harness
+input appended to the initial ID; screenshot confirmed the combined number was
+refused. Corrected Ctrl+A typing, without weakening production validation.
+Compact confirmation inspected: shared-user/compatibility warning and Save/Cancel
+fit inside the scrolling card. Preview regressions pass in snyq9g6h and three
+focused CTests pass. Registered source gate; no broad-suite/package claim.
+Next: isolated stale bank/name/graphics UI checks, pack destination coverage and
+named mesh choice before the next extracted package. Existing archives/RC2 stay
+unchanged. No assembled-creature/animation/runtime compatibility claim.

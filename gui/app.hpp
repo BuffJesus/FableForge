@@ -590,6 +590,7 @@ public:
     void browseDefinition(const std::string& name);
     bool beginDefinitionEdit(size_t field);
     bool beginDefinitionClone(bool creature=false,bool privateVisual=false);
+    bool beginDefinitionBodyModel(size_t bodyPart,size_t alternative);
     bool saveDefinitionClone();
     bool setDefinitionEditValue(const std::string& value);
     bool saveDefinitionEdit();
@@ -623,6 +624,9 @@ private:
     bool definitionEditing_=false,definitionEditConfirm_=false;
     bool definitionCloning_=false;
     forge::bin::File definitionCloneFile_;
+    forge::big::File definitionBodyGraphics_;
+    std::filesystem::path definitionBodyGraphicsPath_;
+    size_t definitionBodyPart_=0,definitionBodyAlternative_=0;
     std::vector<uint8_t> definitionCloneNamesBytes_,definitionCloneBankBytes_;
     size_t definitionEditIndex_=0;
     forge::bin::Entry definitionEditExpected_;

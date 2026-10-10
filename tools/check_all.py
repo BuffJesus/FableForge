@@ -135,6 +135,8 @@ def main():
         ok &= run("Body-binding CLI retail publication, Restore and argument refusals",
                   [sys.executable, "tools/test_creature_body_publication.py", "--install", install_root,
                    "--tools", "build/forge-tools.exe"], capture_output=True)
+        ok &= run("Body-binding GUI drafts, exact native deltas, guards and Restore at both sizes",
+                  [sys.executable, "tools/test_creature_body_binding_ui.py", "--install", install_root], capture_output=True)
         ok &= run("Read-only Creature animation boundaries and numeric candidate observations",
                   [sys.executable, "tools/audit_creature_animation.py", "--install", install_root,
                    "--payload-exe", "build/fableforge_defrelocate_tests.exe"], capture_output=True)

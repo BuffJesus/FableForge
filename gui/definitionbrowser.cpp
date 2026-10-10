@@ -3,6 +3,7 @@
 #include "windowsprocess.hpp"
 #include "definitionfield.hpp"
 #include "definitionclone.hpp"
+#include "definitionbody.hpp"
 #include "definitionread.hpp"
 #include "forge/fmplinks.hpp"
 #include "texturebrowse.hpp"
@@ -158,6 +159,34 @@ bool App::beginDefinitionEdit(size_t field) {
         return true;
     } catch(const std::exception& error) {definitionEditError_=error.what();return false;}
 }
+bool App::beginDefinitionBodyModel(size_t bodyPart,size_t alternative) {
+    definitionEditError_.clear();definitionEditSuccess_.clear();
+    try {
+        if(definitionEditing_)throw std::runtime_error("Save or cancel the current definition draft first.");
+        if(definitionsBusy() || modFilesBusy() || !definitionSelected_ || definitionBank_!="game.bin" ||
+           definitionPaths()!=std::pair{definitionLoadedNames_,definitionLoadedBank_})
+            throw std::runtime_error("Choose a body component in the current game bank.");
+        if(!packDest_.empty()) {if(!modpack::isPack(fs::u8path(packDest_)))throw std::runtime_error("Choose a valid FableForge pack.");(void)modpack::load(fs::u8path(packDest_));}
+        auto current=forge::bin::File::open(definitionLoadedNames_,definitionLoadedBank_);
+        definitionwrite::verifyEntries(definitionFile_,current);
+        const auto decoded=forge::defdecode::decode(current.entries()[*definitionSelected_],definitionSchema_);
+        const auto layout=forge::fmplinks::creaturePrefixLayout(decoded.prefix);
+        const auto slot=std::find_if(layout.bodyModels.begin(),layout.bodyModels.end(),[&](const auto& value){return value.bodyPart==bodyPart && value.alternative==alternative;});
+        if(slot==layout.bodyModels.end())throw std::runtime_error("This body model alternative is absent.");
+        uint32_t id=0;for(size_t n=0;n<4;++n)id|=uint32_t(current.entries()[*definitionSelected_].data.at(slot->offset+n))<<(8*n);
+        const auto graphicsPath=graphicsBigPath();auto graphics=forge::big::File::open(graphicsPath);
+        (void)forge::defedit::setCreatureBodyModel(current,definitionSchema_,*definitionSelected_,bodyPart,alternative,id,graphics);
+        definitionCloneNamesBytes_=definitionwrite::cloneBytes(definitionLoadedNames_);
+        definitionCloneBankBytes_=definitionwrite::cloneBytes(definitionLoadedBank_);
+        definitionCloneFile_=std::move(current);definitionBodyGraphics_=std::move(graphics);definitionBodyGraphicsPath_=graphicsPath;
+        definitionBodyPart_=bodyPart;definitionBodyAlternative_=alternative;definitionEditIndex_=*definitionSelected_;
+        definitionEditNames_=definitionLoadedNames_;definitionEditBank_=definitionLoadedBank_;
+        definitionEditDestination_=fs::u8path(packDest_.empty()?saveRoot():packDest_)/"data"/"CompiledDefs"/definitionBank_;
+        definitionEditField_="Body "+std::to_string(bodyPart)+" / alternative "+std::to_string(alternative);
+        definitionEditType_="body-model";definitionEditing_=true;definitionCloning_=false;definitionEditConfirm_=false;
+        std::snprintf(definitionEditValue_,sizeof definitionEditValue_,"%u",id);return true;
+    }catch(const std::exception& error){definitionEditError_=error.what();return false;}
+}
 bool App::beginDefinitionClone(bool creature,bool privateVisual) {
     definitionEditError_.clear();definitionEditSuccess_.clear();
     try {
@@ -258,7 +287,26 @@ bool App::saveDefinitionEdit() {
             throw std::runtime_error("Definition source or destination changed; start the edit again.");
         if(definitionEditBank_!=destination && fs::exists(destination)) throw std::runtime_error("The destination bank appeared; refresh before editing.");
         if(!packDest_.empty()) {if(!modpack::isPack(fs::u8path(packDest_))) throw std::runtime_error("Choose a valid FableForge pack.");(void)modpack::load(fs::u8path(packDest_));}
-        const bool changed=definitionwrite::replaceField(definitionEditNames_,definitionEditBank_,destination,definitionEditIndex_,
+        bool changed;
+        if(definitionEditType_=="body-model") {
+            if(graphicsBigPath()!=definitionBodyGraphicsPath_ ||
+               !definitionwrite::sameBodyGraphics(definitionBodyGraphics_,forge::big::File::open(definitionBodyGraphicsPath_)))
+                throw std::runtime_error("The graphics source changed; start the body edit again.");
+            if(definitionwrite::cloneBytes(definitionEditBank_)!=definitionCloneBankBytes_ ||
+               definitionwrite::cloneBytes(definitionEditNames_)!=definitionCloneNamesBytes_)
+                throw std::runtime_error("The source bank or name pool changed; start the body edit again.");
+            uint32_t id=0;const std::string_view value=definitionEditValue_;
+            const auto parsed=std::from_chars(value.data(),value.data()+value.size(),id);
+            if(parsed.ec!=std::errc{} || parsed.ptr!=value.data()+value.size())throw std::runtime_error("Choose a complete unsigned decimal model ID.");
+            auto plan=definitionCloneFile_;
+            const auto result=forge::defedit::setCreatureBodyModel(plan,definitionSchema_,definitionEditIndex_,definitionBodyPart_,definitionBodyAlternative_,id,definitionBodyGraphics_);
+            changed=result.oldModelId!=result.newModelId;
+            if(changed) {
+                const definitionwrite::CreatureBodyContract contract{definitionSchema_,definitionBodyGraphics_,definitionCloneBankBytes_,definitionCloneNamesBytes_,
+                    definitionEditIndex_,definitionBodyPart_,definitionBodyAlternative_,id};
+                definitionwrite::publishCreatureBody(plan,definitionEditNames_,definitionEditBank_,definitionBodyGraphicsPath_,destination,contract);
+            }
+        }else changed=definitionwrite::replaceField(definitionEditNames_,definitionEditBank_,destination,definitionEditIndex_,
             definitionEditExpected_,definitionEditExpectedNames_,definitionSchema_,definitionEditField_,definitionEditValue_,&definitionEditExpectedGroups_);
         definitionEditSuccess_=changed?"Saved "+definitionEditField_+".":"The field is unchanged.";
         definitionEditing_=false;definitionEditConfirm_=false;definitionLoaded_=false;definitionBrowseRequest_.reset();definitionBrowseIndex_=definitionEditIndex_;
@@ -308,6 +356,7 @@ void App::drawDefinitionBrowser(float pad,float inner,float cardInner) {
                 "Retargets verified self references. Components, appearance and body stay shared.":
                 "Copies this record unchanged. References keep their existing targets.");
         } else ImGui::TextWrapped("Edit %s (%s)",definitionEditField_.c_str(),definitionEditType_.c_str());
+        if(definitionEditType_=="body-model")theme::hint("Model ID: unique skinned type-5 mesh. All users of this component change; assets stay shared. Skeleton/runtime compatibility is not verified.");
         ImGui::TextWrapped("Destination: %s",definitionEditDestination_.string().c_str());
         if(definitionEditType_=="CDefString") {
             std::string preview=definitionEditValue_;
@@ -444,7 +493,7 @@ void App::drawDefinitionBrowser(float pad,float inner,float cardInner) {
             const char* question=definitionCloning_?(definitionEditType_=="clone-creature-private"?
                 "Create three private definitions (assets shared)?":definitionEditType_=="clone-creature"?
                 "Create creature with shared components?":"Create this definition in the destination bank?"):
-                "Write this field to the destination bank?";
+                definitionEditType_=="body-model"?"Rebind this body model (shared users; compatibility unverified)?":"Write this field to the destination bank?";
             const int answer=confirmRow(question,definitionCloning_?"Create":"Save",cardInner,S(28),"btn_definition_save_confirm");
             if(answer>0) saveDefinitionEdit();if(answer) definitionEditConfirm_=false;
         }
@@ -588,7 +637,7 @@ void App::drawDefinitionViewport(const ImVec2&,const ImVec2&) {
         try {
             const auto layout=forge::fmplinks::creaturePrefixLayout(definitionDecoded_->prefix);
             if(!layout.bodyModels.empty()) {
-                theme::hint("Body-part model alternatives (preview only; assets remain shared).");
+                theme::hint("Body-part model alternatives. Binding changes shared component users; assets remain shared.");
                 for(const auto& slot:layout.bodyModels) {
                     uint32_t id=0;
                     for(size_t n=0;n<4;++n)id|=uint32_t(entry.data.at(slot.offset+n))<<(8*n);
@@ -598,6 +647,10 @@ void App::drawDefinitionViewport(const ImVec2&,const ImVec2&) {
                     ImGui::BeginDisabled(definitionEditing_ || modFilesBusy() || meshReplaceFuture_.valid());
                     if(ImGui::SmallButton(label.c_str()) && selectModelById(id)) assetsTab_=1;
                     auto_.registerWidget(("definition_body_model_"+key).c_str());ImGui::EndDisabled();
+                    ImGui::BeginDisabled(definitionEditing_ || definitionsBusy() || modFilesBusy());
+                    if(ImGui::SmallButton(("Bind body "+std::to_string(slot.bodyPart)+" / alternative "+std::to_string(slot.alternative)).c_str()))
+                        beginDefinitionBodyModel(slot.bodyPart,slot.alternative);
+                    auto_.registerWidget(("definition_bind_body_"+key).c_str());ImGui::EndDisabled();
                 }
             }
         } catch(const std::exception&) {
