@@ -379,6 +379,8 @@ def main():
               [sys.executable, "tools/test_creature_body_stale_ui.py"], capture_output=True)
     ok &= run("Creature body GUI pack source preference, destination guards and Restore",
               [sys.executable, "tools/test_creature_body_pack_ui.py"], capture_output=True)
+    ok &= run("Creature body named model chooser, ID ambiguity exclusion and Restore",
+              [sys.executable, "tools/test_creature_body_model_picker_ui.py"], capture_output=True)
     ok &= run("Creature animation synthetic boundaries and malformed component refusal",
               [sys.executable, "tools/audit_creature_animation.py"], capture_output=True)
     ok &= run("Definition clone controls, exact donors, stale drafts and paired Restore",

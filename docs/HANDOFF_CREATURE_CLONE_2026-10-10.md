@@ -786,3 +786,26 @@ helper accepts an initial model ID; default stale-source fixtures unchanged.
 Registered unconditional gate. No production changes, rebuild, broad-suite or
 package claim. Next: named model chooser and new extracted-package acceptance;
 custom skinned import and skeleton/runtime compatibility remain outstanding.
+
+Named body-model chooser implemented alongside the explicit numeric ID field.
+It uses only the draft's captured MBANK_ALLMESHES directory, counts all entries
+by ID (including other types), and lists unique type-5 IDs. Labels show ID plus
+name or an unnamed placeholder; duplicate names remain distinct. Case-insensitive
+name/decimal-ID search and a clipped list follow existing definition choosers.
+Search resets on beginning a body draft. Selection sets only the existing draft
+value; no new write path or relaxed publication/stale-source guard.
+
+GUI builds; twelve both-size cases pass in
+`creature-body-model-picker-ui-txdybjn1`: named selection, name search, ID search,
+unnamed entry, duplicate names with different IDs, and exclusion of wrong types
+plus an ID duplicated across type 5/type 1. Tests click actual popup controls,
+clear widget registrations for filtered-absence assertions, independently check
+the sole model-word delta and raw name preservation, then Restore. Compact
+duplicate-name screenshot inspected: ID-labelled alternatives and search fit.
+Three focused CTests pass. Rebuilt-GUI pack regressions pass eight cases in
+`creature-body-pack-ui-0fh4qcac`; stale bank/names/graphics regressions pass eight
+in `creature-body-stale-ui-0a_hgqog`. All fixtures tiny and source bytes exact;
+no retail asset copies. Registered chooser gate and documented GUI semantics.
+Existing immutable packages/RC2 do not include these changes. Next is a fresh
+development package with extracted acceptance, then the outstanding custom
+skinned-import/compatibility work. No broad-suite or runtime claim.

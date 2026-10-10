@@ -17,6 +17,7 @@
 #include <cmath>
 #include <numeric>
 #include <stdexcept>
+#include <unordered_map>
 namespace albion::gui {
 namespace fs=std::filesystem;
 namespace {
@@ -184,6 +185,7 @@ bool App::beginDefinitionBodyModel(size_t bodyPart,size_t alternative) {
         definitionEditDestination_=fs::u8path(packDest_.empty()?saveRoot():packDest_)/"data"/"CompiledDefs"/definitionBank_;
         definitionEditField_="Body "+std::to_string(bodyPart)+" / alternative "+std::to_string(alternative);
         definitionEditType_="body-model";definitionEditing_=true;definitionCloning_=false;definitionEditConfirm_=false;
+        definitionNameSearch_[0]=0;
         std::snprintf(definitionEditValue_,sizeof definitionEditValue_,"%u",id);return true;
     }catch(const std::exception& error){definitionEditError_=error.what();return false;}
 }
@@ -476,6 +478,45 @@ void App::drawDefinitionBrowser(float pad,float inner,float cardInner) {
                 text?ImGuiInputTextFlags_CallbackCharFilter:0,text?(wide?definitionUnicodeChar:definitionASCIIChar):nullptr);
         }
         auto_.registerWidget("input_definition_edit_value");
+        if(definitionEditType_=="body-model") {
+            // Use the captured directory, never a freshly loaded bank while a
+            // draft is open. Save still revalidates the directory and sources.
+            const auto* meshes=definitionBodyGraphics_.findBank("MBANK_ALLMESHES");
+            if(meshes) {
+                std::unordered_map<uint32_t,size_t> counts;
+                for(const auto& mesh:meshes->entries) ++counts[mesh.id];
+                const std::string_view value=definitionEditValue_;uint32_t selected=0;
+                const auto parsed=std::from_chars(value.data(),value.data()+value.size(),selected);
+                const bool valid=parsed.ec==std::errc{} && parsed.ptr==value.data()+value.size();
+                std::string preview="Choose a named model";
+                for(const auto& mesh:meshes->entries) if(valid && mesh.id==selected && mesh.type==5 && counts[mesh.id]==1) {
+                    preview=std::to_string(mesh.id)+": "+(mesh.name.empty()?"(unnamed model)":mesh.name);break;
+                }
+                ImGui::SetNextItemWidth(cardInner);
+                const bool open=ImGui::BeginCombo("##definitionbodymodel",preview.c_str());
+                auto_.registerWidget("combo_definition_body_model");
+                if(open) {
+                    ImGui::InputText("Search models",definitionNameSearch_,sizeof definitionNameSearch_);
+                    auto_.registerWidget("input_definition_body_model_search");
+                    const auto search=definitionLower(definitionNameSearch_);
+                    std::vector<size_t> options;
+                    for(size_t i=0;i<meshes->entries.size();++i) {
+                        const auto& mesh=meshes->entries[i];
+                        if(mesh.type==5 && counts[mesh.id]==1 && (search.empty() ||
+                           definitionLower(mesh.name).find(search)!=std::string::npos ||
+                           std::to_string(mesh.id).find(search)!=std::string::npos)) options.push_back(i);
+                    }
+                    ImGuiListClipper clipper;clipper.Begin(int(options.size()));
+                    while(clipper.Step()) for(int i=clipper.DisplayStart;i<clipper.DisplayEnd;++i) {
+                        const auto& mesh=meshes->entries[options[size_t(i)]];
+                        const auto label=std::to_string(mesh.id)+": "+(mesh.name.empty()?"(unnamed model)":mesh.name);
+                        if(ImGui::Selectable(label.c_str(),valid && selected==mesh.id)) setDefinitionEditValue(std::to_string(mesh.id));
+                        auto_.registerWidget(("definition_body_model_option_"+std::to_string(mesh.id)).c_str());
+                    }
+                    ImGui::EndCombo();
+                }
+            }
+        }
         if(definitionCloning_ && definitionEditType_=="clone-creature-private") {
             ImGui::TextDisabled("Body name (127 ASCII characters max)");ImGui::SetNextItemWidth(cardInner);
             ImGui::InputText("##privatebody",definitionCloneBodyName_,sizeof definitionCloneBodyName_,ImGuiInputTextFlags_CallbackCharFilter,definitionASCIIChar);
