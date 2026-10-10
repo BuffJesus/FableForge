@@ -582,6 +582,19 @@ void App::drawDefinitionViewport(const ImVec2&,const ImVec2&) {
     }
     if(!definitionDecodeError_.empty()) {ImGui::TextWrapped("%s",definitionDecodeError_.c_str());auto_.registerWidget("definition_decode_error");}
     ImGui::BeginChild("##definitiondetail",ImGui::GetContentRegionAvail());
+    if(definitionBank_=="game.bin" && definitionDecoded_ && entry.definition=="CREATURE") {
+        for(const auto& [kind,label,widget]:std::array<std::tuple<const char*,const char*,const char*>,2>{
+                std::tuple{"CCreatureDef","Open body definition","btn_definition_body"},
+                std::tuple{"CAppearanceDef","Open appearance definition","btn_definition_appearance"}}) {
+            if(const auto target=definitionread::creatureVisualTarget(definitionFile_,entry,*definitionDecoded_,kind)) {
+                const auto text=std::string(label)+" (entry "+std::to_string(*target)+")";
+                ImGui::BeginDisabled(definitionEditing_);
+                if(ImGui::SmallButton(text.c_str())) definitionBrowseIndex_=*target;
+                auto_.registerWidget(widget);ImGui::EndDisabled();
+            }
+        }
+        theme::hint("Component edits affect every creature that shares that definition.");
+    }
     if(*definitionSelected_<definitionMembers_.size() && !definitionMembers_[*definitionSelected_].empty()) {
         const auto& members=definitionMembers_[*definitionSelected_];
         if(ImGui::CollapsingHeader(("Group members ("+std::to_string(members.size())+")").c_str(),ImGuiTreeNodeFlags_DefaultOpen)) {

@@ -133,6 +133,8 @@ def main():
                   [sys.executable, "tools/test_creature_visual_clone_api.py", "--install", install_root], capture_output=True)
         ok &= run("Private Creature GUI controls at both sizes, independent native deltas and Restore",
                   [sys.executable, "tools/test_creature_private_clone_ui.py", "--install", install_root], capture_output=True)
+        ok &= run("Read-only Creature body/appearance navigation and draft guards at both sizes",
+                  [sys.executable, "tools/test_creature_visual_navigation_ui.py", "--install", install_root], capture_output=True)
         for donor_policy in ("inherited", "missing", "unresolved"):
             ok &= run("Private Creature GUI donor policy " + donor_policy,
                       [sys.executable, "tools/test_creature_private_clone_ui.py", "--install", install_root,
@@ -360,6 +362,8 @@ def main():
               [sys.executable, "tools/test_creature_clone_ui.py"], capture_output=True)
     ok &= run("Creature visual graph synthetic ownership observations",
               [sys.executable, "tools/audit_creature_visual_graph.py"], capture_output=True)
+    ok &= run("Creature visual navigation numeric names and malformed-reference UI refusal",
+              [sys.executable, "tools/test_creature_visual_navigation_fixture_ui.py"], capture_output=True)
     ok &= run("Creature animation synthetic boundaries and malformed component refusal",
               [sys.executable, "tools/audit_creature_animation.py"], capture_output=True)
     ok &= run("Definition clone controls, exact donors, stale drafts and paired Restore",

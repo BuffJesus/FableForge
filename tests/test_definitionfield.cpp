@@ -43,6 +43,33 @@ int main() try {
     require(!albion::definitionread::groupChoice(groups,owner,0) && albion::definitionread::groupChoice(groups,owner,1),"Theme group family differs");
     require(!albion::definitionread::groupChoice(groups,owner,size_t(-1)),"Out-of-range group accepted");
     owner.definition="UNKNOWN";require(!albion::definitionread::groupFamily(owner),"Unknown category inferred");
+    const auto schema=forge::defschema::Schema::loadText(R"({"CREATURE":{"fields":[{"name":"Components","type":"uint32"}]}})");
+    auto append=[](auto& bytes,uint32_t value){for(size_t i=0;i<4;++i)bytes.push_back(uint8_t(value>>(8*i)));};
+    std::vector<uint8_t> data{1,0,1,2,0};
+    for(const auto* kind:{"CCreatureDef","CAppearanceDef"}) {
+        append(data,forge::defdecode::fieldTag(kind));append(data,kind==std::string_view("CCreatureDef")?1:2);append(data,0);
+    }
+    append(data,forge::defdecode::fieldTag("Components"));append(data,99);
+    forge::bin::File visuals;visuals.addEntry("CREATURE","ROOT",data);
+    visuals.addEntry("CCreatureDef","2",{});visuals.addEntry("CAppearanceDef","1",{});
+    auto target=[&](forge::bin::Entry entry,std::string_view kind)->std::optional<size_t>{
+        try{return albion::definitionread::creatureVisualTarget(visuals,entry,forge::defdecode::decode(entry,schema),kind);}
+        catch(const std::runtime_error&){return std::nullopt;} // Browser has no decoded selection after this refusal.
+    };
+    require(target(visuals.entries()[0],"CCreatureDef")==1&&target(visuals.entries()[0],"CAppearanceDef")==2,"Visual link used numeric name rather than index");
+    require(!target(visuals.entries()[0],"CBrainDef"),"Unknown component kind inferred");
+    auto invalidRoot=visuals.entries()[0];invalidRoot.data[3]=1;
+    require(!target(invalidRoot,"CCreatureDef"),"Mismatched counted prefix accepted");
+    invalidRoot=visuals.entries()[0];invalidRoot.data[9]=2;
+    require(!target(invalidRoot,"CCreatureDef"),"Wrong-class visual target accepted");
+    invalidRoot=visuals.entries()[0];invalidRoot.data[9]=99;
+    require(!target(invalidRoot,"CCreatureDef"),"Out-of-range visual target accepted");
+    invalidRoot=visuals.entries()[0];
+    for(size_t i=0;i<4;++i)invalidRoot.data[17+i]=invalidRoot.data[5+i];
+    require(!target(invalidRoot,"CCreatureDef"),"Duplicate component class accepted");
+    require(!target(invalidRoot,"CAppearanceDef"),"Missing component class accepted");
+    invalidRoot=visuals.entries()[0];invalidRoot.data.resize(4);
+    require(!target(invalidRoot,"CCreatureDef"),"Truncated visual listing accepted");
     std::cout<<"Definition draft Unicode, exact originals, malformed data, byte limits and group families: PASS\n";
     return 0;
 } catch(const std::exception& error) {std::cerr<<error.what()<<'\n';return 1;}

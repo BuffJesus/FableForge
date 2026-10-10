@@ -1687,8 +1687,12 @@ bool Automation::tick(App& app) {
         if (!app.logContains(rest)) fail("assert_log: no log line contains '" + rest + "'"); else note("ok   " + line);
         ++pc_;
     }
-    else if (cmd == "assert_widget") {
-        if (!widgets_.count(rest)) fail("widget not on screen: " + rest); else note("ok   " + line);
+    else if (cmd == "clear_widget_registry") {
+        widgets_.clear();widgetClips_.clear();note("ok   " + line);++pc_;
+    }
+    else if (cmd == "assert_widget" || cmd == "assert_widget_absent") {
+        const bool present=widgets_.count(rest)!=0;
+        if (present!=(cmd=="assert_widget")) fail("unexpected widget presence: " + rest); else note("ok   " + line);
         ++pc_;
     }
     else if (cmd == "dump_widget") {

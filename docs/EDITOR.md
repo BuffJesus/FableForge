@@ -1450,6 +1450,8 @@ The separate **Clone private creature visuals** action appends a coordinated roo
 
 The same private mode is available through `forge-tools defs clone-creature-private <game.bin> <donor-name-or-index> <root-name> <body-name> <appearance-name> --schema <schema.json> --out <game.bin> [--names <names.bin>] [--json]`.
 
+Game-bank CREATURE details offer **Open body definition** and **Open appearance definition** when the counted component listing has one valid target of the matching class. These links use record indices, including for inherited components, and are disabled while a definition draft is open. Editing a component affects every creature sharing it; navigation alone does not make components or their model/texture/animation assets private. Missing, ambiguous, wrong-class or out-of-range links are not offered.
+
 Definition `CRGBColour` CLI input uses red, green, blue, alpha (0-255; omitted alpha defaults to 255). The writer converts to the native blue, green, red, alpha byte order. Existing unexpected lengths refuse.
 
 Inline CCharString drafts accept up to 127 printable ASCII characters, including empty text. Non-ASCII narrow input is filtered; legacy byte strings remain read-only and exact. CWideString drafts accept valid Unicode up to 127 UTF-8 bytes, including supplementary characters and empty text. Existing Unicode values within that limit can be edited or saved unchanged. C0/C1 controls, malformed encoding, overlong originals, missing terminators and opaque trailers remain unsupported. The shared writer requires one complete NUL-terminated original string before replacement.

@@ -541,3 +541,41 @@ Reuse counted CDefs and explicit index navigation, reject ambiguous/wrong-class
 targets and disable navigation during drafts. This is read-only navigation, not
 private asset copying or completion of custom skinned mesh import. Graphic/body
 asset binding and optional custom-body import remain real outstanding scope.
+
+Read-only body/appearance navigation implementation is in progress. New
+definitionread helper requires a clean matching CREATURE decode, exact counted
+CDefs prefix and one correctly typed/in-range component row. Only CCreatureDef
+and CAppearanceDef are supported; names never become indices. GUI queues explicit
+record navigation for the next frame and disables both links during a draft.
+Links live inside the scrolling detail panel with a shared-component edit warning.
+No bank writes or private ownership/asset inference are introduced.
+
+Focused definitionfield CTest passes valid numeric-name links and duplicate,
+missing, wrong-class, out-of-range and malformed listing refusal. Initial malformed
+fixture decode itself threw before link lookup; the test now mirrors the browser's
+no-decoded-selection refusal path. GUI build is live in session 35899; no actual
+link clicks or both-size navigation acceptance claim yet. The already validated
+private archive remains unchanged, not rebuilt with this new UI work.
+Next: observe that build, add independent native/synthetic navigation controls
+checks, then proceed toward Graphic/body asset binding.
+
+Navigation GUI build completed successfully. New native read-only gate
+`tools/test_creature_visual_navigation_ui.py` passes at 1440x900/scale 1 and
+800x600/scale 1.5, with eight independently parsed component-target jumps and
+eight disabled-link draft guards across own/inherited roots. All compiled-bank
+hashes remain unchanged. Evidence: external 20261010 packet
+`creature-visual-navigation-ui-0459c39j`; compact body screenshot inspected.
+Focused definitionfield CTest passes again. Registered the native gate in
+check_all; broad suite not rerun. Numeric-name and malformed-reference coverage
+is currently helper-unit coverage, not synthetic GUI acceptance. Source work
+only: existing private/shared archives and public RC2 remain unchanged.
+
+Synthetic navigation acceptance now passes both sizes in packet
+`creature-visual-navigation-fixture-ui-qv727sfw`: deliberately crossed numeric
+component names resolve by index, wrong-class/out-of-range/duplicate/empty/bad-count
+roots offer no links, and a body-only root retains its valid body link. All tiny
+fixture files remain exact. First packet g4vd_ybt failed because the automation
+widget registry retains prior frames, not because invalid links were rendered.
+Added explicit clear_widget_registry and assert_widget_absent commands and
+corrected AUTOMATION.md's prior inaccurate this-frame assertion description.
+Registered the synthetic gate; no broad-suite or packaged-navigation claim.
