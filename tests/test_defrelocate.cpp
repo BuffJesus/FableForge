@@ -79,6 +79,33 @@ int audit(char** argv) {
 }
 
 int main(int argc, char** argv) {
+    if (argc == 4 && std::string_view(argv[1]) == "--creature-self-audit") {
+        try {
+            using namespace forge;
+            const auto folder = std::filesystem::path(argv[2]) / "data" / "CompiledDefs";
+            const auto schema = defschema::Schema::load(argv[3]);
+            const auto source = bin::File::open(folder / "names.bin", folder / "game.bin");
+            nlohmann::json rows = nlohmann::json::array();
+            for (size_t i = 0; i < source.entries().size(); ++i) {
+                const auto& entry = source.entries()[i];
+                if (entry.definition != "CREATURE") continue;
+                const defrelocate::Maps maps{{{uint32_t(i),uint32_t(source.entries().size())}}, {}};
+                const auto decoded = defdecode::decode(entry,schema);
+                const auto analysis = defrelocate::analyze(entry,schema,maps);
+                nlohmann::json row{{"index",i},{"name",entry.name},{"prefix",decoded.prefixLen},
+                    {"rewrites",nlohmann::json::array()},{"unresolved",nlohmann::json::array()}};
+                for (const auto& rewrite : analysis.rewrites)
+                    row["rewrites"].push_back({{"offset",rewrite.offset},{"before",rewrite.before},
+                        {"after",rewrite.after},{"path",rewrite.path}});
+                for (const auto& candidate : analysis.unresolved)
+                    row["unresolved"].push_back({{"offset",candidate.offset},{"value",candidate.value}});
+                if (analysis.unresolved.empty()) row["after_hex"] = hex(defrelocate::relocate(entry,schema,maps));
+                rows.push_back(std::move(row));
+            }
+            std::cout << nlohmann::json{{"entries",source.entries().size()},{"records",rows}}.dump() << '\n';
+            return 0; // Audit reports unresolved donors, never silently accepts them.
+        } catch (const std::exception& e) { std::fprintf(stderr,"%s\n",e.what()); return 1; }
+    }
     if (argc == 7) {
         try { return audit(argv); }
         catch (const std::exception& e) { std::fprintf(stderr, "%s\n", e.what()); return 1; }
@@ -115,19 +142,21 @@ int main(int argc, char** argv) {
     const auto ownerSchema = defschema::Schema::loadText(R"({
         "BUILDING":{"fields":[{"name":"Value","type":"int32"}]},
         "CThingBuildingDef":{"fields":[{"name":"Value","type":"int32"}]},
+        "CREATURE":{"fields":[{"name":"Value","type":"int32"}]},
+        "CThingCreatureDef":{"fields":[{"name":"Value","type":"int32"}]},
         "HERO_ABILITY":{"fields":[{"name":"DummyObject","type":"?"},{"name":"Name","type":"?"}]},
         "CHeroAbilityDef":{"fields":[{"name":"DummyObject","type":"?"},{"name":"Name","type":"?"}]},
         "UNVERIFIED":{"fields":[{"name":"DummyObject","type":"?"},{"name":"Name","type":"?"}]}
     })");
-    for (const auto* owner : {"BUILDING", "CThingBuildingDef"}) {
+    for (const auto* owner : {"BUILDING", "CThingBuildingDef", "CREATURE", "CThingCreatureDef"}) {
         auto bytes = fixture(false); bytes.resize(17); field(bytes, "Value", {12345});
         auto expected = fixture(true); expected.resize(17); field(expected, "Value", {12345});
         bin::Entry building{owner, "BUILDING_PROBE", 0, bytes};
         check(defrelocate::relocate(building, ownerSchema, maps) == expected,
-              "building component data/inheritance move while CRC/header/trailing scalar stay exact");
+              "confirmed owner component data/inheritance move while CRC/header/trailing scalar stay exact");
         building.data[3] = 2;
         rejects([&] { defrelocate::relocate(building, ownerSchema, maps); },
-                "building listing with wrong count refuses");
+                "confirmed owner listing with wrong count refuses");
     }
     for (const auto* owner : {"HERO_ABILITY", "CHeroAbilityDef"}) {
         bin::Entry hero{owner, "ABILITY_PROBE", 0, {1,0,1,0,0}};

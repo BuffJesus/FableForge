@@ -68,9 +68,12 @@ Analysis analyze(const bin::Entry& entry, const defschema::Schema& schema, const
     // Existing fmplinks::locate's native-verified CDefs layout. Discovery is
     // restricted to verified owners; a similarly sized unknown prefix is not
     // evidence that it contains a component listing. Retail Building::Transfer
-    // 00454B8E calls ThingBase::Transfer 00676BE0 (component set before fields).
+    // 00454B8E and Creature::Transfer 00671600 call ThingBase::Transfer
+    // 00676BE0 before their fields; the retail Creature prefix uses the same
+    // counted CDefs triples. This is not CCreatureDef's appearance prefix.
     if (entry.definition == "OBJECT" || entry.definition == "CObjectDef" ||
-        entry.definition == "BUILDING" || entry.definition == "CThingBuildingDef") {
+        entry.definition == "BUILDING" || entry.definition == "CThingBuildingDef" ||
+        entry.definition == "CREATURE" || entry.definition == "CThingCreatureDef") {
         if (decoded.prefixLen >= 5) {
             const size_t count = size_t(entry.data[3]) | size_t(entry.data[4]) << 8;
             if (decoded.prefixLen == 5 + count * 12) {

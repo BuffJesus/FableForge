@@ -1,4 +1,4 @@
-> Active continuation: [Creature GroupDef schema recovery](HANDOFF_CREATURE_GROUP_2026-10-10.md) in the owned C development worktree. Original-byte/PDB evidence confirms int32; all 517 retail records, eight real picker cases and five extracted workflows pass. Two unrelated corpus skips remain explicit. RC2 remains unchanged.
+> Active continuation: [Creature donor self-reference foundation](HANDOFF_CREATURE_CLONE_2026-10-10.md). All 517 donors independently audited: 1,521 verified self slots, 509 relocation-eligible and eight unresolved/refused. Distinct clone publication remains next; generic exact cloning and RC2 remain unchanged.
 
 # Navigation lane, 2026-09-27
 

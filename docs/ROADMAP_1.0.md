@@ -1,4 +1,4 @@
-> Active continuation: [Creature GroupDef schema recovery](HANDOFF_CREATURE_GROUP_2026-10-10.md) in the owned C development worktree. Original-byte/PDB evidence confirms int32; all 517 retail records, eight real picker cases and five extracted workflows pass. Two unrelated corpus skips remain explicit. RC2 remains unchanged.
+> Active continuation: [Creature donor self-reference foundation](HANDOFF_CREATURE_CLONE_2026-10-10.md). All 517 donors independently audited: 1,521 verified self slots, 509 relocation-eligible and eight unresolved/refused. Distinct clone publication remains next; generic exact cloning and RC2 remain unchanged.
 
 # Albion Atlas -> 1.0: what it should do, what it can't, and how we get there
 
@@ -2570,3 +2570,16 @@ missing-corpus FMP skips. No full-suite, clean-machine or gameplay claim.
 The debug-evidence skill required native/PDB confirmation before promotion;
 format-I/O required independent boundaries and unchanged-byte/Restore checks.
 See [Creature schema handoff](HANDOFF_CREATURE_GROUP_2026-10-10.md).
+
+### Creature donor self-reference foundation, 2026-10-10
+
+Canonical defrelocate now recognizes the verified Creature CDefs prefix, retaining
+the same strict clean/encode checks and unresolved-candidate refusal. Independent
+raw audit covers all 517 retail donors and 1,521 self slots: 509 relocate using only
+those slots, eight remain refused for outside-prefix matches. Header/CRC, shared
+references and every other payload byte stay exact; native compiled hashes unchanged.
+Three affected relocation/namespace/FMP CTests pass. No clone publisher or GUI
+feature is claimed for this foundation; generic clone still copies exact bytes.
+Distinct self-retargeted cloning and own appearance/body references remain next.
+Picker head b49dcf2 passes Windows CI 38065042651. See
+[creature donor handoff](HANDOFF_CREATURE_CLONE_2026-10-10.md).
