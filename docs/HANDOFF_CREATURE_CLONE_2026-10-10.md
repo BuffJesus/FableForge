@@ -1150,3 +1150,17 @@ harness. Existing texture assets remain unchanged except the single appended slo
 No shipping/release rebuild, full native definition corpus or runtime claim. Next:
 CLI wiring and native definition-graph cases, then the donor/mesh/texture GUI card,
 placement and runtime validation. New-asset flow is not complete without that UI.
+
+CLI continuation: forge creature-import now dispatches explicit donor-index,
+body-part/alternative, schema, install and output selections to the coordinated
+publisher. Optional image/format or existing texture ID uses the same transaction;
+JSON and human reports explicitly retain shared slots/animations and unverified
+runtime compatibility. Strict decimal selectors, duplicate/unknown/missing options,
+texture conflicts and ASCII names refuse. No extra mesh decode occurs after commit.
+Owned forge target builds successfully. tools/test_creature_import_arguments.py
+passes 22 argument refusals plus help from an unrelated temporary cwd, with no
+output creation. Initial help check exposed usage's nonzero status; command-specific
+help now returns zero and the rerun passes. Generated docs/CLI.md refreshed.
+These are argument-only checks, not positive CLI import acceptance; next retain
+tiny donor source fixtures and independently test successful CLI publications and
+Restore before GUI wiring. Native graph, package and runtime gates remain open.

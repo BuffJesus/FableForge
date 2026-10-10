@@ -26,6 +26,8 @@ usage:
       (a ground theme from your own texture: appended to textures.big + a new ENGINE_THEME in game.bin; paint it from the editor)
   forge mesh-import <model.glb|.gltf|.obj> <NAME> [--texture <png> | --texture-id <n>] [--donor <OBJECT_...>] [--stored] [--no-collision] [--install <root>]
   forge mesh-replace <model.glb|.gltf|.obj> <MESH_NAME|id> [--stored] [--install <root>] (static geometry; preserves materials and collision)
+  forge creature-import <model.glb|.gltf> <NAME> --donor-index <n> --body <n> --alternative <n> --schema <json> --install <root> --out <root> [--texture <image> | --texture-id <n>] [--texture-format dxt1|dxt3|argb8888] [--stored] [--json]
+      (private root/body/appearance clone + one selected body mesh; other body slots and animations remain shared; runtime compatibility unverified)
       (a custom static object: MESH_<NAME> appended to graphics.big, its diffuse to textures.big, a collision hull from its own triangles, an OBJECT_<NAME> def copied from the donor; Y-up model space)
   forge textures [filter] [--bank <bank>]              (list textures.big entries: id, size, format, bank)
   forge texture-export <name> <out.png>   |   texture-replace <name> <image>   |   texture-add <name> <image> [--bank B] [--format dxt1|dxt3|argb8888]
