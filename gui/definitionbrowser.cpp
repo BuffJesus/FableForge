@@ -4,6 +4,7 @@
 #include "definitionfield.hpp"
 #include "definitionclone.hpp"
 #include "definitionread.hpp"
+#include "forge/fmplinks.hpp"
 #include "texturebrowse.hpp"
 #include "modpack.hpp"
 #include "../vendor/embedded_schema.hpp"
@@ -582,6 +583,27 @@ void App::drawDefinitionViewport(const ImVec2&,const ImVec2&) {
     }
     if(!definitionDecodeError_.empty()) {ImGui::TextWrapped("%s",definitionDecodeError_.c_str());auto_.registerWidget("definition_decode_error");}
     ImGui::BeginChild("##definitiondetail",ImGui::GetContentRegionAvail());
+    if(definitionBank_=="game.bin" && definitionDecoded_ && entry.definition=="CCreatureDef" &&
+       definitionDecoded_->clean() && forge::defdecode::encode(*definitionDecoded_)==entry.data) {
+        try {
+            const auto layout=forge::fmplinks::creaturePrefixLayout(definitionDecoded_->prefix);
+            if(!layout.bodyModels.empty()) {
+                theme::hint("Body-part model alternatives (preview only; assets remain shared).");
+                for(const auto& slot:layout.bodyModels) {
+                    uint32_t id=0;
+                    for(size_t n=0;n<4;++n)id|=uint32_t(entry.data.at(slot.offset+n))<<(8*n);
+                    const auto key=std::to_string(slot.bodyPart)+"_"+std::to_string(slot.alternative);
+                    const auto label="Open body "+std::to_string(slot.bodyPart)+" / alternative "+
+                        std::to_string(slot.alternative)+" model "+std::to_string(id);
+                    ImGui::BeginDisabled(definitionEditing_ || modFilesBusy() || meshReplaceFuture_.valid());
+                    if(ImGui::SmallButton(label.c_str()) && selectModelById(id)) assetsTab_=1;
+                    auto_.registerWidget(("definition_body_model_"+key).c_str());ImGui::EndDisabled();
+                }
+            }
+        } catch(const std::exception&) {
+            // Unsupported counted prefixes stay inspectable, with no guessed links.
+        }
+    }
     if(definitionBank_=="game.bin" && definitionDecoded_ && entry.definition=="CREATURE") {
         for(const auto& [kind,label,widget]:std::array<std::tuple<const char*,const char*,const char*>,2>{
                 std::tuple{"CCreatureDef","Open body definition","btn_definition_body"},

@@ -1454,6 +1454,8 @@ Game-bank CREATURE details offer **Open body definition** and **Open appearance 
 
 Definition `CRGBColour` CLI input uses red, green, blue, alpha (0-255; omitted alpha defaults to 255). The writer converts to the native blue, green, red, alpha byte order. Existing unexpected lengths refuse.
 
+Clean game-bank CCreatureDef details list verified body-part model alternatives as **Open body / alternative model** links. They open the individual mesh in Models by graphics-bank ID and remain disabled during definition drafts or asset file operations. Unsupported counted prefixes offer no guessed links. This is an individual mesh preview, not creature assembly, animation, rebinding or skeleton-compatibility validation.
+
 Inline CCharString drafts accept up to 127 printable ASCII characters, including empty text. Non-ASCII narrow input is filtered; legacy byte strings remain read-only and exact. CWideString drafts accept valid Unicode up to 127 UTF-8 bytes, including supplementary characters and empty text. Existing Unicode values within that limit can be edited or saved unchanged. C0/C1 controls, malformed encoding, overlong originals, missing terminators and opaque trailers remain unsupported. The shared writer requires one complete NUL-terminated original string before replacement.
 
 CWideString uses UTF-16LE with a final zero code unit, without a count prefix. CLI and GUI edits use strict UTF-8 conversion. Odd lengths, malformed surrogates, missing or embedded terminators and opaque trailers refuse before writes. Unchanged supported drafts retain their exact original bytes.

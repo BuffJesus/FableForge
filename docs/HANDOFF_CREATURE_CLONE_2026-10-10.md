@@ -628,3 +628,17 @@ still clear preview and fail decode; do not overstate that preservation contract
 Next: body-slot preview through this guarded selector, then typed binding with
 independent exact four-byte delta and recovery checks. Custom skinned import is
 still outstanding; no writer or package changed by this metadata audit.
+
+Body-slot preview controls now reuse validated bodyModels and selectModelById.
+They require clean exact decode/encode, game-bank CCreatureDef and a supported
+counted prefix; malformed prefixes have no guessed links. Labels/widgets preserve
+body-part and alternative indices. Drafts and asset writes disable links. Successful
+selection opens Models; missing/ambiguous IDs use the existing refusal path.
+No model writer, body rebinding or private asset copying introduced.
+GUI build and three focused linker/relocation/definitionfield CTests pass.
+Both-size native UI acceptance passes in `creature-body-preview-ui-28eh7100`:
+CCreatureDef 9116, body 0 alternatives 0/1, IDs 4534/4537 select named meshes
+and render; four draft guards retain state. Compact render visually inspected.
+All compiled-bank and graphics hashes unchanged. This is individual body-part
+preview, not assembled/animated NPC or skeleton compatibility. Registered the
+gate; broad suite not rerun and existing archives/public RC2 unchanged.

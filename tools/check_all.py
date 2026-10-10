@@ -128,6 +128,8 @@ def main():
                    "--payload-exe", "build/fableforge_defrelocate_tests.exe"], capture_output=True)
         ok &= run("Independent retail Creature body-part model slot audit (not runtime compatibility)",
                   [sys.executable, "tools/audit_creature_body_models.py", "--install", install_root, "--graphics"], capture_output=True)
+        ok &= run("Read-only Creature body-slot mesh preview and draft guards at both sizes",
+                  [sys.executable, "tools/test_creature_body_preview_ui.py", "--install", install_root], capture_output=True)
         ok &= run("Read-only Creature animation boundaries and numeric candidate observations",
                   [sys.executable, "tools/audit_creature_animation.py", "--install", install_root,
                    "--payload-exe", "build/fableforge_defrelocate_tests.exe"], capture_output=True)
