@@ -1043,3 +1043,30 @@ graphics hash unchanged; no full-bank copies. Rebuilt affected targets and all
 three focused CTests PASS. No shipping executable/package rebuild or runtime
 claim. Coordinated graphics/texture/private-definition publication remains next;
 existing clone publisher's exact private-clone contract is deliberately unchanged.
+
+creatureimport::prepareMesh adds an all-or-nothing in-memory coordinated plan.
+Const source definition/graphics banks produce disposable copies: canonical
+private root/body/appearance clone, selected body-slot lookup, skinned preparation
+using that slot's current model as the donor, one new type-5 entry and exactly one
+new-body model word changed. It does not allow an unrelated caller-selected rig.
+Returns both proposed banks plus clone/binding indices; source graph, gameplay
+ownership, original visual components and raw donor assets are unchanged. No
+filesystem write or publication. Materials can carry prepared texture IDs, but
+the future publisher must validate them against the coordinated texture bank.
+
+Native gate now exercises ten complete in-memory plans with tiny independent
+six-record definition fixtures and five native skeleton donors. All nine planned
+records compare exactly with canonical private cloning plus the specific four-
+byte word at body offset 27; expected append indices 6/7/8, original donor ID and
+next mesh ID checked. Ten mesh outputs again pass independent Python geometry,
+weights and raw LOD0/ghost skeleton checks. Three plan refusals per donor (15)
+cover missing body part, conflicting root name and existing mesh name. Thirty
+mesh-preparation guards and five authored-name mismatch refusals remain exercised.
+Final packet skinned-input-donors-x5qkf0vu passes, native graphics hash unchanged.
+Private-clone and 66-case skin-input CTests PASS; final rebuilt harness also passes
+the donor gate. Initial k8gb9tf4 fixture used default addEntry ordinals and was
+correctly refused as noncanonical. Tiny fixture now saves/reopens before planning,
+matching the core test setup; no production ordinal validation weakened. No native
+definition corpus claim for this combined plan, no full archive copies, shipping
+app rebuild or package update. Next: coordinated filesystem publication with fresh
+source/destination proofs, texture validation, recovery/Restore and rollback tests.

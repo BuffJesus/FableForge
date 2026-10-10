@@ -1,6 +1,8 @@
 #include "meshimport.hpp"
 #include "forge/meshpreview.hpp"
 #include "forge/big.hpp"
+#include "creatureimport.hpp"
+#include "forge/temporarydirectory.hpp"
 #include "nlohmann/json.hpp"
 #include <bit>
 #include <algorithm>
@@ -63,11 +65,65 @@ static int donorGate(char** argv) {
     const auto donor=forge::meshpreview::decodeLod0(archive.entryData(*entry),5);
     require(bool(donor.skeletonBlocks),"missing donor raw skeleton");
     const auto model=albion::meshimport::loadSkinnedModel(argv[4]);
+    // Small independent definition graph; the donor's real skeleton/payload
+    // remains lazy/read-only, with no full archive serialization or copies.
+    const auto schema=forge::defschema::Schema::loadText(R"({
+        "CREATURE":{"fields":[{"name":"Components","type":"uint32"},{"name":"Self","type":"CDefIndex"},{"name":"Other","type":"int32"}]},
+        "CCreatureDef":{"fields":[{"name":"Link","type":"CDefIndex"},{"name":"Other","type":"int32"}]},
+        "CAppearanceDef":{"fields":[{"name":"Link","type":"CDefIndex"},{"name":"Other","type":"int32"}]}
+    })");
+    const auto field=[](Bytes& bytes,const char* name,uint32_t value){word(bytes,forge::defdecode::fieldTag(name));word(bytes,value);};
+    const auto root=[&](bool donorRoot) {
+        Bytes bytes{1,0,1,3,0};
+        for(const auto& [name,index]:std::array<std::pair<const char*,uint32_t>,3>{{{"CCreatureDef",3},{"CAppearanceDef",4},{"CBrainDef",5}}}) {
+            word(bytes,forge::defdecode::fieldTag(name));word(bytes,index);word(bytes,donorRoot?1:0);
+        }
+        field(bytes,"Components",0);field(bytes,"Self",donorRoot?1:0);field(bytes,"Other",99);return bytes;
+    };
+    Bytes body{1,0,1};field(body,"WoundMorphs",0);word(body,0x01ab6cee);
+    field(body,"RandomAppearanceMorph",1);word(body,1);
+    for(uint32_t value:{id,0u,0u,0u}) word(body,value);body.push_back(0);
+    body.insert(body.end(),27,0);word(body,0);body.insert(body.end(),13,0);
+    field(body,"Expressions",0);word(body,0x01ab6d32);field(body,"Stats",0);
+    field(body,"Link",1);field(body,"Other",99);
+    Bytes appearance{1,0,1};field(appearance,"Link",1);field(appearance,"Other",99);
+    forge::TemporaryDirectory definitionFixture(fs::temp_directory_path(),"creature-mesh-plan-");
+    const auto namesPath=definitionFixture.path()/"names.bin",bankPath=definitionFixture.path()/"game.bin";
+    const auto write=[&](const fs::path& path,const Bytes& bytes) {
+        std::ofstream stream(path,std::ios::binary);stream.write(reinterpret_cast<const char*>(bytes.data()),std::streamsize(bytes.size()));
+        require(bool(stream),"definition plan fixture write failed");
+    };
+    Bytes emptyNames;for(uint32_t value:{0u,0xa8e36c34u,0u,4u,0u})word(emptyNames,value);
+    Bytes emptyBank(9);for(uint32_t value:{0u,1u,0u,0u,0u})word(emptyBank,value);
+    write(namesPath,emptyNames);write(bankPath,emptyBank);
+    auto definitions=forge::bin::File::open(namesPath,bankPath);
+    definitions.addEntry("CREATURE","ANCESTOR",root(false));definitions.addEntry("CREATURE","DONOR",root(true));
+    definitions.addEntry("OTHER","OTHER",{});definitions.addEntry("CCreatureDef","",body);
+    definitions.addEntry("CAppearanceDef","",appearance);definitions.addEntry("CBrainDef","SHARED_BRAIN",{5,7});
+    definitions.save(namesPath,bankPath);definitions=forge::bin::File::open(namesPath,bankPath);
+    albion::creatureimport::MeshRequest request{1,0,0,"CREATURE_IMPORTED","IMPORTED_BODY","IMPORTED_APPEARANCE","MESH_IMPORTED_"+idText,true};
     const auto output=fs::absolute(argv[5]);require(!fs::exists(output),"donor output must be fresh");
     forge::meshcompose::Material material;material.name="native donor import test";
     std::vector<forge::big::Entry> meshes;
     for(bool compressed:{false,true}) {
-        auto mesh=albion::meshimport::prepareSkinnedMesh(model,archive,id,"MESH_IMPORTED_"+idText,{material},compressed);
+        request.compress=compressed;
+        const auto plan=albion::creatureimport::prepareMesh(definitions,archive,schema,request,model,{material});
+        const auto& mesh=plan.graphics.findBank("MBANK_ALLMESHES")->entries.back();
+        require(plan.definitions.entries().size()==9 && plan.clones.rootIndex==6 && plan.clones.bodyIndex==7 && plan.clones.appearanceIndex==8,
+                "private mesh graph append order changed");
+        auto expectedDefinitions=definitions;
+        forge::defedit::cloneCreatureVisuals(expectedDefinitions,schema,1,request.rootName,request.bodyName,request.appearanceName);
+        auto expectedBody=expectedDefinitions.entries()[7].data;
+        for(size_t byte=0;byte<4;++byte) expectedBody.at(plan.binding.offset+byte)=uint8_t(mesh.id>>(8*byte));
+        expectedDefinitions.setEntryData(7,std::move(expectedBody));
+        for(size_t i=0;i<9;++i) {
+            const auto& expected=expectedDefinitions.entries()[i];const auto& actual=plan.definitions.entries()[i];
+            require(expected.data==actual.data && expected.name==actual.name && expected.definition==actual.definition &&
+                    expected.indexInDefinition==actual.indexInDefinition,"private mesh plan changed unrelated definition bytes");
+        }
+        require(plan.binding.oldModelId==id && plan.binding.newModelId==mesh.id && plan.binding.offset==27 &&
+                plan.graphics.findBank("MBANK_ALLMESHES")->entries.size()==bank->entries.size()+1 && definitions.entries().size()==6,
+                "private mesh plan donor selection or source preservation changed");
         uint32_t maximum=0;for(const auto& existing:bank->entries) maximum=std::max(maximum,existing.id);
         require(mesh.id==maximum+1 && mesh.type==5 && mesh.magic==42 && mesh.devFileType==entry->devFileType &&
                 mesh.length==mesh.data.size() && mesh.name=="MESH_IMPORTED_"+idText,"prepared entry metadata invalid");
@@ -76,8 +132,18 @@ static int donorGate(char** argv) {
             readback.skeletonBlocks->names==donor.skeletonBlocks->names && readback.skeletonBlocks->bones==donor.skeletonBlocks->bones &&
             readback.skeletonBlocks->keyframes==donor.skeletonBlocks->keyframes && readback.skeletonBlocks->inverseBinds==donor.skeletonBlocks->inverseBinds,
             "imported donor spans changed");
-        meshes.push_back(std::move(mesh));
+        meshes.push_back(mesh);
     }
+    const auto planRefuses=[&](const albion::creatureimport::MeshRequest& invalid,const albion::meshimport::Model& authored,const char* reason) {
+        bool rejected=false;
+        try {albion::creatureimport::prepareMesh(definitions,archive,schema,invalid,authored,{material});}
+        catch(const std::exception& e) {rejected=std::string(e.what()).find(reason)!=std::string::npos;}
+        require(rejected && definitions.entries().size()==6 && archive.findBank("MBANK_ALLMESHES")->entries.size()==bank->entries.size(),
+                "private mesh refusal did not preserve source graph/bank");
+    };
+    auto invalidRequest=request;invalidRequest.bodyPart=99;planRefuses(invalidRequest,model,"absent body part or alternative");
+    invalidRequest=request;invalidRequest.rootName="DONOR";planRefuses(invalidRequest,model,"name");
+    invalidRequest=request;invalidRequest.meshName=entry->name;planRefuses(invalidRequest,model,"new mesh name already exists");
     const auto refuses=[&](const forge::big::File& candidate,const std::string& name,const char* reason) {
         bool rejected=false;
         try {albion::meshimport::prepareSkinnedMesh(model,candidate,id,name,{material});}
