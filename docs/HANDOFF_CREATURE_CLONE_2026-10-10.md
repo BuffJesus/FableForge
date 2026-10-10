@@ -1070,3 +1070,44 @@ matching the core test setup; no production ordinal validation weakened. No nati
 definition corpus claim for this combined plan, no full archive copies, shipping
 app rebuild or package update. Next: coordinated filesystem publication with fresh
 source/destination proofs, texture validation, recovery/Restore and rollback tests.
+
+creatureimport::publishMesh implements coordinated names/game/graphics filesystem
+publication for the existing-texture path. SourceProof captures resolved paths
+and streaming SHA256 of all four input files (including textures); fresh hashes
+and path identities must match before planning and immediately before install.
+The publisher recomputes the canonical private mesh plan from source files, not
+caller-provided modified banks. Explicit graphics output permits only the two
+supported graphics.big layouts. Destination canonical paths stay inside the
+resolved install root, cannot alias each other or hardlink/unrelated sources,
+and existing outputs must equal the captured loaded inputs. Destination presence,
+resolution and bytes are checked again before install. Running destination game
+refuses. Missing outputs with recovery records refuse; creation markers and
+original backups use the existing rollback-capable PendingBanks transaction.
+
+All nonzero material diffuse/bump/reflection/illumination/positive-decal IDs must
+resolve uniquely in GBANK_MAIN_PC before writes. New texture append is explicitly
+unfinished and must join this same transaction, not publish separately first.
+Prepared definitions read back with every planned record exact and original raw
+name-pool prefix preserved. Graphics readback compares every bank/entry identity,
+native metadata and payload (physical offsets/container size may move). Staged
+graphics fully reopened before install, so returned in-place results cannot retain
+stale lazy source offsets and no fallible read occurs after the commit. This adds
+RAM cost during serialization/readback, not repeated disk scratch bank copies.
+
+Final packet skinned-input-donors-wlpok87m PASS: ten fresh publications + exact
+created-file Restore, five in-place publications + hash-exact baseline Restore,
+five source-change and five destination-change barriers, five missing-texture
+refusals, five Windows locked-third-file rollback cases. The first two targets
+are replaced before graphics rename is forced to fail; all live destination bytes
+return to their captured baselines. Original backups may remain after refusal;
+no claim that backup creation is rolled back. Publication sources are tiny private
+definition fixtures and one-entry graphics archives, not full retail banks. Native
+graphics SHA256 unchanged; ten mesh payloads still pass independent addon checks.
+Result manifest records publication counts and runner checks publication-stage
+messages to refuse an older reader lacking these gates. Private visual clone and
+66-case skin-input CTests also PASS. Initial srppv6oi rollback fixture compared
+proofs from different resolved trees; its snapshot now uses the actual destination
+tree and was rebuilt. Production source diagnostics identify input index and
+path/content mismatch without relaxing checks. No release/shipping rebuild or
+gameplay claim. Next: optional texture append in the same transaction, native
+definition graph cases, CLI/GUI card wiring and placement/runtime validation.

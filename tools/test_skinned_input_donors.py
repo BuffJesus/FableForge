@@ -4,6 +4,7 @@ import argparse
 import copy
 import hashlib
 import json
+import os
 from pathlib import Path
 import struct
 import subprocess
@@ -95,6 +96,9 @@ def main():
         output = folder/'payloads'
         result = run(folder/'source.gltf', output)
         assert result.returncode==0, result.stdout+result.stderr
+        assert 'publication in-place and Restore:' in result.stdout, 'reader lacks coordinated publication gate'
+        if os.name=='nt':
+            assert 'publication locked-third-file rollback:' in result.stdout, 'reader lacks Windows rollback gate'
         for mode in ('stored','compressed'):
             payload_path = output/(mode+'.mesh')
             payload = payload_path.read_bytes()
@@ -127,7 +131,9 @@ def main():
         assert not refusal_output.exists()
         print(donor_id, 'authored input, remap, stored/compressed oracle and refusal: PASS', flush=True)
     assert len(checks)==10 and digest(graphics)==before
-    (work/'result.json').write_text(json.dumps({'passed': True, 'graphics_sha256': before, 'checks': checks, 'refusals': 5}, indent=2)+'\n', encoding='utf-8')
+    (work/'result.json').write_text(json.dumps({'passed': True, 'graphics_sha256': before, 'checks': checks, 'refusals': 5,
+        'publication': {'fresh_restore': 10, 'in_place_restore': 5, 'source_stale': 5, 'destination_stale': 5,
+                        'missing_texture': 5, 'locked_third_file_rollback': 5 if os.name=='nt' else 0}}, indent=2)+'\n', encoding='utf-8')
 
 
 if __name__=='__main__':

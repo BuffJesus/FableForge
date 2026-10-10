@@ -2,6 +2,7 @@
 #include "forge/meshpreview.hpp"
 #include "forge/big.hpp"
 #include "creatureimport.hpp"
+#include "creaturepublish.hpp"
 #include "forge/temporarydirectory.hpp"
 #include "nlohmann/json.hpp"
 #include <bit>
@@ -101,6 +102,14 @@ static int donorGate(char** argv) {
     definitions.addEntry("OTHER","OTHER",{});definitions.addEntry("CCreatureDef","",body);
     definitions.addEntry("CAppearanceDef","",appearance);definitions.addEntry("CBrainDef","SHARED_BRAIN",{5,7});
     definitions.save(namesPath,bankPath);definitions=forge::bin::File::open(namesPath,bankPath);
+    forge::big::File tinyGraphics;tinyGraphics.setMagic("BIGB");tinyGraphics.setVersion(archive.version());
+    auto tinyEntry=*entry;tinyEntry.data=archive.entryData(*entry);
+    tinyGraphics.addBank("MBANK_ALLMESHES",bank->id).entries.push_back(std::move(tinyEntry));
+    forge::big::File tinyTextures;tinyTextures.setMagic("BIGB");tinyTextures.addBank("GBANK_MAIN_PC",0);
+    const auto graphicsPath=definitionFixture.path()/"graphics.big",texturesPath=definitionFixture.path()/"textures.big";
+    write(graphicsPath,tinyGraphics.serialize());write(texturesPath,tinyTextures.serialize());
+    const albion::creatureimport::Sources sources{namesPath,bankPath,graphicsPath,texturesPath};
+    const auto proof=albion::creatureimport::captureSources(sources);
     albion::creatureimport::MeshRequest request{1,0,0,"CREATURE_IMPORTED","IMPORTED_BODY","IMPORTED_APPEARANCE","MESH_IMPORTED_"+idText,true};
     const auto output=fs::absolute(argv[5]);require(!fs::exists(output),"donor output must be fresh");
     forge::meshcompose::Material material;material.name="native donor import test";
@@ -133,7 +142,65 @@ static int donorGate(char** argv) {
             readback.skeletonBlocks->keyframes==donor.skeletonBlocks->keyframes && readback.skeletonBlocks->inverseBinds==donor.skeletonBlocks->inverseBinds,
             "imported donor spans changed");
         meshes.push_back(mesh);
+        const auto publishRoot=definitionFixture.path()/(compressed?"compressed-publish":"stored-publish");
+        const auto published=albion::creatureimport::publishMesh(sources,proof,publishRoot,"data/graphics/graphics.big",schema,request,model,{material});
+        require(published.definitions.entries().size()==9 && published.binding.oldModelId==id && published.binding.newModelId==id+1 &&
+                published.graphics.findBank("MBANK_ALLMESHES")->entries.size()==2,"coordinated publication result differs");
+        albion::creatureimport::requireSourceProof(sources,proof);
+        for(const auto& path:std::array<fs::path,3>{publishRoot/"data/CompiledDefs/names.bin",publishRoot/"data/CompiledDefs/game.bin",publishRoot/"data/graphics/graphics.big"})
+            require(fs::is_regular_file(fs::path(path.string()+albion::backups::kCreatedSuffix)),"coordinated publication missing creation marker");
+        std::vector<std::string> restoreNotes;std::string restoreError;
+        require(albion::backups::restoreAll(publishRoot,true,restoreNotes,restoreError)==3 && restoreError.empty(),"coordinated created outputs did not Restore");
+        require(!fs::exists(publishRoot/"data/CompiledDefs/game.bin") && !fs::exists(publishRoot/"data/graphics/graphics.big"),"Restore kept created creature files");
     }
+    const auto originalNames=albion::definitionwrite::cloneBytes(namesPath);
+    const auto staleRoot=definitionFixture.path()/"stale-publish";
+    bool staleRefused=false;
+    try {albion::creatureimport::publishMesh(sources,proof,staleRoot,"data/graphics/graphics.big",schema,request,model,{material},true,[&]{
+        std::ofstream stream(namesPath,std::ios::binary|std::ios::app);stream.put('x');stream.close();require(bool(stream),"stale fixture update failed");
+    });}catch(const std::exception& e){staleRefused=std::string(e.what()).find("source changed")!=std::string::npos;}
+    write(namesPath,originalNames);
+    require(staleRefused && !fs::exists(staleRoot/"data/CompiledDefs/game.bin") && !fs::exists(staleRoot/"data/graphics/graphics.big"),"stale coordinated publication installed files");
+    albion::creatureimport::requireSourceProof(sources,proof);
+    const auto destinationStaleRoot=definitionFixture.path()/"destination-stale-publish";
+    bool destinationRefused=false;
+    try {albion::creatureimport::publishMesh(sources,proof,destinationStaleRoot,"data/graphics/graphics.big",schema,request,model,{material},true,[&]{
+        fs::create_directories(destinationStaleRoot/"data/CompiledDefs");write(destinationStaleRoot/"data/CompiledDefs/game.bin",Bytes{7,8,9});
+    });}catch(const std::exception& e){destinationRefused=std::string(e.what()).find("destination changed")!=std::string::npos;}
+    require(destinationRefused && albion::definitionwrite::cloneBytes(destinationStaleRoot/"data/CompiledDefs/game.bin")==Bytes{7,8,9} &&
+            !fs::exists(destinationStaleRoot/"data/graphics/graphics.big"),"stale destination overwritten during creature publication");
+    auto missingTexture=material;missingTexture.diffuseId=99;bool textureRefused=false;
+    const auto textureRefusalRoot=definitionFixture.path()/"missing-texture-publish";
+    try {albion::creatureimport::publishMesh(sources,proof,textureRefusalRoot,"data/graphics/graphics.big",schema,request,model,{missingTexture});}
+    catch(const std::exception& e){textureRefused=std::string(e.what()).find("missing or ambiguous material texture ID")!=std::string::npos;}
+    require(textureRefused && !fs::exists(textureRefusalRoot),"invalid material texture published");
+    const auto existingTree=[&](const fs::path& root) {
+        fs::create_directories(root/"data/CompiledDefs");fs::create_directories(root/"data/graphics/pc");
+        fs::copy_file(namesPath,root/"data/CompiledDefs/names.bin");fs::copy_file(bankPath,root/"data/CompiledDefs/game.bin");
+        fs::copy_file(graphicsPath,root/"data/graphics/graphics.big");fs::copy_file(texturesPath,root/"data/graphics/pc/textures.big");
+        return albion::creatureimport::Sources{root/"data/CompiledDefs/names.bin",root/"data/CompiledDefs/game.bin",root/"data/graphics/graphics.big",root/"data/graphics/pc/textures.big"};
+    };
+    const auto inPlaceRoot=definitionFixture.path()/"in-place";const auto inPlaceSources=existingTree(inPlaceRoot);
+    std::cout<<"publication in-place and Restore: "<<id<<std::endl;
+    const auto inPlaceProof=albion::creatureimport::captureSources(inPlaceSources);
+    const auto inPlace=albion::creatureimport::publishMesh(inPlaceSources,inPlaceProof,inPlaceRoot,"data/graphics/graphics.big",schema,request,model,{material});
+    require(inPlace.graphics.entryData(inPlace.graphics.findBank("MBANK_ALLMESHES")->entries.front())==archive.entryData(*entry),"in-place result retained stale lazy offsets");
+    std::vector<std::string> restoreNotes;std::string restoreError;
+    require(albion::backups::restoreAll(inPlaceRoot,true,restoreNotes,restoreError)==3 && restoreError.empty(),"in-place creature Restore failed");
+    albion::creatureimport::requireSourceProof(inPlaceSources,inPlaceProof);
+#ifdef _WIN32
+    const auto lockedRoot=definitionFixture.path()/"locked-output";const auto lockedSources=existingTree(lockedRoot);
+    std::cout<<"publication locked-third-file rollback: "<<id<<std::endl;
+    const auto lockedProof=albion::creatureimport::captureSources(lockedSources);
+    HANDLE locked=INVALID_HANDLE_VALUE;bool rollbackRefused=false;
+    try {albion::creatureimport::publishMesh(sources,proof,lockedRoot,"data/graphics/graphics.big",schema,request,model,{material},true,[&]{
+        locked=CreateFileW(lockedSources.graphics.c_str(),GENERIC_READ,FILE_SHARE_READ,nullptr,OPEN_EXISTING,FILE_ATTRIBUTE_NORMAL,nullptr);
+        require(locked!=INVALID_HANDLE_VALUE,"cannot lock third publication target");
+    });}catch(const std::exception& e){rollbackRefused=std::string(e.what()).find("creature publication:")!=std::string::npos;}
+    if(locked!=INVALID_HANDLE_VALUE) CloseHandle(locked);
+    require(rollbackRefused,"locked third publication target accepted");
+    albion::creatureimport::requireSourceProof(lockedSources,lockedProof);
+#endif
     const auto planRefuses=[&](const albion::creatureimport::MeshRequest& invalid,const albion::meshimport::Model& authored,const char* reason) {
         bool rejected=false;
         try {albion::creatureimport::prepareMesh(definitions,archive,schema,invalid,authored,{material});}
