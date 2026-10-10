@@ -524,3 +524,20 @@ have passed. Session 28722 remains live in shared GUI regression, with selector
 still to follow; retain the same archive and handle. Do not report all nine or
 final omitted/skipped counts before result.json exists. Test-harness changes are
 ready to commit independently of the still-running final regression.
+
+Package-gate harness checkpoint 390b5f1 committed/pushed. Session 28722 is now
+terminal success: final oey2hj9e result.json proves nine selected workflows passed,
+130 not run and two unrelated missing-corpus skips (controller/Aeon and F2 FMP).
+All 117 shipped identities and 141 documentation links passed. Private package
+checks exercise 28 CLI cases and 26 both-size GUI cases, including stale source,
+inherited ownership and missing/unresolved preflight. Shared CLI/36 GUI cases and
+the selector also passed using extracted executables. The archive hash stays
+6422b166165a6aac34e8d51dbacb72b0f40c0ca71fd896ac82574619be4746c9; old shared
+archive and RC2 are unchanged. No full-suite, clean-machine or gameplay claim.
+
+Next roadmap step: make the root's verified body/appearance definitions directly
+reachable in the browser so privately cloned components can be inspected/edited.
+Reuse counted CDefs and explicit index navigation, reject ambiguous/wrong-class
+targets and disable navigation during drafts. This is read-only navigation, not
+private asset copying or completion of custom skinned mesh import. Graphic/body
+asset binding and optional custom-body import remain real outstanding scope.
