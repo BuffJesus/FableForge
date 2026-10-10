@@ -663,3 +663,23 @@ GUI promotion and independent retail output/recovery acceptance remain required.
 Reuse existing-entry guarded publication, but add a typed recomputation contract
 and stale graphics identity checks rather than treating arbitrary changed payloads
 as a verified body binding. Existing packages and RC2 remain unchanged.
+
+Typed body publication is implemented in src/definitionbody.hpp. Its contract
+captures schema, graphics directory snapshot, exact loaded source bank/name bytes
+and requested entry/body/alternative/model ID. It reopens source and recomputes
+the canonical edit, compares every proposed record/name, and requires existing
+outputs to match the loaded pair. Raw bank/name bytes and graphics directory
+metadata are rechecked immediately before PendingBanks installation through a
+new optional callback in the existing-entry publisher. Hardlink/cross-bank/asset
+aliases, offline guards and creation-record protections remain enforced.
+An existing destination graphics directory must also match; absent graphics uses
+the loaded source fallback. This is directory identity validation, not a full
+asset-payload hash or runtime/skeleton compatibility guarantee.
+
+Synthetic publisher checks pass fresh and in-place output, exact name-pool
+preservation, tampered-plan/source-byte/graphics-type refusals, late callback
+refusal before installation, fresh-file Restore removal and exact in-place
+original Restore. Three focused Creature/linker/relocation CTests pass. No native
+input writes, CLI/GUI promotion, independent retail published delta, complete
+race/rollback matrix or broad-suite acceptance yet. Next: broaden publisher
+negatives and independently verify retail publication/Restore, then CLI/UI.

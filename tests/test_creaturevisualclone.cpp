@@ -2,6 +2,7 @@
 #include "forge/defdecode.hpp"
 #include "forge/temporarydirectory.hpp"
 #include "definitionclone.hpp"
+#include "definitionbody.hpp"
 #include <algorithm>
 #include <fstream>
 #include <iostream>
@@ -188,5 +189,65 @@ int main(int argc,char** argv)try{
     require(read(fs::path(inPlace.string()+albion::backups::kOrigSuffix))==oldBank&&
         read(fs::path(inPlaceNames.string()+albion::backups::kOrigSuffix))==oldNames,"private in-place pair lacks exact originals");
     require(read(namesPath)==oldNames&&read(bankPath)==oldBank,"private test changed original source pair");
-    std::cout<<"Private Creature graph: selected ownership, shared gameplay, atomic refusal and paired roundtrip PASS\n";return 0;
+    {
+        const auto bindingSchema=defschema::Schema::loadText(R"({"CCreatureDef":{"fields":[{"name":"InitialActions","type":"uint32"}]}})");
+        Bytes payload{1,0,1};field(payload,"WoundMorphs",0);word(payload,0x01ab6cee);
+        field(payload,"RandomAppearanceMorph",1);word(payload,1);
+        const size_t modelAt=payload.size();word(payload,10);word(payload,0);word(payload,0);word(payload,0);payload.push_back(0);
+        payload.insert(payload.end(),27,0);word(payload,0);payload.insert(payload.end(),13,0);
+        field(payload,"Expressions",0);word(payload,0x01ab6d32);field(payload,"Stats",0);field(payload,"InitialActions",0);
+        auto baseline=source;baseline.setEntryData(3,payload);
+        const auto folder=temp.path()/"body-source";fs::create_directories(folder);
+        const auto bodyNames=folder/"names.bin",bodyBank=folder/"game.bin",graphicsPath=folder/"graphics.big";
+        baseline.save(bodyNames,bodyBank);
+        big::File assets;auto& meshBank=assets.addBank("MBANK_ALLMESHES",0);
+        for(const auto id:{10u,20u}) {big::Entry mesh;mesh.id=id;mesh.type=5;mesh.name=std::to_string(id);mesh.data={1};meshBank.entries.push_back(mesh);}
+        write(graphicsPath,assets.serialize());const auto graphics=big::File::open(graphicsPath);
+        const auto bankBytes=read(bodyBank),nameBytes=read(bodyNames);
+        baseline=bin::File::open(bodyNames,bodyBank);auto plan=baseline;
+        defedit::setCreatureBodyModel(plan,bindingSchema,3,0,0,20,graphics);
+        const albion::definitionwrite::CreatureBodyContract proof{bindingSchema,graphics,bankBytes,nameBytes,3,0,0,20};
+        const auto fresh=temp.path()/"body-fresh"/"game.bin";
+        auto bad=plan;auto badPayload=bad.entries()[3].data;badPayload.back()^=1;bad.setEntryData(3,badPayload);
+        bool denied=false;try{albion::definitionwrite::publishCreatureBody(bad,bodyNames,bodyBank,graphicsPath,fresh,proof);}
+        catch(const std::runtime_error&){denied=true;}
+        require(denied&&!fs::exists(fresh.parent_path()),"tampered body plan created output");
+        albion::definitionwrite::publishCreatureBody(plan,bodyNames,bodyBank,graphicsPath,fresh,proof);
+        albion::definitionwrite::verifyEntries(plan,bin::File::open(fresh.parent_path()/"names.bin",fresh));
+        auto expected=payload;put(expected,modelAt,20);require(plan.entries()[3].data==expected,"body publication delta differs");
+        require(read(fresh.parent_path()/"names.bin")==nameBytes,"body publication normalized original names");
+        require(fs::exists(fs::path(fresh.string()+albion::backups::kCreatedSuffix)),"body fresh publication lacks recovery marker");
+        for(const auto& path:{fresh,fresh.parent_path()/"names.bin"}) {
+            albion::backups::Entry recovery;recovery.file=path;
+            recovery.backup=fs::path(path.string()+albion::backups::kCreatedSuffix);
+            recovery.kind=albion::backups::Kind::Created;recovery.created=true;
+            std::string error;require(albion::backups::restore(recovery,false,error),"body created restore failed");
+            require(!fs::exists(path)&&!fs::exists(recovery.backup),"body created restore left file or marker");
+        }
+        const auto late=temp.path()/"late-body"/"game.bin";bool callbackCalled=false;
+        denied=false;try {
+            albion::definitionwrite::publish(plan,bodyNames,late,true,[&] {
+                callbackCalled=true;require(!fs::exists(late),"callback ran after installation");
+                throw std::runtime_error("late fixture refusal");
+            });
+        }catch(const std::runtime_error&){denied=true;}
+        require(denied&&callbackCalled&&!fs::exists(late)&&!fs::exists(late.parent_path()/"names.bin"),
+                "late publication refusal installed outputs");
+        auto stale=bankBytes;stale[0]^=1;write(bodyBank,stale);
+        denied=false;try{albion::definitionwrite::publishCreatureBody(plan,bodyNames,bodyBank,graphicsPath,temp.path()/"stale-body"/"game.bin",proof);}
+        catch(const std::runtime_error&){denied=true;}
+        require(denied,"stale body bank accepted");write(bodyBank,bankBytes);
+        auto staleGraphics=assets;staleGraphics.banks()[0].entries[1].type=1;write(graphicsPath,staleGraphics.serialize());
+        denied=false;try{albion::definitionwrite::publishCreatureBody(plan,bodyNames,bodyBank,graphicsPath,temp.path()/"stale-graphics"/"game.bin",proof);}
+        catch(const std::runtime_error&){denied=true;}
+        require(denied,"stale graphics directory accepted");write(graphicsPath,assets.serialize());
+        albion::definitionwrite::publishCreatureBody(plan,bodyNames,bodyBank,graphicsPath,bodyBank,proof);
+        require(read(fs::path(bodyBank.string()+albion::backups::kOrigSuffix))==bankBytes,"body in-place original differs");
+        require(read(bodyNames)==nameBytes,"body in-place namespace changed");
+        albion::backups::Entry original;original.file=bodyBank;
+        original.backup=fs::path(bodyBank.string()+albion::backups::kOrigSuffix);
+        std::string restoreError;require(albion::backups::restore(original,false,restoreError),"body original restore failed");
+        require(read(bodyBank)==bankBytes&&read(bodyNames)==nameBytes,"body restore did not recover exact source pair");
+    }
+    std::cout<<"Private Creature graph and typed body publication PASS\n";return 0;
 }catch(const std::exception& error){std::cerr<<error.what()<<'\n';return 1;}

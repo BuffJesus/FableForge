@@ -3,6 +3,7 @@
 #include <cctype>
 #include <filesystem>
 #include <fstream>
+#include <functional>
 #include <set>
 #include <stdexcept>
 #include "forge/bin.hpp"
@@ -32,7 +33,8 @@ inline void verifyEntries(const forge::bin::File& expected,const forge::bin::Fil
 // Existing-entry edits add no names. Retain the original pool bytes and publish
 // only a missing destination pool; an existing pool must decode every identity.
 inline void publish(const forge::bin::File& bank,const std::filesystem::path& sourceNames,
-                    const std::filesystem::path& destination,bool trackRecovery=false) {
+                    const std::filesystem::path& destination,bool trackRecovery=false,
+                    const std::function<void()>& validateBeforeInstall={}) {
     namespace fs=std::filesystem;
     const auto target=fs::absolute(destination).lexically_normal();
     const auto names=target.parent_path()/"names.bin";
@@ -71,6 +73,7 @@ inline void publish(const forge::bin::File& bank,const std::filesystem::path& so
     if(newBank && fs::exists(target)) throw std::runtime_error("definition write: bank destination appeared during preparation");
     if(newNames && fs::exists(names)) throw std::runtime_error("definition write: name pool destination appeared during preparation");
     if(!newNames) verifyEntries(bank,forge::bin::File::open(names,preparedBank));
+    if(validateBeforeInstall)validateBeforeInstall();
     std::string error;if(!pending.install(trackRecovery,error)) throw std::runtime_error("definition write: "+error);
 }
 } // namespace albion::definitionwrite
