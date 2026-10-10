@@ -126,6 +126,8 @@ def main():
         ok &= run("Read-only Creature visual ownership and relocation observations (not clone eligibility)",
                   [sys.executable, "tools/audit_creature_visual_graph.py", "--install", install_root,
                    "--payload-exe", "build/fableforge_defrelocate_tests.exe"], capture_output=True)
+        ok &= run("Read-only Creature animation boundaries and numeric candidate observations",
+                  [sys.executable, "tools/audit_creature_animation.py", "--install", install_root], capture_output=True)
         ok &= run("Creature donor self-reference layout and independent relocation audit",
                   [sys.executable, "tools/audit_creature_self_refs.py", "--install", install_root, "--clone-api"], capture_output=True)
         ok &= run("Retail paired Creature clone, self-only deltas and Restore",
@@ -347,6 +349,8 @@ def main():
               [sys.executable, "tools/test_creature_clone_ui.py"], capture_output=True)
     ok &= run("Creature visual graph synthetic ownership observations",
               [sys.executable, "tools/audit_creature_visual_graph.py"], capture_output=True)
+    ok &= run("Creature animation synthetic boundaries and malformed component refusal",
+              [sys.executable, "tools/audit_creature_animation.py"], capture_output=True)
     ok &= run("Definition clone controls, exact donors, stale drafts and paired Restore",
               [sys.executable, "tools/test_definition_clone_ui.py"], capture_output=True)
     ok &= run("Definition existing-name picker, exact field deltas, invalid offsets and Restore",

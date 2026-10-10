@@ -250,3 +250,32 @@ coordinated private root/body/appearance plan with explicit selected-row parent
 updates and non-mutating refusal. Keep gameplay components and existing assets
 shared until separately requested by the chosen import workflow. Still no private
 visual writer, transaction, GUI or gameplay claim.
+
+## Animation boundary recovery
+
+Bounded packet `creature-animation-native-oo2dfwaa` uses the same hash-guarded
+FableWin bytes and matching PDB. `probe_creature_cdefs_native.py --feature animation`
+captures set/entry readers and writers, thirteen component reader/writer pairs,
+allocation, Add, PostInit and rotation lookup. PDB confirms CAnimationEntry
+BankIndex/AnimName/GroupName and CAnimationSet DefaultFlags/TransitionTime/Delay/
+DefaultGroup. Matching PDB enum EAnimComponent is 0..12; queried with llvm-pdbutil
+pretty --enums --include-types=^EAnimComponent$ and the DIA SDK on PATH.
+Native Add 01fa0f8f takes AnimName.GetCRC for the map key. Rotation lookup
+01fa0c78..01fa0c81 passes BankIndex to CMeshDataBank::PeekAnimation, not the
+definition manager. Component 8/11 transfer CDefString; component 12 transfers a
+u32-length inline byte string. Other component bodies use signed scalars, flags,
+floats, booleans or a 2D vector; do not classify the whole field as one domain.
+
+Independent `audit_creature_animation.py` synthetic truncation/count/unknown-type
+cases pass. Native observations `creature-animation-audit-qcn0gzqq` decode all
+320 appearance fields, 27,779 animation entries, zero layout failures; each ends
+at the following OutlineEffectAlphaRef tag. Source bank hashes remain unchanged.
+The 27 root-ID-equal windows across twenty affected root observations comprise
+nineteen whole BankIndex fields in the separate animation asset namespace and
+eight windows straddling name-offset/count or combo-value/component-type fields.
+These are layout observations, not rewritten IDs or a clone eligibility claim.
+Registered native/synthetic gates; no full-suite or new shipping archive claim.
+
+Next: translate these verified primitive/reference boundaries into canonical
+relocation coverage, testing name-offset remapping and strict malformed refusal.
+Then implement the coordinated private visual plan with localized parent updates.
