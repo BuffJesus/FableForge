@@ -1,7 +1,10 @@
 #include "meshimport.hpp"
 #include "forge/meshpreview.hpp"
+#include "forge/big.hpp"
 #include "nlohmann/json.hpp"
 #include <bit>
+#include <algorithm>
+#include <charconv>
 #include <chrono>
 #include <cmath>
 #include <filesystem>
@@ -49,7 +52,45 @@ static void save(const fs::path& path,const Fixture& f) {
     const auto size=uint32_t(bytes.size());for(unsigned i=0;i<4;++i) bytes[8+i]=uint8_t(size>>(8*i));
     std::ofstream out(path,std::ios::binary);out.write(reinterpret_cast<const char*>(bytes.data()),std::streamsize(bytes.size()));require(bool(out),"fixture write failed");
 }
-int main() {
+static int donorGate(char** argv) {
+    uint32_t id=0;const std::string idText=argv[3];
+    const auto parsed=std::from_chars(idText.data(),idText.data()+idText.size(),id);
+    require(parsed.ec==std::errc{} && parsed.ptr==idText.data()+idText.size(),"invalid donor ID");
+    const auto archive=forge::big::File::open(argv[2]);const auto* bank=archive.findBank("MBANK_ALLMESHES");
+    require(bank,"missing donor bank");
+    const auto entry=std::find_if(bank->entries.begin(),bank->entries.end(),[&](const auto& e){return e.id==id;});
+    require(entry!=bank->entries.end() && entry->type==5,"missing type-5 donor");
+    const auto donor=forge::meshpreview::decodeLod0(archive.entryData(*entry),5);
+    require(bool(donor.skeletonBlocks),"missing donor raw skeleton");
+    const auto model=albion::meshimport::loadSkinnedModel(argv[4]);
+    const auto mapped=albion::meshimport::mapSkinToDonor(model,donor.bones);
+    const auto output=fs::absolute(argv[5]);require(!fs::exists(output),"donor output must be fresh");
+    forge::meshcompose::Material material;material.name="native donor import test";
+    std::vector<forge::meshcompose::Composed> meshes;
+    for(bool compressed:{false,true}) {
+        auto mesh=forge::meshcompose::composeSkinned("MESH_IMPORTED_"+idText,mapped,{material},*donor.skeletonBlocks,compressed);
+        const auto readback=forge::meshpreview::decodeLod0(mesh.payload,5);
+        require(readback.skeletonBlocks && readback.skeletonBlocks->indices==donor.skeletonBlocks->indices &&
+            readback.skeletonBlocks->names==donor.skeletonBlocks->names && readback.skeletonBlocks->bones==donor.skeletonBlocks->bones &&
+            readback.skeletonBlocks->keyframes==donor.skeletonBlocks->keyframes && readback.skeletonBlocks->inverseBinds==donor.skeletonBlocks->inverseBinds,
+            "imported donor spans changed");
+        meshes.push_back(std::move(mesh));
+    }
+    require(fs::create_directories(output),"cannot create fresh donor output");
+    for(size_t i=0;i<meshes.size();++i) {
+        const auto stem=i?"compressed":"stored";
+        for(const auto& [suffix,bytes]:std::array<std::pair<std::string,const Bytes*>,2>{{{".mesh",&meshes[i].payload},{".info",&meshes[i].info}}}) {
+            std::ofstream stream(output/(std::string(stem)+suffix),std::ios::binary);
+            stream.write(reinterpret_cast<const char*>(bytes->data()),std::streamsize(bytes->size()));require(bool(stream),"donor output write failed");
+        }
+    }
+    std::cout<<"authored glTF -> donor remap -> stored/compressed readback PASS: "<<id<<'\n';return 0;
+}
+int main(int argc,char** argv) {
+    if(argc!=1) {
+        try {require(argc==6 && std::string(argv[1])=="--donor","expected --donor graphics.big ID source.gltf fresh-output-directory");return donorGate(argv);}
+        catch(const std::exception& e) {std::cerr<<"donor input: "<<e.what()<<'\n';return 1;}
+    }
     const auto dir=fs::temp_directory_path()/("FableForgeSkinInput-"+std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
     try {
         require(fs::create_directory(dir),"fixture directory already exists");

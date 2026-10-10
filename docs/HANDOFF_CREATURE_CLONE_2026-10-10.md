@@ -995,3 +995,30 @@ default-pose independence, float jitter and retention of four positive influence
 No test restart or acceptance from an old log. Next: exercise authored glTF input
 and mapped composition against native donor exports with independent readback,
 then owned-bank/private-definition publication and the creature import card.
+
+Native donor input/composition gate added: test_skinnedinput --donor graphics.big
+ID source.gltf fresh-output-directory reads one donor from the archive, uses the
+production skin loader/remapper, composes stored/compressed outputs and verifies
+all five donor raw spans on C++ readback. tools/test_skinned_input_donors.py builds
+tiny sidecar glTF triangles using independent addon-decoded native names, parents
+and IBMs. Generic Python matrix multiplication reverses the coordinate basis;
+skin.joints order is reversed to ensure mapping is not an ordinal passthrough.
+Mesh-node translation/nonuniform mirror must not bake into authored geometry.
+Default node transforms are identity, not a Blender-exported native bind scene.
+This proves this authored donor-metadata route, not a full Blender or native
+geometry export round trip, all donor headers, animation or gameplay behavior.
+
+Five donors (4521/5121/5150/3985/5110, 17-28 bones) pass ten stored/compressed
+independent Python readbacks: exact donor spans in LOD0 and ghost, intended
+triangle positions/winding and per-vertex mapped weights within byte quantization.
+Five required-name mismatch inputs refuse before output-directory creation.
+Evidence: skinned-input-donors-fl8uxu0_ under external 20261010 evidence root;
+result.json records each payload hash and unchanged native graphics SHA256
+8b909c4036a89840413f66828d855ee3ccf29796feaeb1f05f36727a5086f617.
+Initial 18ojta_v packet passed donor 4521 output checks but its refusal assertion
+expected a name error; actual parent-mismatch refusal was equally correct.
+Test assertion now recognizes both specific diagnostic paths; no production
+validation changed. Rebuilt test harness and normal 66-case CTest also PASS.
+No copied banks, native writes, shipping rebuild or checkpoint replacement.
+Next: owned graphics/texture and private-definition transactional publication,
+then creature import card, placement and runtime evidence.
