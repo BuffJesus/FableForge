@@ -683,3 +683,21 @@ original Restore. Three focused Creature/linker/relocation CTests pass. No nativ
 input writes, CLI/GUI promotion, independent retail published delta, complete
 race/rollback matrix or broad-suite acceptance yet. Next: broaden publisher
 negatives and independently verify retail publication/Restore, then CLI/UI.
+
+Retail publisher test mode --body-publish writes only a fresh output outside the
+source install and invokes the typed contract, not raw serialization. Independent
+Python gate passes in `creature-body-publication-3s59jcbe`: native components
+9116/9118 select another existing alternative in their same body part. Both outputs
+match all 14,764 records except the intended four-byte model word, preserve raw
+header/identity tables and names.bin exactly, and contain both creation markers.
+Explicit forge restore removes both created banks and markers. Compiled and
+graphics hashes remain unchanged; no asset banks copied. This is offline binding
+and recovery, not runtime or skeleton compatibility. Gate registered in check_all.
+
+Six additional synthetic publisher negatives pass: wrong model contract, absent
+alternative, unauthorized extra record, stale name-pool bytes, hardlinked source
+output and incompatible destination graphics directory. Refusals retain output
+existence and prior bytes. Initial compile caught a test-only assignment to a
+reference-bearing contract; use a separately constructed proof copy instead.
+Three affected CTests pass again. Complete race/locked-file rollback matrix and
+CLI/UI promotion still remain; no broad suite or new package claim.

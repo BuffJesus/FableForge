@@ -1,6 +1,7 @@
 #include "forge/defedit.hpp"
 #include "forge/defdecode.hpp"
 #include "forge/temporarydirectory.hpp"
+#include "forge/fmplinks.hpp"
 #include "definitionclone.hpp"
 #include "definitionbody.hpp"
 #include <algorithm>
@@ -69,6 +70,26 @@ static int retail(char** argv){
 }
 int main(int argc,char** argv)try{
     using namespace forge;
+    if(argc==9 && std::string_view(argv[1])=="--body-publish") {
+        namespace fs=std::filesystem;
+        const auto native=fs::weakly_canonical(fs::path(argv[2]));
+        const auto output=fs::weakly_canonical(fs::path(argv[4]));
+        const auto relative=output.lexically_relative(native);
+        require(!fs::exists(output)&&!relative.empty()&&*relative.begin()=="..","body output must be fresh and outside source install");
+        const auto folder=native/"data"/"CompiledDefs";
+        const auto names=folder/"names.bin",bank=folder/"game.bin",graphicsPath=native/"data"/"graphics"/"graphics.big";
+        const auto schema=defschema::Schema::load(argv[3]);
+        const auto graphics=big::File::open(graphicsPath);auto plan=bin::File::open(names,bank);
+        const auto bankBytes=read(bank),nameBytes=read(names);
+        const size_t entry=std::stoull(argv[5]),bodyPart=std::stoull(argv[6]),alternative=std::stoull(argv[7]);
+        const auto model=std::stoull(argv[8]);require(model<=UINT32_MAX,"model ID overflow");
+        const auto result=defedit::setCreatureBodyModel(plan,schema,entry,bodyPart,alternative,uint32_t(model),graphics);
+        const albion::definitionwrite::CreatureBodyContract proof{schema,graphics,bankBytes,nameBytes,entry,bodyPart,alternative,uint32_t(model)};
+        albion::definitionwrite::publishCreatureBody(plan,names,bank,graphicsPath,output/"data"/"CompiledDefs"/"game.bin",proof);
+        require(read(bank)==bankBytes&&read(names)==nameBytes,"body test changed native source banks");
+        std::cout<<nlohmann::json{{"entry",entry},{"body_part",bodyPart},{"alternative",alternative},
+            {"offset",result.offset},{"old_id",result.oldModelId},{"new_id",result.newModelId}}.dump()<<'\n';return 0;
+    }
     if(argc==5&&std::string_view(argv[1])=="--retail-audit")return retail(argv);
     require(argc==1,"expected --retail-audit root schema fresh-output or no arguments");
     const auto schema=defschema::Schema::loadText(R"({
@@ -208,6 +229,32 @@ int main(int argc,char** argv)try{
         defedit::setCreatureBodyModel(plan,bindingSchema,3,0,0,20,graphics);
         const albion::definitionwrite::CreatureBodyContract proof{bindingSchema,graphics,bankBytes,nameBytes,3,0,0,20};
         const auto fresh=temp.path()/"body-fresh"/"game.bin";
+        const auto refuseBody=[&](const bin::File& candidate,const auto& contract,const fs::path& destination) {
+            const bool hadBank=fs::exists(destination),hadNames=fs::exists(destination.parent_path()/"names.bin");
+            const auto previousBank=hadBank?read(destination):Bytes{};
+            const auto previousNames=hadNames?read(destination.parent_path()/"names.bin"):Bytes{};
+            bool refused=false;
+            try{albion::definitionwrite::publishCreatureBody(candidate,bodyNames,bodyBank,graphicsPath,destination,contract);}
+            catch(const std::runtime_error&){refused=true;}
+            require(refused,"invalid body publication accepted");
+            require(hadBank==fs::exists(destination)&&hadNames==fs::exists(destination.parent_path()/"names.bin"),"body refusal changed output existence");
+            if(hadBank)require(read(destination)==previousBank,"body refusal changed prior output bank");
+            if(hadNames)require(read(destination.parent_path()/"names.bin")==previousNames,"body refusal changed prior output names");
+        };
+        auto wrongProof=proof;wrongProof.modelId=10;refuseBody(plan,wrongProof,fresh);
+        auto wrongAlternative=proof;wrongAlternative.alternative=99;refuseBody(plan,wrongAlternative,fresh);
+        auto extra=plan;extra.addEntry("OTHER","UNAUTHORIZED",{});refuseBody(extra,proof,fresh);
+        auto oldNamesChanged=nameBytes;oldNamesChanged[0]^=1;write(bodyNames,oldNamesChanged);
+        refuseBody(plan,proof,fresh);write(bodyNames,nameBytes);
+        const auto hardlinked=temp.path()/"body-hardlink"/"game.bin";fs::create_directories(hardlinked.parent_path());
+        fs::create_hard_link(bodyBank,hardlinked);refuseBody(plan,proof,hardlinked);
+        const auto incompatible=temp.path()/"body-destination"/"data"/"CompiledDefs"/"game.bin";
+        fs::create_directories(incompatible.parent_path());write(incompatible,bankBytes);write(incompatible.parent_path()/"names.bin",nameBytes);
+        const auto incompatibleGraphics=incompatible.parent_path().parent_path()/"graphics"/"graphics.big";
+        fs::create_directories(incompatibleGraphics.parent_path());
+        auto changedDirectory=assets;changedDirectory.banks()[0].entries[1].type=1;
+        write(incompatibleGraphics,changedDirectory.serialize());refuseBody(plan,proof,incompatible);
+        require(read(bodyBank)==bankBytes&&read(bodyNames)==nameBytes,"negative body routes altered source");
         auto bad=plan;auto badPayload=bad.entries()[3].data;badPayload.back()^=1;bad.setEntryData(3,badPayload);
         bool denied=false;try{albion::definitionwrite::publishCreatureBody(bad,bodyNames,bodyBank,graphicsPath,fresh,proof);}
         catch(const std::runtime_error&){denied=true;}
