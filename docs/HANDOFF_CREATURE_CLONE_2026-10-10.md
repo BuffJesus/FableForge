@@ -1187,3 +1187,30 @@ specific donor-skin-mapping diagnostic. No production guards/tolerances relaxed.
 Failed-run tiny outputs were removed through authoritative Restore; logs retained.
 No full native definition corpus, GUI, package or runtime acceptance claimed.
 Next: native definition-graph coverage and donor/mesh/texture GUI workflow.
+
+Native combined mesh-plan coverage now passes 140 actual compiled Creature
+graph/slot cases in creature-native-mesh-plan-r2h8bzk9. The skin-input harness
+adds read-only --native-plan: loads original names/game/graphics and the real
+schema, derives the mesh donor from a selected native root/body/alternative,
+prepares a private graph plus skinned mesh, and verifies all prior 14,764 records
+remain exact. Writes only the three new component payloads and mesh payload/info,
+never serializes or copies full native banks. The independent Python gate applies
+the established relocation audit's explicit rewrites to original bytes, restores
+every unselected gameplay triple, and verifies exact graph output plus the one
+selected model word, next mesh ID 8113 and preserved raw LOD0/ghost skeleton spans.
+Original compiled-bank and graphics streaming hashes remain unchanged.
+
+Counts by skeleton ID: 4521=32, 5121=48, 5150=59, 5110=1. ID3985 has no eligible
+native root slot in this corpus and is explicitly NOT EXERCISED for this gate;
+its synthetic graph/public CLI coverage remains separate. Two matching slots of
+root1175 refuse with the established unclassified possible reference at offset347,
+before output creation; no relocation guard weakened. Initial test asserted each
+head fixture had a native root link, correctly exposing the unexercised 3985 case.
+The refusal wording assertion was corrected to the actual specific diagnostic.
+Final evidence contains 843 files/3,356,169 bytes (~3.2 MiB), not native bank copies.
+Rebuilt skin-input harness and its CTest pass. This is native in-memory plan
+acceptance, not native filesystem publication, GUI, package or runtime acceptance.
+GUI investigation locates integration in gui/definitionbrowser.cpp's private
+clone draft/confirmation and gui/app.hpp's shared definition-edit state. Next:
+donor/model/texture card with captured source and destination identity, background
+publication, draft/close protection, reload and real-control UI acceptance.

@@ -308,9 +308,49 @@ static int donorGate(char** argv) {
     write(fs::path(argv[4]).parent_path()/"schema.json",Bytes(schemaText.begin(),schemaText.end()));
     std::cout<<"authored glTF -> donor remap -> stored/compressed readback PASS: "<<id<<'\n';return 0;
 }
+static int nativePlanGate(char** argv) {
+    const fs::path install=argv[2];
+    const auto definitions=forge::bin::File::open(install/"data/CompiledDefs/names.bin",install/"data/CompiledDefs/game.bin");
+    const auto graphics=forge::big::File::open(install/"data/graphics/graphics.big");
+    const auto schema=forge::defschema::Schema::load(argv[3]);
+    const auto model=albion::meshimport::loadSkinnedModel(argv[4]);
+    const auto number=[](const char* text) {
+        size_t value=0;const std::string_view input=text;
+        const auto parsed=std::from_chars(input.data(),input.data()+input.size(),value);
+        require(parsed.ec==std::errc{} && parsed.ptr==input.data()+input.size(),"invalid native-plan selector");return value;
+    };
+    albion::creatureimport::MeshRequest request{number(argv[5]),number(argv[6]),number(argv[7]),
+        "CREATURE_NATIVE_PLAN","FORGE_NATIVE_PLAN_BODY","FORGE_NATIVE_PLAN_APPEARANCE","MESH_NATIVE_PLAN",true};
+    forge::meshcompose::Material material;material.name="native graph input";
+    const auto plan=albion::creatureimport::prepareMesh(definitions,graphics,schema,request,model,{material});
+    require(plan.definitions.entries().size()==definitions.entries().size()+3,"native graph append count");
+    for(size_t i=0;i<definitions.entries().size();++i) {
+        const auto& old=definitions.entries()[i];const auto& current=plan.definitions.entries()[i];
+        require(old.data==current.data && old.name==current.name && old.definition==current.definition &&
+                old.indexInDefinition==current.indexInDefinition,"native prior definition changed");
+    }
+    const fs::path output=fs::absolute(argv[8]);require(!fs::exists(output),"native plan output must be fresh");
+    require(fs::create_directories(output),"native plan output creation failed");
+    const auto write=[](const fs::path& path,const Bytes& bytes) {
+        std::ofstream stream(path,std::ios::binary);stream.write(reinterpret_cast<const char*>(bytes.data()),std::streamsize(bytes.size()));
+        require(bool(stream),"native plan payload write failed");
+    };
+    for(const auto& [name,index]:std::array<std::pair<const char*,size_t>,3>{{
+            {"root",plan.clones.rootIndex},{"body",plan.clones.bodyIndex},{"appearance",plan.clones.appearanceIndex}}})
+        write(output/(std::string(name)+".bin"),plan.definitions.entries()[index].data);
+    const auto& mesh=plan.graphics.findBank("MBANK_ALLMESHES")->entries.back();
+    write(output/"mesh.bin",mesh.data);write(output/"mesh.info",mesh.subHeader);
+    std::cout<<json{{"source_entries",definitions.entries().size()},{"root_index",plan.clones.rootIndex},
+        {"body_index",plan.clones.bodyIndex},{"appearance_index",plan.clones.appearanceIndex},
+        {"donor_model_id",plan.binding.oldModelId},{"mesh_id",plan.binding.newModelId},
+        {"body_offset",plan.binding.offset},{"all_prior_records_preserved",true}}.dump()<<'\n';return 0;
+}
 int main(int argc,char** argv) {
     if(argc!=1) {
-        try {require(argc==6 && std::string(argv[1])=="--donor","expected --donor graphics.big ID source.gltf fresh-output-directory");return donorGate(argv);}
+        try {
+            if(std::string(argv[1])=="--native-plan") {require(argc==9,"expected --native-plan install schema gltf root body alternative fresh-output-directory");return nativePlanGate(argv);}
+            require(argc==6 && std::string(argv[1])=="--donor","expected --donor graphics.big ID source.gltf fresh-output-directory");return donorGate(argv);
+        }
         catch(const std::exception& e) {std::cerr<<"donor input: "<<e.what()<<'\n';return 1;}
     }
     const auto dir=fs::temp_directory_path()/("FableForgeSkinInput-"+std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
