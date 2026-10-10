@@ -601,3 +601,16 @@ Next: independently audit these typed slots on retail components, then expose
 body model selection/binding with exact four-byte deltas, mesh identity/type
 validation, stale-source/destination protection and paired recovery. Skinned
 custom import and runtime skeleton compatibility remain outstanding scope.
+
+Independent retail body-slot audit passes in external 20261010 packet
+`creature-body-model-audit-c7_5_3vw`: all 330 CCreatureDef records accounted for,
+329 parsed, one unsupported prefix refused, 1,745 exact model words across 188
+populated components. The independent parser matches body-part/alternative order,
+offset and ID against canonical output, walks wound/texture/skeletal/expression
+boundaries and later markers, and checks InitialActions at the decoded boundary.
+All compiled-bank hashes unchanged. Stats itself remains opaque: the first audit
+incorrectly assumed a four-byte Stats value; retail has a larger block, so the
+diagnostic now explicitly stops structural interpretation at its marker.
+No Stats grammar, graphics-bank identity/type, skeleton or runtime compatibility
+claim. Targeted linker/relocation tests pass; registered the retail audit in
+check_all without repeating the broad suite. Test executable mode is read-only.

@@ -1,5 +1,6 @@
 #include "forge/defrelocate.hpp"
 #include "forge/defdecode.hpp"
+#include "forge/fmplinks.hpp"
 #include <cstdio>
 #include <iostream>
 #include <stdexcept>
@@ -97,6 +98,33 @@ int audit(char** argv) {
 }
 
 int main(int argc, char** argv) {
+    if(argc==4 && std::string_view(argv[1])=="--creature-body-audit") {
+        try {
+            const auto folder=std::filesystem::path(argv[2])/"data"/"CompiledDefs";
+            const auto schema=forge::defschema::Schema::load(argv[3]);
+            const auto source=forge::bin::File::open(folder/"names.bin",folder/"game.bin");
+            auto rows=nlohmann::json::array();
+            for(size_t i=0;i<source.entries().size();++i) {
+                const auto& entry=source.entries()[i];if(entry.definition!="CCreatureDef") continue;
+                nlohmann::json row{{"index",i},{"models",nlohmann::json::array()}};
+                try {
+                    const auto decoded=forge::defdecode::decode(entry,schema);
+                    if(!decoded.clean() || forge::defdecode::encode(decoded)!=entry.data)
+                        throw std::runtime_error("unclean component decode");
+                    const auto layout=forge::fmplinks::creaturePrefixLayout(decoded.prefix);
+                    row["prefix_length"]=decoded.prefixLen;
+                    for(const auto& slot:layout.bodyModels) {
+                        uint32_t value=0;
+                        for(size_t n=0;n<4;++n)value|=uint32_t(entry.data.at(slot.offset+n))<<(8*n);
+                        row["models"].push_back({{"body_part",slot.bodyPart},{"alternative",slot.alternative},
+                                                {"offset",slot.offset},{"id",value}});
+                    }
+                } catch(const std::exception& e) {row["refused"]=e.what();}
+                rows.push_back(std::move(row));
+            }
+            std::cout<<nlohmann::json{{"records",rows}}.dump()<<'\n';return 0;
+        }catch(const std::exception& e){std::cerr<<e.what()<<'\n';return 1;}
+    }
     if (argc == 4 && std::string_view(argv[1]) == "--creature-animation-name-audit") {
         try {
             using namespace forge;
