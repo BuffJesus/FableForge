@@ -1,5 +1,81 @@
 # Creature donor self-reference foundation, 2026-10-10
 
+## Paused at user request: next-session entry point
+
+User asked to stop and update documentation. Do not automatically resume until
+asked. Last validated implementation commit is **5a91d6f**, pushed on
+`feat/definition-clone-gui-20261010`. The preceding CLI commit is 2bd2b9c.
+Owned checkout: `C:/Users/Cornelio/AppData/Local/FableForgeDevelopment/definition-clone-gui-20261010`.
+RC2 publication is already complete; RC2/stable releases and development archives
+remain unchanged. The full continuation goal is paused, not complete.
+
+Four source files contain **uncommitted, unbuilt, untested GUI WIP**:
+
+- `gui/app.hpp`: opaque custom-import draft, future/result state, model/texture
+  fields, body choices and review/publish/poll method declarations. definitionsBusy
+  now includes the custom-import future.
+- `gui/definitionbrowser.cpp`: review/publish workers with source and destination
+  proofs, captured pack manifest, model/sidecar validation, publisher callback and
+  completion/reload logic. pollDefinitions polls this new worker; custom-mode clone
+  save dispatches to it.
+- `src/meshimport.hpp` / `src/meshimport.cpp`: skinned glTF Model now records source
+  file paths, canonical identities and SHA256 of the exact consumed bytes, including
+  external sidecars. Static loading does not capture hashes. Model ABI changed;
+  existing binaries have NOT been rebuilt against this WIP.
+
+This is scaffolding, **not a usable or accepted custom-import GUI**. No widgets
+have been attached; definitionCreatureMesh remains false, slot choices are not yet
+populated, and no review can currently be started through the UI. Preserve these
+edits and inspect/improve them; do not mistake dirty source for the last tested
+commit. No owning FableForge build/test worker was live at pause. An unrelated
+FableTLC native syntax-check process was observed and left untouched.
+
+Next actions after explicit resume:
+
+1. Populate body/alternative/model choices from the preflight private cloned body
+   in beginDefinitionClone; reset all custom state on new draft/cancel/discard.
+2. Attach optional custom-mesh controls to the private Creature draft: model and
+   texture browse fields, explicit slot selection, mesh/texture names, existing
+   texture ID versus image, format and stored/compressed selection. Keep no-mesh
+   private cloning unchanged. Connect Review to prepareCreatureImport and Create
+   to the reviewed snapshot. Invalidate confirmation when any input changes.
+3. Audit busy/close/discard/automation paths: widgets must not mutate or cancel a
+   publishing draft; existing definition_cancel automation bypasses UI guards.
+   Validate destination switches between review/Create, source bank/name changes,
+   glTF main/sidecar changes, PNG changes, pack-manifest edits and physical aliases.
+   Check modelRoot/context/texture refresh behavior for folder and pack output.
+4. Build the owned GUI, forge and skin-input targets with `-j2` (ABI changed), then
+   test source-file proofs and the existing skin/static-loader neighbors. WIP has
+   no compile or test acceptance yet. Use tiny retained fixture banks for GUI tests
+   at both sizes, including cancellation, stale/refusal, exact deltas and Restore.
+   Native graph gates are read-only; do not publish full native banks merely to
+   test UI. Do not repeat unchanged accepted gates without a relevant change.
+5. Only after real-control acceptance, update roadmap/current status, commit the
+   implementation and consider a separate immutable development checkpoint.
+   Placement, assembled creature presentation and runtime validation remain open;
+   changing one body alternative is not full-body replacement.
+
+Git commands in this worktree require these task-specific object directories:
+`GIT_OBJECT_DIRECTORY=C:/Users/Cornelio/AppData/Local/FableForgeDevelopment/definition-clone-git-objects`
+and `GIT_ALTERNATE_OBJECT_DIRECTORIES=D:/Code/FableForge/.git/objects`.
+Do not remove sibling locks or change their object stores. Re-read root AGENTS and
+the development/format-I/O skills before resuming; no sub-agent delegation enabled.
+
+Retained acceptance evidence under
+`C:/Users/Cornelio/AppData/Local/FableForgeEvidence/20261010`:
+
+- `skinned-input-donors-dkvikiu6`: five native skeleton fixtures with tiny retained
+  source installs, native-donor/publisher/texture/rollback gates.
+- `creature-cli-grenrlbw`: 30 public CLI import/Restore cases + 25 prewrite refusals;
+  independent graph/mesh/pixel preservation, unchanged fixture inputs.
+- `creature-native-mesh-plan-r2h8bzk9`: 140 native graph plans + two verified strict
+  refusals; 3985 native-root linkage explicitly unexercised; native hashes exact.
+- `build-scratch-cleanup-summary.txt`: both user-named build trees cleaned of
+  216.96 GiB logical scratch data; binaries/releases/logs/results preserved.
+
+Continue avoiding full game/texture scratch copies. Original install remains
+read-only: `C:/Programs/Steam/steamapps/common/Fable The Lost Chapters`.
+
 Owned C development checkout/branch unchanged; starting clean at d2678ed.
 Previous turn is progress: recovered one Creature schema field, completed exact
 source/extracted acceptance and committed/pushed. See
