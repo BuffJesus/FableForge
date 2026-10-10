@@ -1,4 +1,4 @@
-> Active continuation: [guarded Creature clone GUI](HANDOFF_CREATURE_CLONE_2026-10-10.md). Distinct shared-component controls pass 36 GUI cases, both-size retail-copy preservation/Restore and eight extracted workflows, including 44 exact-clone GUI neighbors. Own appearance/body cloning remains open. RC2 unchanged.
+> Active continuation: [private Creature visual graph recovery](HANDOFF_CREATURE_CLONE_2026-10-10.md). GUI milestone a04ba4c passes CI. Read-only CDefs/native/PDB evidence establishes visual targets and original-parent ownership; 502 three-node graphs observed, 25 with unresolved candidates. Private writer remains next. RC2 unchanged.
 
 # Navigation lane, 2026-09-27
 

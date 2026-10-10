@@ -199,3 +199,54 @@ Next: commit/push this GUI milestone, then recover a bounded private appearance/
 clone graph from verified CDefs ownership and native evidence. Do not rewrite all
 numeric matches or silently clone shared gameplay components. RC2 and predecessor
 archives remain unchanged; no full-suite, clean-machine or gameplay claim.
+
+## Private visual graph evidence continuation
+
+GUI head a04ba4c Windows CI 38068198733 passed. Current continuation is read-only
+graph/relocation observation, not a private clone writer or eligibility claim.
+`audit_creature_visual_graph.py` independently decodes native CDefs triples and
+checks selected CCreatureDef/CAppearanceDef class targets, original-parent rows,
+duplicate/missing rows and sharing. Synthetic malformed/range/type/duplicate,
+inherited/shared and empty cases pass. Native `creature-visual-graph-c4db1bp_`
+observes 517 Creature roots: 502 have both visual rows, fourteen have no appearance
+row and NULLDEF has an empty listing. All observed visual targets match their
+class keys; referenced original parents contain matching component rows.
+CCreatureDef: 328 own/188 inherited rows, 261 shared rows. CAppearanceDef:
+100 own/402 inherited rows, 442 shared rows. There are 428 unique visual components.
+Sharing counts are Creature-root use observations, not a complete incoming-edge audit.
+
+Bounded original-byte evidence `creature-cdefs-native-d4h9ut0j` records FableWin
+SHA256 a9d6d0977d9d7fc8242da4292ae7ed92e926ca80364a95c003d9b9f689e41845
+and matching FableWin PDB/layout identity. Native CParentDefClassBase save/load
+030633f0/030634d0 writes/reads u16 count plus {u32 class CRC, i32 DefIndex,
+i32 OriginalParentDefIndex}; base loader 03063850 consumes three flag bytes.
+PDB CDefClassBase::CSubDefInfo is eight bytes with those two signed-long members
+at +0/+4. GetSubDef<CCreatureDef> 01ac010e and appearance 01b207b4 call the
+class-key lookup and resolve the first member through GetPDefFromGlobalIndex
+030620e0. CompileSubDefinition 03060c70 compares OriginalParentDefIndex to the
+current parent at 03060cf9..03060cff; a different parent takes instantiate/copy
+before editing, equal parent reuses the existing component. This corroborates
+copy-on-write ownership; private inherited visual rows need localized parent
+reassignment, not remapping that old parent across shared gameplay components.
+`probe_creature_cdefs_native.py` reproduces the bounded packet with optional local
+pefile/capstone and the existing read-only PDB oracle; not a shipping dependency.
+Earlier packet uco3u3aq lacked compiler/PDB capture; final d4h9ut0j includes both.
+The preliminary Ego_r layout query was cross-checked with matching FableWin PDB.
+
+Canonical optional `fableforge_defrelocate_tests --creature-visual-audit` analyzes
+root/body/appearance maps in memory only. Combined independent gate passes at
+`creature-visual-graph-bbhi1gb8`: all 502 three-node graphs round-trip all payloads;
+2,435 verified root rewrites, zero component rewrites. 477 graphs have no unresolved
+candidates; 25 have findings (eight root payloads, twenty appearance payloads,
+with overlap). Raw checks verify every root CDefs rewrite and full payload deltas;
+native bank hashes unchanged. Appearance examples hit long Animation payload
+offsets, not necessarily model IDs. Unknown matches remain refused observations;
+do not value-wide rewrite them or infer a reference domain from integer equality.
+One affected relocation CTest passes; native observation gate registered.
+No new GUI archive or native install copies for this analysis continuation.
+
+Next: establish the unresolved appearance-field asset domains, then implement the
+coordinated private root/body/appearance plan with explicit selected-row parent
+updates and non-mutating refusal. Keep gameplay components and existing assets
+shared until separately requested by the chosen import workflow. Still no private
+visual writer, transaction, GUI or gameplay claim.

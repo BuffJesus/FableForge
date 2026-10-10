@@ -79,6 +79,60 @@ int audit(char** argv) {
 }
 
 int main(int argc, char** argv) {
+    if (argc == 4 && std::string_view(argv[1]) == "--creature-visual-audit") {
+        try {
+            using namespace forge;
+            const auto folder=std::filesystem::path(argv[2])/"data"/"CompiledDefs";
+            const auto schema=defschema::Schema::load(argv[3]);
+            const auto source=bin::File::open(folder/"names.bin",folder/"game.bin");
+            const auto& entries=source.entries();
+            if(entries.size()>UINT32_MAX-3) throw std::runtime_error("visual audit index overflow");
+            auto read=[](const auto& bytes,size_t at) {
+                if(at>bytes.size() || bytes.size()-at<4) throw std::runtime_error("truncated visual audit word");
+                return uint32_t(bytes[at]) | uint32_t(bytes[at+1])<<8 | uint32_t(bytes[at+2])<<16 | uint32_t(bytes[at+3])<<24;
+            };
+            nlohmann::json rows=nlohmann::json::array();
+            for(size_t i=0;i<entries.size();++i) {
+                const auto& root=entries[i];if(root.definition!="CREATURE") continue;
+                const auto decoded=defdecode::decode(root,schema);
+                if(!decoded.clean() || defdecode::encode(decoded)!=root.data || root.data.size()<5)
+                    throw std::runtime_error("visual audit root decode mismatch");
+                const size_t count=size_t(root.data[3]) | size_t(root.data[4])<<8;
+                if(decoded.prefixLen!=5+12*count) throw std::runtime_error("visual audit prefix mismatch");
+                std::vector<size_t> nodes{i};
+                for(const auto* kind:{"CCreatureDef","CAppearanceDef"}) {
+                    std::vector<size_t> matches;
+                    for(size_t row=0;row<count;++row) if(read(root.data,5+12*row)==defdecode::fieldTag(kind))
+                        matches.push_back(read(root.data,9+12*row));
+                    if(matches.size()!=1 || matches.front()>=entries.size() || entries[matches.front()].definition!=kind) break;
+                    nodes.push_back(matches.front());
+                }
+                if(nodes.size()!=3) continue; // Missing shapes are reported independently, not accepted.
+                defrelocate::Maps maps;
+                for(size_t n=0;n<nodes.size();++n) maps.gameEntries.emplace(uint32_t(nodes[n]),uint32_t(entries.size()+n));
+                nlohmann::json payloads=nlohmann::json::array();
+                for(const auto node:nodes) {
+                    const auto& entry=entries[node];const auto view=defdecode::decode(entry,schema);
+                    const auto analysis=defrelocate::analyze(entry,schema,maps);
+                    nlohmann::json payload{{"index",node},{"type",entry.definition},{"prefix",view.prefixLen},
+                        {"clean_roundtrip",view.clean() && defdecode::encode(view)==entry.data},
+                        {"rewrites",nlohmann::json::array()},{"unresolved",nlohmann::json::array()}};
+                    for(const auto& rewrite:analysis.rewrites)
+                        payload["rewrites"].push_back({{"offset",rewrite.offset},{"before",rewrite.before},
+                            {"after",rewrite.after},{"path",rewrite.path},
+                            {"domain",rewrite.domain==defrelocate::Domain::GameEntry?"game":"name"}});
+                    for(const auto& candidate:analysis.unresolved)
+                        payload["unresolved"].push_back({{"offset",candidate.offset},{"value",candidate.value}});
+                    if(analysis.unresolved.empty()) payload["after_hex"]=hex(defrelocate::relocate(entry,schema,maps));
+                    payloads.push_back(std::move(payload));
+                }
+                rows.push_back({{"root",i},{"payloads",std::move(payloads)}});
+            }
+            std::cout<<nlohmann::json{{"entries",entries.size()},{"records",rows},
+                {"clone_eligibility_verified",false}}.dump()<<'\n';
+            return 0;
+        } catch(const std::exception& e) {std::fprintf(stderr,"%s\n",e.what());return 1;}
+    }
     if (argc == 4 && std::string_view(argv[1]) == "--creature-self-audit") {
         try {
             using namespace forge;

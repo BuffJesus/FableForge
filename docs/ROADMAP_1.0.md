@@ -1,4 +1,4 @@
-> Active continuation: [guarded Creature clone GUI](HANDOFF_CREATURE_CLONE_2026-10-10.md). Distinct shared-component controls pass 36 GUI cases, both-size retail-copy preservation/Restore and eight extracted workflows, including 44 exact-clone GUI neighbors. Own appearance/body cloning remains open. RC2 unchanged.
+> Active continuation: [private Creature visual graph recovery](HANDOFF_CREATURE_CLONE_2026-10-10.md). GUI milestone a04ba4c passes CI. Read-only CDefs/native/PDB evidence establishes visual targets and original-parent ownership; 502 three-node graphs observed, 25 with unresolved candidates. Private writer remains next. RC2 unchanged.
 
 # Albion Atlas -> 1.0: what it should do, what it can't, and how we get there
 
@@ -2619,3 +2619,14 @@ workflows, including all 44 exact-clone GUI neighbors. 126 not run and two unrel
 missing-corpus skips remain explicit. ZIP SHA256
 `51d135c1e95f4fb51cfe4a501f164a7064aa3c1577d4467c137c789a54ffca4e`.
 Evidence and remaining scope are recorded in the creature handoff.
+
+Private visual ownership recovery now independently observes all 517 Creature
+roots: 502 have both CCreatureDef/CAppearanceDef rows, fourteen omit appearance,
+NULLDEF is empty. Native original-byte serialization/lookup and matching PDB
+confirm DefIndex and OriginalParentDefIndex plus copy-on-write parent handling.
+In-memory canonical relocation observations round-trip all 502 three-node graphs;
+477 have no unresolved candidates, 25 retain findings (eight roots/twenty
+appearance payloads with overlap). No graph clone eligibility/private writer is
+claimed. One affected CTest and independent raw-delta/hash checks pass. Next:
+recover unresolved appearance asset domains, then coordinated private-clone API.
+No copied native install or new GUI archive for this evidence continuation.
