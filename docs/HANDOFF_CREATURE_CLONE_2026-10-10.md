@@ -355,3 +355,56 @@ asz7xrrz includes them. No private publisher, CLI, GUI, archive or gameplay clai
 Next: a typed paired publisher contract that recomputes the whole three-record
 plan against the fresh source, followed by the private CLI and GUI controls.
 Keep prior shared/exact modes and their tested checkpoint intact.
+
+## Typed private paired publication
+
+Core checkpoint e2a3c54 was pushed; its Windows CI 38075951769 was still running
+at the last observation. `definitionwrite::publishClone` now accepts an explicit
+`CreatureVisualCloneContract` containing schema, donor index and all three names.
+It rejects mixed shared/private contracts and requires exactly three additions
+in the loaded namespace. Before staging, it recomputes the canonical private plan
+from the freshly reopened source and compares every record identity, ordinal and
+payload. The existing PendingBanks pair, source/destination rechecks, offline
+guards, alias refusal and recovery logic are reused, not replaced.
+
+Extended private CTest passes fresh output, exact existing-pair replacement and
+in-place independent fixtures with paired originals/creation markers. It refuses
+tampering in each appended payload, a changed prior slot, wrong donor/name, mixed
+contracts, incompatible already-appended output, orphan recovery records and a
+hardlinked source-bank alias. Fixtures contain only small definition-bank pairs.
+No live-game guard probe, injected rename-failure rollback, new native publisher
+audit, CLI/private GUI wiring or release/package claim yet. Prior core native
+494/23 evidence remains about core cloning, not this new publication path.
+
+Next: build the existing publisher callers and verify shared/exact regressions,
+then expose explicit private names through CLI and the compact GUI confirmation.
+
+Existing GUI/CLI publisher callers rebuilt successfully (session 84749 terminal
+success). Shared Creature CLI gate `creature-clone-cli-66tqgmhc` passes all thirty
+cases, including paired rename-denial rollback and explicit Restore. Those checks
+used the pre-private-command binary with the new publisher header.
+
+Private command is now wired as `defs clone-creature-private <game.bin>
+<donor-name-or-index> <root-name> <body-name> <appearance-name> --schema ... --out
+<game.bin>`. It uses canonical core cloning and the typed publisher; JSON reports
+all three indices/names, private visual components and shared assets. The rebuild
+is still live in session 47337; do not claim this command exercised yet.
+`tools/test_creature_private_clone_cli.py` is ready for that binary and audits
+small independently encoded fixtures, selected owner/reference deltas, original
+numeric-table/name-pool prefixes, selectors and invalid names/CRC collisions.
+Next: observe the same build handle, run that gate, repeat shared CLI against the
+new binary, then commit the publisher/CLI checkpoint and add private GUI mode.
+
+Private command rebuild session 47337 completed successfully. Final independent
+gate `creature-private-cli-syb42lx7` passes 28 cases, including exact existing and
+in-place pair originals/Restore, a Windows name-pool rename denial with rollback,
+and destination pool mismatch. The initial fixture 42wykc1a intentionally hit the
+unknown-scalar guard because opaque Components scalar zero matched moved donor
+zero; changed the synthetic scalar to 99, not the production guard. Earlier
+favbp55q passed 24 cases before rollback/Restore additions. Seven scoped CTests
+pass again; current-binary shared Creature CLI b98vm26u passes 30 cases and generic
+clone `definition-clone-ascu504p` passes 35 including owned
+sleeping-helper running-owner/alias checks. No real game process was launched.
+Registered private gate in check_all; no full broad-suite claim. CLI documentation
+now distinguishes shared components, private visual definitions and shared assets.
+Next: commit/push this checkpoint, then private GUI mode and both-size UI evidence.

@@ -260,6 +260,7 @@ int usage() {
         "       [--schema <schema.json>] --out <out-root>\n"
         "  forge defs clone <bin> <donor-name-or-index> <new-name> --out <bin> [--names <names.bin>] [--json]\n"
         "  forge defs clone-creature <game.bin> <donor-name-or-index> <new-name> --schema <schema.json> --out <game.bin> [--names <names.bin>] [--json]\n"
+        "  forge defs clone-creature-private <game.bin> <donor-name-or-index> <root-name> <body-name> <appearance-name> --schema <schema.json> --out <game.bin> [--names <names.bin>] [--json]\n"
         "  forge defs set-field <bin> [--names <names.bin>] <entryName> <field> <value>\n"
         "  forge title add <game-root> <OBJECT_HERO_TITLE_NEW> --donor <OBJECT_HERO_TITLE_X>\n"
         "       --gui <textId> --desc <textId> --greet <groupId> --comment <groupId> --self <groupId>\n"
@@ -7605,7 +7606,8 @@ int questCard(const std::string& gameRoot, const std::string& schemaPath,
 // writes the modified bin (+ names.bin) to --out or a "<bin>.set-field.bin"
 // sibling. Untouched entries stay byte-identical (semantic re-serialize).
 int defsClone(const std::string& binPath,const std::string& namesPath,const std::string& donor,
-              const std::string& newName,const std::string& outPath,bool asJson,const std::string& creatureSchemaPath={}) {
+              const std::string& newName,const std::string& outPath,bool asJson,const std::string& creatureSchemaPath={},
+              const std::optional<std::pair<std::string,std::string>>& visualNames={}) {
     namespace fs=std::filesystem;
     const fs::path input=fs::u8path(binPath),names=namesPath.empty()?input.parent_path()/"names.bin":fs::u8path(namesPath);
     auto file=forge::bin::File::open(names,input);std::optional<size_t> exact;
@@ -7625,13 +7627,30 @@ int defsClone(const std::string& binPath,const std::string& namesPath,const std:
             throw std::runtime_error("defs clone-creature: source and destination must be game.bin");
         creatureSchema=forge::defschema::Schema::load(fs::u8path(creatureSchemaPath));
     }
-    const auto added=creatureSchema?forge::defedit::cloneCreature(file,*creatureSchema,index,newName):forge::defedit::cloneEntry(file,index,newName);
-    albion::definitionwrite::publishClone(file,names,input,output,true,creatureSchema?&*creatureSchema:nullptr,
-        creatureSchema?std::optional<size_t>(index):std::nullopt);
+    size_t added;
+    std::optional<forge::defedit::CreatureVisualCloneResult> visual;
+    if(visualNames) {
+        if(!creatureSchema) throw std::runtime_error("defs clone-creature-private: --schema is required");
+        visual=forge::defedit::cloneCreatureVisuals(file,*creatureSchema,index,newName,visualNames->first,visualNames->second);
+        added=visual->rootIndex;
+        const albion::definitionwrite::CreatureVisualCloneContract contract{*creatureSchema,index,newName,visualNames->first,visualNames->second};
+        albion::definitionwrite::publishClone(file,names,input,output,true,nullptr,{},&contract);
+    } else {
+        added=creatureSchema?forge::defedit::cloneCreature(file,*creatureSchema,index,newName):forge::defedit::cloneEntry(file,index,newName);
+        albion::definitionwrite::publishClone(file,names,input,output,true,creatureSchema?&*creatureSchema:nullptr,
+            creatureSchema?std::optional<size_t>(index):std::nullopt);
+    }
     const auto& entry=file.entries()[added];
-    if(asJson) std::puts(json{{"bin",output.string()},{"names",(output.parent_path()/"names.bin").string()},
+    json report{{"bin",output.string()},{"names",(output.parent_path()/"names.bin").string()},
         {"donor_index",index},{"entry_index",added},{"definition",entry.definition},{"entry_name",entry.name},
-        {"index_in_definition",entry.indexInDefinition},{"payload_size",entry.data.size()}}.dump(2).c_str());
+        {"index_in_definition",entry.indexInDefinition},{"payload_size",entry.data.size()}};
+    if(visual) {
+        report["body_index"]=visual->bodyIndex;report["appearance_index"]=visual->appearanceIndex;
+        report["body_name"]=file.entries()[visual->bodyIndex].name;
+        report["appearance_name"]=file.entries()[visual->appearanceIndex].name;
+        report["visual_components_private"]=true;report["assets_shared"]=true;
+    }
+    if(asJson) std::puts(report.dump(2).c_str());
     else std::printf("Cloned record %zu to %zu: %s\n",index,added,entry.name.c_str());
     return 0;
 }
@@ -14317,8 +14336,9 @@ int main(int argc, char** argv) {
             return uiSetCardModel(gameRoot, schemaPath, entryName, (uint32_t)meshId,
                                   outRoot, inPlace);
         }
-        if(args.size()>=2 && args[0]=="defs" && (args[1]=="clone" || args[1]=="clone-creature")) {
-            const bool creature=args[1]=="clone-creature";
+        if(args.size()>=2 && args[0]=="defs" && (args[1]=="clone" || args[1]=="clone-creature" || args[1]=="clone-creature-private")) {
+            const bool privateVisual=args[1]=="clone-creature-private";
+            const bool creature=args[1]!="clone";
             std::string names,out,creatureSchema;bool asJson=false;std::vector<std::string> positional;
             for(size_t i=2;i<args.size();++i) {
                 const auto& argument=args[i];
@@ -14329,9 +14349,12 @@ int main(int argc, char** argv) {
                 else if(argument.rfind("--",0)==0) throw std::runtime_error("defs clone: unknown option "+argument);
                 else positional.push_back(argument);
             }
-            if(positional.size()!=3 || out.empty()) throw std::runtime_error("defs clone: usage: defs clone <bin> <donor-name-or-index> <new-name> --out <bin> [--names <names.bin>] [--json]");
+            if(positional.size()!=(privateVisual?5u:3u) || out.empty()) throw std::runtime_error(privateVisual?
+                "defs clone-creature-private: expected <game.bin> <donor-name-or-index> <root-name> <body-name> <appearance-name> --schema <schema.json> --out <game.bin>":
+                "defs clone: usage: defs clone <bin> <donor-name-or-index> <new-name> --out <bin> [--names <names.bin>] [--json]");
             if(creature && creatureSchema.empty()) throw std::runtime_error("defs clone-creature: --schema <schema.json> is required");
-            return defsClone(positional[0],names,positional[1],positional[2],out,asJson,creatureSchema);
+            return defsClone(positional[0],names,positional[1],positional[2],out,asJson,creatureSchema,
+                privateVisual?std::optional<std::pair<std::string,std::string>>(std::make_pair(positional[3],positional[4])):std::nullopt);
         }
         // forge defs set-field <bin> [--names <names.bin>] <entryName> <field>
         //   <value> [--schema <schema.json>] [--out <out.bin>] [--json]

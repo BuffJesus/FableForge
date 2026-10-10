@@ -19,10 +19,16 @@ inline void verifyCloneRecords(const forge::bin::File& expected,const forge::bin
 }
 // Clone publication appends a name pool and bank in one rollback-capable pair.
 // Existing outputs must still be the exact loaded namespace and record set.
+struct CreatureVisualCloneContract {
+    const forge::defschema::Schema& schema;
+    size_t donorIndex;
+    std::string rootName, bodyName, appearanceName;
+};
 inline void publishClone(const forge::bin::File& bank,const std::filesystem::path& sourceNames,
                          const std::filesystem::path& sourceBank,const std::filesystem::path& destination,
                          bool trackRecovery=true,const forge::defschema::Schema* creatureSchema=nullptr,
-                         std::optional<size_t> creatureDonor={}) {
+                         std::optional<size_t> creatureDonor={},
+                         const CreatureVisualCloneContract* visualContract=nullptr) {
     namespace fs=std::filesystem;
     const auto target=fs::absolute(destination).lexically_normal(),names=target.parent_path()/"names.bin";
     const auto sameFile=[](const fs::path& a,const fs::path& b) {
@@ -35,15 +41,27 @@ inline void publishClone(const forge::bin::File& bank,const std::filesystem::pat
             throw std::runtime_error("definition clone: output aliases a source through a hard link");
     requireOffline(target);requireOffline(names);
     const auto source=forge::bin::File::open(sourceNames,sourceBank);
-    if(bank.entries().size()!=source.entries().size()+1 || bank.originalNames()!=source.originalNames())
-        throw std::runtime_error("definition clone: expected one appended record in the loaded namespace");
+    if(visualContract && (creatureSchema || creatureDonor))
+        throw std::runtime_error("definition clone: conflicting Creature clone contracts");
+    const size_t additions=visualContract?3:1;
+    if(bank.entries().size()!=source.entries().size()+additions || bank.originalNames()!=source.originalNames())
+        throw std::runtime_error("definition clone: unexpected appended record count or loaded namespace");
     verifyCloneRecords(bank,source,source.entries().size());
     const auto& clone=bank.entries().back();
     if(clone.name.empty() || std::any_of(source.entries().begin(),source.entries().end(),[&](const auto& e){return e.name==clone.name;}))
         throw std::runtime_error("definition clone: appended name is not unique");
     if(bool(creatureSchema)!=creatureDonor.has_value())
         throw std::runtime_error("definition clone: incomplete Creature donor contract");
-    if(creatureSchema) {
+    if(visualContract) {
+        if(sourceBank.filename()!="game.bin" || target.filename()!="game.bin")
+            throw std::runtime_error("private creature clone: source and destination must be game.bin");
+        auto verified=source;
+        forge::defedit::cloneCreatureVisuals(verified,visualContract->schema,visualContract->donorIndex,
+            visualContract->rootName,visualContract->bodyName,visualContract->appearanceName);
+        // Compare all three identities, dense ordinals and payloads, not merely
+        // the root. Caller-provided component bytes cannot bypass the core plan.
+        verifyCloneRecords(verified,bank,verified.entries().size());
+    } else if(creatureSchema) {
         if(sourceBank.filename()!="game.bin" || target.filename()!="game.bin")
             throw std::runtime_error("creature clone: source and destination must be game.bin");
         auto verified=source;

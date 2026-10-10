@@ -348,6 +348,8 @@ def main():
               [sys.executable, "tools/test_definition_clone.py"], capture_output=True)
     ok &= run("Creature clone selector, verified self-only payloads, paired rollback and Restore",
               [sys.executable, "tools/test_creature_clone_cli.py"], capture_output=True)
+    ok &= run("Private Creature CLI ownership, paired publication, rollback and Restore",
+              [sys.executable, "tools/test_creature_private_clone_cli.py"], capture_output=True)
     ok &= run("Creature clone controls, draft protection, stale sources and paired Restore",
               [sys.executable, "tools/test_creature_clone_ui.py"], capture_output=True)
     ok &= run("Creature visual graph synthetic ownership observations",

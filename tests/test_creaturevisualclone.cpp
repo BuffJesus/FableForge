@@ -1,6 +1,7 @@
 #include "forge/defedit.hpp"
 #include "forge/defdecode.hpp"
 #include "forge/temporarydirectory.hpp"
+#include "definitionclone.hpp"
 #include <algorithm>
 #include <fstream>
 #include <iostream>
@@ -135,6 +136,57 @@ int main(int argc,char** argv)try{
     const auto poolBytes=read(outNames);require(std::equal(oldNames.begin()+20,oldNames.end(),poolBytes.begin()+20),"private output altered loaded name records");
     auto again=working;const auto second=defedit::cloneCreatureVisuals(again,schema,7,"SECOND_ROOT","SECOND_PRIVATE_BODY","SECOND_PRIVATE_APPEARANCE");
     require(second.rootIndex==10&&second.bodyIndex==11&&second.appearanceIndex==12,"private clone of clone failed");
+    namespace fs=std::filesystem;
+    const albion::definitionwrite::CreatureVisualCloneContract contract{schema,1,"NEW_ROOT","NEW_BODY","NEW_APPEARANCE"};
+    const auto published=temp.path()/"published"/"game.bin";
+    auto publish=[&](const auto& candidate,const auto& destination,const auto* proof){
+        albion::definitionwrite::publishClone(candidate,namesPath,bankPath,destination,true,nullptr,{},proof);
+    };
+    auto deniedPublication=[&](const auto& candidate,const auto* proof){
+        bool denied=false;try{publish(candidate,published,proof);}catch(const std::runtime_error&){denied=true;}
+        require(denied,"invalid private publisher plan accepted");
+        require(!fs::exists(published.parent_path()),"private publisher refusal created output");
+        require(read(namesPath)==oldNames&&read(bankPath)==oldBank,"private publisher refusal changed source");
+    };
+    deniedPublication(working,static_cast<const albion::definitionwrite::CreatureVisualCloneContract*>(nullptr));
+    for(size_t slot=0;slot<3;++slot){
+        auto tampered=working;auto bytes=tampered.entries()[7+slot].data;bytes.back()^=1;
+        tampered.setEntryData(7+slot,bytes);deniedPublication(tampered,&contract);
+    }
+    auto wrongContract=contract;wrongContract.donorIndex=0;deniedPublication(working,&wrongContract);
+    auto wrongNameContract=contract;wrongNameContract.bodyName="DIFFERENT_BODY";deniedPublication(working,&wrongNameContract);
+    bool conflictDenied=false;
+    try{albion::definitionwrite::publishClone(working,namesPath,bankPath,published,true,&schema,1,&contract);}
+    catch(const std::runtime_error&){conflictDenied=true;}
+    require(conflictDenied&&!fs::exists(published.parent_path()),"conflicting private/shared contracts wrote output");
+    auto priorTampered=working;priorTampered.setEntryData(5,{8,9});deniedPublication(priorTampered,&contract);
+    publish(working,published,&contract);
+    const auto publishedBank=bin::File::open(published.parent_path()/"names.bin",published);
+    albion::definitionwrite::verifyCloneRecords(working,publishedBank,working.entries().size());
+    for(const auto& target:{published,published.parent_path()/"names.bin"})
+        require(fs::is_regular_file(fs::path(target.string()+albion::backups::kCreatedSuffix)),"private fresh publication lacks creation marker");
+    bool repeatDenied=false;try{publish(working,published,&contract);}catch(const std::runtime_error&){repeatDenied=true;}
+    require(repeatDenied,"private publisher overwrote an incompatible appended namespace");
+    const auto existing=temp.path()/"existing"/"game.bin";fs::create_directories(existing.parent_path());
+    write(existing,oldBank);write(existing.parent_path()/"names.bin",oldNames);publish(working,existing,&contract);
+    require(read(fs::path(existing.string()+albion::backups::kOrigSuffix))==oldBank&&
+        read(fs::path((existing.parent_path()/"names.bin").string()+albion::backups::kOrigSuffix))==oldNames,
+        "private paired publication did not retain both original files");
+    const auto failed=temp.path()/"recovery-refusal"/"game.bin";fs::create_directories(failed.parent_path());
+    write(fs::path(failed.string()+albion::backups::kCreatedSuffix),{1});
+    bool recoveryDenied=false;try{publish(working,failed,&contract);}catch(const std::runtime_error&){recoveryDenied=true;}
+    require(recoveryDenied&&!fs::exists(failed)&&!fs::exists(failed.parent_path()/"names.bin"),"orphan recovery record did not prevent paired creation");
+    const auto alias=temp.path()/"hardlink-refusal"/"game.bin";fs::create_directories(alias.parent_path());
+    fs::create_hard_link(bankPath,alias);
+    bool aliasDenied=false;try{publish(working,alias,&contract);}catch(const std::runtime_error&){aliasDenied=true;}
+    require(aliasDenied&&read(alias)==oldBank&&!fs::exists(alias.parent_path()/"names.bin"),"hardlinked source alias did not refuse before writes");
+    // In-place publication is confined to another independent fixture pair.
+    const auto inPlace=temp.path()/"in-place"/"game.bin";fs::create_directories(inPlace.parent_path());
+    const auto inPlaceNames=inPlace.parent_path()/"names.bin";write(inPlace,oldBank);write(inPlaceNames,oldNames);
+    albion::definitionwrite::publishClone(working,inPlaceNames,inPlace,inPlace,true,nullptr,{},&contract);
+    albion::definitionwrite::verifyCloneRecords(working,bin::File::open(inPlaceNames,inPlace),working.entries().size());
+    require(read(fs::path(inPlace.string()+albion::backups::kOrigSuffix))==oldBank&&
+        read(fs::path(inPlaceNames.string()+albion::backups::kOrigSuffix))==oldNames,"private in-place pair lacks exact originals");
     require(read(namesPath)==oldNames&&read(bankPath)==oldBank,"private test changed original source pair");
     std::cout<<"Private Creature graph: selected ownership, shared gameplay, atomic refusal and paired roundtrip PASS\n";return 0;
 }catch(const std::exception& error){std::cerr<<error.what()<<'\n';return 1;}
