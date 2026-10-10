@@ -915,6 +915,25 @@ static void appendUvNotes(Model& model) {
     }
 }
 
+std::array<double,16> inverseBindInFable(const std::array<float,16>& source) {
+    for(float value:source)
+        if(!std::isfinite(value)) throw std::runtime_error("non-finite source inverse bind matrix");
+    if(source[3]!=0 || source[7]!=0 || source[11]!=0 || source[15]!=1)
+        throw std::runtime_error("non-affine source inverse bind matrix");
+    // Signed permutation plus uniform unit scale. Linear terms lose the
+    // uniform scale in conjugation; translation retains metres-to-centimetres.
+    constexpr std::array<size_t,3> axes{0,2,1};
+    constexpr std::array<double,3> signs{1,-1,1};
+    std::array<double,16> result{};
+    for(size_t row=0;row<3;++row) {
+        for(size_t column=0;column<3;++column)
+            result[row*4+column]=signs[row]*signs[column]*source[axes[column]*4+axes[row]];
+        result[row*4+3]=100.0*signs[row]*source[12+axes[row]];
+    }
+    result[15]=1;
+    return result;
+}
+
 Model loadModel(const fs::path& path) {
     std::string ext = path.extension().string();
     std::transform(ext.begin(), ext.end(), ext.begin(), [](unsigned char c) { return char(std::tolower(c)); });

@@ -56,6 +56,10 @@ Model loadModel(const std::filesystem::path& path);
 // Does not apply pose or skinned mesh-node transforms to the authored vertices,
 // map joints to a donor, compose bytes or publish banks. Static loader unchanged.
 Model loadSkinnedModel(const std::filesystem::path& path);
+// Coordinate-only conversion for donor bind comparison: C * M * inverse(C),
+// C maps glTF metres (x,y,z) to Fable centimetres (x,-z,y)*100.
+// Returns a row-major affine matrix. Does not establish donor compatibility.
+std::array<double,16> inverseBindInFable(const std::array<float,16>& gltfMatrix);
 
 struct ImportRequest {
     std::filesystem::path model;

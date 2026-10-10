@@ -31,7 +31,7 @@ static Fixture fixture(bool shortJoints=false,size_t weightType=5126) {
             {{"buffer",0},{"byteOffset",36},{"byteLength",weightOffset-36}},
             {{"buffer",0},{"byteOffset",weightOffset},{"byteLength",matrixOffset-weightOffset}},
             {{"buffer",0},{"byteOffset",matrixOffset},{"byteLength",256}}}},
-        {"accessors",{{{"bufferView",0},{"componentType",5126},{"count",3},{"type","VEC3"}},
+        {"accessors",{{{"bufferView",0},{"componentType",5126},{"count",3},{"type","VEC3"},{"min",{0,0,0}},{"max",{1,1,0}}},
             {{"bufferView",1},{"componentType",shortJoints?5123:5121},{"count",3},{"type","VEC4"}},
             {{"bufferView",2},{"componentType",weightType},{"count",3},{"type","VEC4"},{"normalized",weightType!=5126}},
             {{"bufferView",3},{"componentType",5126},{"count",4},{"type","MAT4"}}}},
@@ -54,6 +54,31 @@ int main() {
         require(fs::create_directory(dir),"fixture directory already exists");
         require(fs::canonical(dir).parent_path()==fs::canonical(fs::temp_directory_path()),"fixture escaped temporary root");
         const auto path=dir/"skin.glb";size_t checks=0;
+        // Independent point oracle: converting after applying M must agree
+        // with applying the converted matrix to the converted point. Use an
+        // asymmetric linear matrix to expose transpose/sign/axis mistakes.
+        const std::array<float,16> source{2,3,5,0,7,11,13,0,17,19,23,0,29,31,37,1};
+        const auto converted=albion::meshimport::inverseBindInFable(source);
+        for(const std::array<double,3> point:std::array<std::array<double,3>,4>{{{0,0,0},{1,0,0},{0,1,0},{2,-3,4}}}) {
+            std::array<double,3> transformed{};
+            for(size_t row=0;row<3;++row) {
+                transformed[row]=source[12+row];
+                for(size_t column=0;column<3;++column) transformed[row]+=source[column*4+row]*point[column];
+            }
+            const std::array<double,3> fablePoint{100*point[0],-100*point[2],100*point[1]};
+            const std::array<double,3> expected{100*transformed[0],-100*transformed[2],100*transformed[1]};
+            for(size_t row=0;row<3;++row) {
+                double actual=converted[row*4+3];
+                for(size_t column=0;column<3;++column) actual+=converted[row*4+column]*fablePoint[column];
+                require(actual==expected[row],"inverse bind coordinate conjugation mismatch");
+            }
+            ++checks;
+        }
+        for(size_t bad:{3u,7u,11u,15u,0u}) {
+            auto invalid=source;invalid[bad]=bad==0?std::nanf(""):2.f;
+            bool rejected=false;try {albion::meshimport::inverseBindInFable(invalid);}catch(const std::exception&) {rejected=true;}
+            require(rejected,"invalid inverse bind conversion accepted");++checks;
+        }
         const auto load=[&](const Fixture& f){save(path,f);return albion::meshimport::loadSkinnedModel(path);};
         const auto refuses=[&](const Fixture& f,const char* label) {bool failed=false;try {load(f);}catch(const std::exception&) {failed=true;}require(failed,label);++checks;};
         for(bool shorts:{false,true}) for(size_t weights:{5126u,5121u,5123u}) {

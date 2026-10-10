@@ -953,3 +953,16 @@ owned graphics/texture and private definition publication, creature import card
 and placement/runtime evidence. Reading metadata is not compatibility proof;
 the complete custom-body workflow remains unfinished. Existing checkpoints stay
 as previously validated.
+
+Donor comparison coordinate foundation: inverseBindInFable converts original
+column-major glTF matrices to row-major Fable matrices by C*M*inverse(C), where
+C maps metres (x,y,z) to centimetres (x,-z,y)*100. Linear scale cancels in this
+conjugation; translation retains the factor 100. Source nonfinite/projective
+matrices refuse. No donor bytes, source pose or weights are modified. Independent
+point-action tests use asymmetric linear terms and four points to catch transpose,
+axis/sign and unit errors, plus five malformed matrix refusals. Fixture POSITION
+now includes its actual min/max bounds. This is coordinate conversion only, not
+joint-name resolution, hierarchy validation or donor compatibility proof; those
+remain the next implementation step. Shipping executables/checkpoints unchanged.
+Rebuilt skin/static input targets; all three focused skin-input, static-input and
+skinned-composition CTests pass. Skin-input executable reports 45 checks PASS.
