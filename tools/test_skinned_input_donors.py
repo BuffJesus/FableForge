@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Native donor glTF/remapping/composition gate; tiny outputs, no bank writes."""
+"""Native donor import/publication gate; tiny outputs, no native bank writes."""
 import argparse
 import copy
 import hashlib
@@ -10,6 +10,7 @@ import struct
 import subprocess
 import sys
 import tempfile
+import zlib
 
 
 def digest(path):
@@ -58,6 +59,12 @@ def fixture(skeleton, folder):
            'scenes': [{'nodes': [count,count+1]}], 'scene': 0}
     (folder/'source.bin').write_bytes(data)
     (folder/'source.gltf').write_text(json.dumps(doc), encoding='utf-8')
+    def png_chunk(kind, payload):
+        return struct.pack('>I', len(payload))+kind+payload+struct.pack('>I', zlib.crc32(kind+payload))
+    row = b'\0'+bytes([255,0,0,255]*2+[0,255,0,255]*2)
+    png = b'\x89PNG\r\n\x1a\n'+png_chunk(b'IHDR', struct.pack('>2I5B',4,4,8,6,0,0,0))
+    png += png_chunk(b'IDAT', zlib.compress(row*4))+png_chunk(b'IEND', b'')
+    (folder/'diffuse.png').write_bytes(png)
     return doc
 
 
@@ -99,6 +106,43 @@ def main():
         assert 'publication in-place and Restore:' in result.stdout, 'reader lacks coordinated publication gate'
         if os.name=='nt':
             assert 'publication locked-third-file rollback:' in result.stdout, 'reader lacks Windows rollback gate'
+        assert 'publication texture append, Restore and refusal:' in result.stdout, 'reader lacks texture publication gate'
+        if os.name=='nt':
+            assert 'publication texture fourth-file rollback:' in result.stdout, 'reader lacks four-file rollback gate'
+        for format_name, fmt in (('dxt1',0x1f),('dxt3',0x20),('argb8888',1)):
+            texture_output = folder/('texture-output-'+format_name)
+            texture_bank = fc.TextureBank([str(texture_output/'textures.big')])
+            assert texture_bank.count()==2 and texture_bank.entry_name(8)=='IMPORTED_DIFFUSE'
+            info = fc.parse_texture.parse_info(texture_bank._by_id[8][2]['info'])
+            assert info['fmt']==fmt
+            def pixels(tex_id):
+                # TextureBank.decode pads the LZO result with zeros and drops
+                # Fable's three raw tail bytes. Use the addon's correct framed
+                # block reader, then its independent pixel-format decoder.
+                buf, _, entry, _ = texture_bank._by_id[tex_id]
+                desc = fc.parse_texture.parse_info(entry['info'])
+                assert desc['alloc_w']==4 and desc['alloc_h']==4
+                pay = buf[entry['offset']:entry['offset']+entry['size']]
+                raw_size = fc._base_mip_raw_len(desc['fmt'], 4, 4)
+                if desc['first_block_field']:
+                    raw, cursor = fc._lzo_fable(pay,0,raw_size)
+                    assert cursor==desc['first_block_field']
+                else:
+                    raw = pay[:raw_size]
+                assert len(raw)==raw_size
+                return fc.rgba_to_blender(fc.parse_texture.decode_mip(desc['fmt'],raw,4,4))
+            old = pixels(7)
+            new = pixels(8)
+            assert all(abs(value-[0,0,1,1][i%4])<.01 for i,value in enumerate(old))
+            expected_row = [1,0,0,1]*2+[0,1,0,1]*2
+            assert all(abs(value-expected_row[i%16])<.01 for i,value in enumerate(new)), 'independent texture pixels differ'
+            graphics_bytes, graphics_entries = fc.open_graphics_big(str(texture_output/'graphics.big'))
+            composed_entry = max(graphics_entries,key=lambda e:e['id'])
+            pay = graphics_bytes[composed_entry['offset']:composed_entry['offset']+composed_entry['size']]
+            _, texture_prims, _ = fc._parse_mesh_primitives(pay,5)
+            assert len(texture_prims)==1
+            mesh_model = fc.build_model(graphics_bytes, composed_entry, texture_bank, decode_textures=False)
+            assert len(mesh_model.materials)==1 and mesh_model.materials[0].base_tex_id==8
         for mode in ('stored','compressed'):
             payload_path = output/(mode+'.mesh')
             payload = payload_path.read_bytes()
@@ -133,7 +177,9 @@ def main():
     assert len(checks)==10 and digest(graphics)==before
     (work/'result.json').write_text(json.dumps({'passed': True, 'graphics_sha256': before, 'checks': checks, 'refusals': 5,
         'publication': {'fresh_restore': 10, 'in_place_restore': 5, 'source_stale': 5, 'destination_stale': 5,
-                        'missing_texture': 5, 'locked_third_file_rollback': 5 if os.name=='nt' else 0}}, indent=2)+'\n', encoding='utf-8')
+                        'missing_texture': 5, 'locked_third_file_rollback': 5 if os.name=='nt' else 0,
+                        'texture_fresh_restore': 15, 'texture_in_place_restore': 5, 'texture_image_stale': 5,
+                        'texture_name_refusal': 5, 'texture_fourth_file_rollback': 5 if os.name=='nt' else 0}}, indent=2)+'\n', encoding='utf-8')
 
 
 if __name__=='__main__':

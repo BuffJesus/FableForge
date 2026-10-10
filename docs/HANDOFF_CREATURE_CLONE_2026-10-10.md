@@ -1111,3 +1111,42 @@ tree and was rebuilt. Production source diagnostics identify input index and
 path/content mismatch without relaxing checks. No release/shipping rebuild or
 gameplay claim. Next: optional texture append in the same transaction, native
 definition graph cases, CLI/GUI card wiring and placement/runtime validation.
+
+Optional texture append now participates in publishMesh's same transaction.
+captureTexture binds the selected image path/hash to a draft; commit revalidates
+its resolved identity and bytes alongside all source/destination proofs. A unique
+uppercase/number/underscore symbol (<80 bytes) appends to nonempty BIGB
+GBANK_MAIN_PC through native terraintex::importPng. Reserves the next bank-local
+ID before composing; every ordinary material diffuse uses that ID, while other
+maps must resolve in the original texture bank. DXT1, DXT3 and ARGB encoding use
+the existing native writer. Imported ID/type/name/count and texture validation
+checked; all prior bank/entry metadata and payloads must survive exactly. New
+texture bytes are staged first, then names/game/graphics; one PendingBanks install
+handles all four, including backups/creation markers and rollback. No separate
+texture publication precedes creature publication. Returned plan owns fully read
+texture bytes and the new ID, avoiding stale in-place offsets. Exactly the selected
+new-body slot/alternative changes; other body alternatives remain donor-derived.
+
+Final _m23l9ws native-donor packet PASS: fifteen fresh four-file publications and
+Restore (three formats x five donors), five in-place four-file Restore/hash checks,
+five image-change barriers and five existing-name refusals. Five Windows locked
+fourth-file cases roll back earlier texture/names/game replacements to their exact
+baseline hashes. Prior ten mesh outputs, three-file publication/Restore, stale
+source/destination and missing-existing-ID guards remain PASS. Publication texture
+sources are one-entry 4x4 blue fixtures, not native texture-bank copies; tiny
+published archives retained per format for independent Python checks. Native
+graphics SHA unchanged; private visual and 66-case skin-input CTests PASS.
+
+Independent Python pixel/descriptor checks decode preserved blue and appended
+red/green stripe images for all fifteen outputs and verify material texture ID 8.
+First 2h00g95a packet exposed an addon TextureBank.decode issue: it pads the LZO
+result with zeros rather than consuming Fable's three raw tail bytes. The test now
+uses that addon's correctly framed _lzo_fable reader followed by its independent
+parse_texture pixel decoder; exact tail handling checked against mip-0 span size.
+No external oracle files or production texture encoder changed, no pixel tolerance
+relaxed (0.01 normalized channel tolerance for DXT quantization). Runner manifests
+now include texture publication counts and stage-presence guards against an older
+harness. Existing texture assets remain unchanged except the single appended slot.
+No shipping/release rebuild, full native definition corpus or runtime claim. Next:
+CLI wiring and native definition-graph cases, then the donor/mesh/texture GUI card,
+placement and runtime validation. New-asset flow is not complete without that UI.

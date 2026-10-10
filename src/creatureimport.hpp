@@ -18,6 +18,8 @@ struct MeshPlan {
     forge::big::File graphics;
     forge::defedit::CreatureVisualCloneResult clones;
     forge::defedit::CreatureBodyModelResult binding;
+    std::optional<forge::big::File> textures; // publication with texture append only
+    uint32_t textureId=0;
 };
 // All-or-nothing in-memory plan. Derives the mesh donor from the selected body
 // slot in the privately cloned CCreatureDef, not an unrelated caller-chosen rig.

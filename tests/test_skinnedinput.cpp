@@ -4,6 +4,7 @@
 #include "creatureimport.hpp"
 #include "creaturepublish.hpp"
 #include "forge/temporarydirectory.hpp"
+#include "forge/texturewrite.hpp"
 #include "nlohmann/json.hpp"
 #include <bit>
 #include <algorithm>
@@ -105,7 +106,13 @@ static int donorGate(char** argv) {
     forge::big::File tinyGraphics;tinyGraphics.setMagic("BIGB");tinyGraphics.setVersion(archive.version());
     auto tinyEntry=*entry;tinyEntry.data=archive.entryData(*entry);
     tinyGraphics.addBank("MBANK_ALLMESHES",bank->id).entries.push_back(std::move(tinyEntry));
-    forge::big::File tinyTextures;tinyTextures.setMagic("BIGB");tinyTextures.addBank("GBANK_MAIN_PC",0);
+    forge::big::File tinyTextures;tinyTextures.setMagic("BIGB");
+    forge::texturewrite::Image blue;blue.width=blue.height=4;
+    for(size_t pixel=0;pixel<16;++pixel) blue.rgba.insert(blue.rgba.end(),{0,0,255,255});
+    const auto builtBlue=forge::texturewrite::buildEntry(blue,forge::texturewrite::kFormatARGB);
+    forge::big::Entry blueEntry;blueEntry.id=7;blueEntry.name="EXISTING";blueEntry.magic=42;blueEntry.devCrc=123;
+    blueEntry.devSources={"retained source"};blueEntry.data=builtBlue.payload;blueEntry.subHeader=builtBlue.info;blueEntry.length=uint32_t(blueEntry.data.size());
+    tinyTextures.addBank("GBANK_MAIN_PC",9).entries.push_back(std::move(blueEntry));
     const auto graphicsPath=definitionFixture.path()/"graphics.big",texturesPath=definitionFixture.path()/"textures.big";
     write(graphicsPath,tinyGraphics.serialize());write(texturesPath,tinyTextures.serialize());
     const albion::creatureimport::Sources sources{namesPath,bankPath,graphicsPath,texturesPath};
@@ -201,6 +208,61 @@ static int donorGate(char** argv) {
     require(rollbackRefused,"locked third publication target accepted");
     albion::creatureimport::requireSourceProof(lockedSources,lockedProof);
 #endif
+    const auto imagePath=fs::path(argv[4]).parent_path()/"diffuse.png";
+    std::cout<<"publication texture append, Restore and refusal: "<<id<<std::endl;
+    for(const auto& format:{"dxt1","dxt3","argb8888"}) {
+        const auto append=albion::creatureimport::captureTexture(imagePath,"IMPORTED_DIFFUSE",format);
+        const auto textureRoot=definitionFixture.path()/(std::string("texture-")+format);
+        const auto published=albion::creatureimport::publishMesh(sources,proof,textureRoot,"data/graphics/graphics.big",schema,request,model,{material},true,{},&append);
+        require(published.textures && published.textureId==8 && published.textures->findBank("GBANK_MAIN_PC")->entries.size()==2,
+                "texture append result differs");
+        const auto& texture=published.textures->findBank("GBANK_MAIN_PC")->entries.back();
+        require(forge::terraintex::validateTextureEntry(texture.subHeader,published.textures->entryData(texture)).ok,"appended texture validation failed");
+        const auto textureMesh=forge::meshpreview::decodeLod0(published.graphics.entryData(published.graphics.findBank("MBANK_ALLMESHES")->entries.back()),5);
+        require(textureMesh.materials.size()==1 && textureMesh.materials[0].diffuseTexture==8,"new diffuse ID not bound to composed mesh");
+        // Retain tiny published files for independent Python archive/texture
+        // decoding before Restore removes the actual publication tree.
+        const auto retained=fs::path(argv[4]).parent_path()/(std::string("texture-output-")+format);
+        require(fs::create_directory(retained),"texture evidence output must be fresh");
+        fs::copy_file(textureRoot/"data/graphics/pc/textures.big",retained/"textures.big");
+        fs::copy_file(textureRoot/"data/graphics/graphics.big",retained/"graphics.big");
+        restoreNotes.clear();restoreError.clear();
+        require(albion::backups::restoreAll(textureRoot,true,restoreNotes,restoreError)==4 && restoreError.empty(),"four-file texture publication Restore failed");
+        require(!fs::exists(textureRoot/"data/graphics/pc/textures.big"),"Restore kept newly created textures bank");
+        albion::creatureimport::requireSourceProof(sources,proof);
+    }
+    auto append=albion::creatureimport::captureTexture(imagePath,"IMPORTED_DIFFUSE","argb8888");
+    const auto pngBytes=albion::definitionwrite::cloneBytes(imagePath);bool imageStaleRefused=false;
+    const auto imageStaleRoot=definitionFixture.path()/"image-stale";
+    try {albion::creatureimport::publishMesh(sources,proof,imageStaleRoot,"data/graphics/graphics.big",schema,request,model,{material},true,[&]{
+        std::ofstream stream(imagePath,std::ios::binary|std::ios::app);stream.put('x');stream.close();require(bool(stream),"image stale update failed");
+    },&append);}catch(const std::exception& e){imageStaleRefused=std::string(e.what()).find("texture source changed")!=std::string::npos;}
+    write(imagePath,pngBytes);require(imageStaleRefused && !fs::exists(imageStaleRoot/"data/graphics/pc/textures.big"),"stale image published a texture bank");
+    const auto textureInPlaceRoot=definitionFixture.path()/"texture-in-place";
+    const auto textureInPlaceSources=existingTree(textureInPlaceRoot);const auto textureInPlaceProof=albion::creatureimport::captureSources(textureInPlaceSources);
+    const auto textureInPlace=albion::creatureimport::publishMesh(textureInPlaceSources,textureInPlaceProof,textureInPlaceRoot,"data/graphics/graphics.big",schema,request,model,{material},true,{},&append);
+    require(textureInPlace.textures && textureInPlace.textures->entryData(textureInPlace.textures->findBank("GBANK_MAIN_PC")->entries.front())==tinyTextures.entryData(tinyTextures.findBank("GBANK_MAIN_PC")->entries.front()),
+            "in-place texture return lost unchanged payload");
+    restoreNotes.clear();restoreError.clear();
+    require(albion::backups::restoreAll(textureInPlaceRoot,true,restoreNotes,restoreError)==4 && restoreError.empty(),"in-place four-file Restore failed");
+    albion::creatureimport::requireSourceProof(textureInPlaceSources,textureInPlaceProof);
+#ifdef _WIN32
+    std::cout<<"publication texture fourth-file rollback: "<<id<<std::endl;
+    const auto textureLockedRoot=definitionFixture.path()/"texture-locked-output";const auto textureLockedSources=existingTree(textureLockedRoot);
+    const auto textureLockedProof=albion::creatureimport::captureSources(textureLockedSources);
+    locked=INVALID_HANDLE_VALUE;bool textureRollbackRefused=false;
+    try {albion::creatureimport::publishMesh(sources,proof,textureLockedRoot,"data/graphics/graphics.big",schema,request,model,{material},true,[&]{
+        locked=CreateFileW(textureLockedSources.graphics.c_str(),GENERIC_READ,FILE_SHARE_READ,nullptr,OPEN_EXISTING,FILE_ATTRIBUTE_NORMAL,nullptr);
+        require(locked!=INVALID_HANDLE_VALUE,"cannot lock fourth publication target");
+    },&append);}catch(const std::exception& e){textureRollbackRefused=std::string(e.what()).find("creature publication:")!=std::string::npos;}
+    if(locked!=INVALID_HANDLE_VALUE) CloseHandle(locked);
+    require(textureRollbackRefused,"locked fourth target accepted during texture publication");
+    albion::creatureimport::requireSourceProof(textureLockedSources,textureLockedProof);
+#endif
+    append=albion::creatureimport::captureTexture(imagePath,"EXISTING");bool duplicateTextureRefused=false;
+    try {albion::creatureimport::publishMesh(sources,proof,definitionFixture.path()/"duplicate-texture","data/graphics/graphics.big",schema,request,model,{material},true,{},&append);}
+    catch(const std::exception& e){duplicateTextureRefused=std::string(e.what()).find("new texture name already exists")!=std::string::npos;}
+    require(duplicateTextureRefused,"existing texture name accepted");
     const auto planRefuses=[&](const albion::creatureimport::MeshRequest& invalid,const albion::meshimport::Model& authored,const char* reason) {
         bool rejected=false;
         try {albion::creatureimport::prepareMesh(definitions,archive,schema,invalid,authored,{material});}
