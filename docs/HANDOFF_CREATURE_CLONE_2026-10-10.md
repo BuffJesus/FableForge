@@ -866,3 +866,45 @@ headers without resolving this known layout gap. Accepted head donors exercise
 the existing supported path. Next: complete skinned composer using raw skeleton
 spans, authored influences and bounded multi-block palettes, then geometry import
 and owned bank/definition publication. Runtime compatibility remains unproven.
+
+Canonical composeSkinned API now emits new type-5 payload/Info bytes from authored
+geometry, per-vertex local-slot influence lists, materials and retained donor raw
+skeleton spans. Float stride 28, triangle lists, no degenerate sentinel, <=16-bone
+greedy animated-block palettes. Splitting regroups vertices in face-first order
+and duplicates shared vertices across blocks; post-duplication u16 capacity is
+checked. Top three positive influences normalize via the largest first (finite
+large sums cannot overflow); byte weights sum exactly 255. Explicit empty lists
+bind to slot zero; missing per-vertex lists refuse. Duplicate slots, negative/
+nonfinite weights, out-of-range bones and nonfinite geometry refuse. Public API
+documents top-three reduction; future import UI must expose this authoring limit.
+Every raw donor span survives exactly in LOD0 and ghost, including ignored IBM/TRS
+padding. Validates shape/counts, meaningful bind floats and parent cycles. Donor
+support: 1-256 local slots; name pool 4 bytes to 1 MiB. Tiny <=3-byte pools are
+outside the current chunked reader contract. PhysicsIndex zero; no bank writes.
+
+New registered fableforge_skinnedcompose_tests passes stored/compressed single/
+multi-palette face/skin checks, raw donor+ghost equality, top-three quantization,
+empty-root and huge finite weights, malformed spans/influences/geometry refusals,
+multiple primitives, sentinel/name refusals, and the specific overflow caused
+by palette duplication at 65,535 input vertices. Rebuilt static meshbounds and
+headpose regressions pass; shared static writer changes only the default-zero
+header animation parameter. Shipping applications not rebuilt or repackaged.
+
+Independent read-only addon oracle tools/test_skinned_composition.py gate passes
+12 payloads in `skinned-composition-dtgr8apx`: compressed/stored authored triangles
+against five native head skeletons, and synthetic multi-palette fans. Python
+checks exact cloned donor and ghost spans, descriptor excluding ghost, positions/
+winding, <=16 palettes, block vertex ownership, per-corner bone mapping, joint
+byte divisibility and <=3 nonzero weights summing to 255. Native graphics SHA256
+unchanged; no archive copies. First f63lgdws packet completed the C++ retail gate
+but Python assertion referenced nonexistent 'sbc' key; corrected to sblocks.
+Initial C++ harness compile failure was a lambda default argument referencing a
+local; corrected test harness. No production validation weakened for either.
+Evidence source paths explicitly supplied (--oracle-root), not checkout-assumed.
+
+This completes the byte composer, not the custom-body workflow or runtime proof.
+Next: import authored joint names/weights and bind transforms (glTF), resolve to
+the donor local skeleton without silently stripping skin, then owned graphics /
+texture and private-definition publication with GUI selection and readback.
+Optional-header volume/generator decoder gap remains as previously recorded;
+do not claim all native donors supported. Existing validated packages unchanged.
