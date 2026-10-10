@@ -3,6 +3,7 @@
 import argparse
 import hashlib
 import json
+import os
 from pathlib import Path
 import shutil
 import struct
@@ -23,6 +24,7 @@ def main():
     parser.add_argument('--install', type=Path, required=True)
     parser.add_argument('--tool', type=Path, default=repo/'build/forge-tools.exe')
     parser.add_argument('--forge', type=Path, default=repo/'build/forge.exe')
+    parser.add_argument('--gui', type=Path, help='Drive the GUI clone controls instead of the CLI')
     parser.add_argument('--work-root', type=Path, default=repo/'build')
     parser.add_argument('--donor', default='OBJECT_QUEST_CARD_TEMPLATE')
     args = parser.parse_args()
@@ -50,18 +52,43 @@ def main():
     bank = output/'data/CompiledDefs/game.bin'
     names = bank.parent/'names.bin'
 
-    def run(label, command):
+    def run(label, command, env=None):
         result = subprocess.run(list(map(str, command)), cwd=work, capture_output=True,
-                                text=True, encoding='utf-8', errors='replace', timeout=120)
+                                text=True, encoding='utf-8', errors='replace', timeout=120, env=env)
         (work/(label+'.log')).write_text(result.stdout+result.stderr, encoding='utf-8')
         assert result.returncode == 0, result.stdout+result.stderr
         return result
 
     try:
-        result = run('clone', [args.tool.resolve(), 'defs', 'clone', folder/'game.bin',
-                              args.donor, new_name, '--out', bank, '--json'])
-        report = json.loads(result.stdout)
-        assert report['donor_index'] == donor and report['entry_index'] == len(before)
+        if args.gui:
+            from test_definition_edit_ui import click
+            # The selected native install supplies read-only map/asset inputs;
+            # every authored file goes to this new owned output directory.
+            script = work/'clone.txt'
+            lines = ['wait_maps', 'wait_ready', f'set saveroot {output.as_posix()}',
+                     'assets_tab 6', 'wait_definitions', 'frames 3',
+                     'definition_select '+args.donor, 'frames 3']
+            lines += click('btn_definition_clone')+['assert_state definition_cloning 1']
+            lines += click('input_definition_edit_value')+['input_text '+new_name, 'frames 3']
+            lines += click('btn_definition_save')+click('btn_definition_save_confirm')
+            lines += ['wait_ready', 'wait_definitions', 'frames 3',
+                      'assert_state definition_cloning 0',
+                      'assert_state context_ready 1',
+                      f'assert_state definition_selected {len(before)}',
+                      'definition_select '+new_name,
+                      f'screenshot {(work/"created.png").as_posix()}', 'quit']
+            script.write_text('\n'.join(lines)+'\n', encoding='utf-8')
+            run('clone-ui', [args.gui.resolve(), '--install', args.install.resolve(),
+                '--size', '1440x900', '--auto', script], env=dict(os.environ,
+                FABLEFORGE_AUTOMATION_HIDDEN='1', APPDATA=str(work/'profile'),
+                LOCALAPPDATA=str(work/'local')))
+            trace = Path(str(script)+'.log').read_text(encoding='utf-8')
+            assert 'RESULT PASS' in trace and 'FAIL ' not in trace, trace[-7000:]
+        else:
+            result = run('clone', [args.tool.resolve(), 'defs', 'clone', folder/'game.bin',
+                                  args.donor, new_name, '--out', bank, '--json'])
+            report = json.loads(result.stdout)
+            assert report['donor_index'] == donor and report['entry_index'] == len(before)
         after = read_bank(output)
         assert after[:-1] == before and len(after) == len(before)+1
         assert after[-1] == dict(before[donor], name=new_name)
@@ -88,7 +115,8 @@ def main():
     (work/'result.json').write_text(json.dumps({
         'passed': True, 'preserved_records': len(before), 'donor_index': donor,
         'new_index': len(before), 'native_hashes_unchanged': hashes,
-        'tool_sha256': digest(args.tool.resolve()), 'forge_sha256': digest(args.forge.resolve())
+        'tool_sha256': digest(args.tool.resolve()), 'forge_sha256': digest(args.forge.resolve()),
+        'gui_sha256': digest(args.gui.resolve()) if args.gui else None
     }, indent=2)+'\n', encoding='utf-8')
     print('PASS:', len(before), 'records and identity rows preserved; exact donor/name appended; Restore passed', flush=True)
 

@@ -17,6 +17,8 @@
 #include <optional>
 #include <vector>
 
+namespace forge::meshpreview { struct SkeletonBlocks; }
+
 namespace forge::meshcompose {
 
 // Current static writer capacity per primitive.
@@ -55,6 +57,24 @@ struct Composed {
     float sphereRadius = 0;
     size_t vertices = 0, triangles = 0;
 };
+
+struct Influence { uint16_t bone = 0; double weight = 0; }; // local donor slot, not global ID
+struct SkinnedPrimitive {
+    Primitive geometry;
+    std::vector<std::vector<Influence>> skin; // exactly one list per vertex
+};
+// New type-5 payload: float positions (stride 28), triangle lists and greedy
+// <=16-bone palettes with shared vertices duplicated across animated blocks.
+// Uses the top three positive influences, normalized to bytes summing to 255;
+// an explicitly empty influence list binds to donor slot 0. Rejects nonfinite,
+// negative, duplicate-slot or out-of-range influences and malformed donor spans.
+// Donors have 1-256 local slots and a 4-byte to 1-MiB terminated name pool;
+// smaller name blocks are outside the existing chunked-LZO readback contract.
+// All five decoded donor skeleton spans survive exactly in LOD0 and ghost LOD.
+// This composes bytes only; it does not publish banks or prove runtime compatibility.
+Composed composeSkinned(const std::string& name,const std::vector<SkinnedPrimitive>& prims,
+                        const std::vector<Material>& materials,
+                        const meshpreview::SkeletonBlocks& skeleton,bool compress=true);
 
 // `name` must start with "MESH_" (the payload classifier). Throws std::invalid_argument on bad input
 // (no prims / materials, > 65535 primitives or vertices in one primitive, a face index out of range,

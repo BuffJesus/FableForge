@@ -589,6 +589,9 @@ public:
     bool setDefinitionBank(const std::string& bank);
     void browseDefinition(const std::string& name);
     bool beginDefinitionEdit(size_t field);
+    bool beginDefinitionClone(bool creature=false,bool privateVisual=false);
+    bool beginDefinitionBodyModel(size_t bodyPart,size_t alternative);
+    bool saveDefinitionClone();
     bool setDefinitionEditValue(const std::string& value);
     bool saveDefinitionEdit();
     bool definitionsBusy() const {return definitionFuture_.valid();}
@@ -619,12 +622,20 @@ private:
     char definitionSearch_[256]={};
     bool definitionLoaded_=false,definitionFilterDirty_=true;
     bool definitionEditing_=false,definitionEditConfirm_=false;
+    bool definitionCloning_=false;
+    forge::bin::File definitionCloneFile_;
+    forge::big::File definitionBodyGraphics_;
+    std::filesystem::path definitionBodyGraphicsPath_;
+    size_t definitionBodyPart_=0,definitionBodyAlternative_=0;
+    std::vector<uint8_t> definitionCloneNamesBytes_,definitionCloneBankBytes_;
     size_t definitionEditIndex_=0;
     forge::bin::Entry definitionEditExpected_;
     std::vector<std::pair<uint32_t,std::string>> definitionEditExpectedNames_;
+    std::map<size_t,forge::bin::Entry> definitionEditExpectedGroups_;
     std::filesystem::path definitionEditNames_,definitionEditBank_,definitionEditDestination_;
     std::string definitionEditField_,definitionEditType_,definitionEditError_,definitionEditSuccess_;
     char definitionEditValue_[128]={};
+    char definitionCloneBodyName_[128]={},definitionCloneAppearanceName_[128]={};
     char definitionNameSearch_[128]={};
     std::pair<std::filesystem::path,std::filesystem::path> definitionPaths() const;
     bool selectDefinitionIndex(size_t index,bool reveal=true);
@@ -1571,6 +1582,9 @@ public:
     void setDpiScale(float s) { dpiScale_ = s; }
 private:
     ImFont* fontBody_ = nullptr;
+    // Shared immutable bytes outlive ImGui's sources and avoid one file copy per
+    // role/scale. main.cpp destroys the atlas before this App is destroyed.
+    std::map<std::string,std::vector<unsigned char>> fontFileData_;
     ImFont* fontBold_ = nullptr;
     ImFont* fontTitle_ = nullptr;
     ImFont* fontSmall_ = nullptr;

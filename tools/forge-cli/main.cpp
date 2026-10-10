@@ -37,6 +37,7 @@
 #include "textwrite.hpp"
 #include "definitionwrite.hpp"
 #include "definitionclone.hpp"
+#include "definitionbody.hpp"
 #include "textdisplay.hpp"
 #include "temporarydirectory.hpp"
 #include "forge/bin.hpp"
@@ -259,6 +260,9 @@ int usage() {
         "  forge ui clone-object-model <game-root> <donorObject> <newObject> <meshId>\n"
         "       [--schema <schema.json>] --out <out-root>\n"
         "  forge defs clone <bin> <donor-name-or-index> <new-name> --out <bin> [--names <names.bin>] [--json]\n"
+        "  forge defs clone-creature <game.bin> <donor-name-or-index> <new-name> --schema <schema.json> --out <game.bin> [--names <names.bin>] [--json]\n"
+        "  forge defs clone-creature-private <game.bin> <donor-name-or-index> <root-name> <body-name> <appearance-name> --schema <schema.json> --out <game.bin> [--names <names.bin>] [--json]\n"
+        "  forge defs bind-body-model <game.bin> <entry-index> <body-part> <alternative> <model-id> --schema <schema.json> --graphics <graphics.big> --out <game.bin> [--names <names.bin>] [--json]\n"
         "  forge defs set-field <bin> [--names <names.bin>] <entryName> <field> <value>\n"
         "  forge title add <game-root> <OBJECT_HERO_TITLE_NEW> --donor <OBJECT_HERO_TITLE_X>\n"
         "       --gui <textId> --desc <textId> --greet <groupId> --comment <groupId> --self <groupId>\n"
@@ -7603,8 +7607,40 @@ int questCard(const std::string& gameRoot, const std::string& schemaPath,
 // parses <value> into the field's typed bytes, rewrites only that value, and
 // writes the modified bin (+ names.bin) to --out or a "<bin>.set-field.bin"
 // sibling. Untouched entries stay byte-identical (semantic re-serialize).
+int defsBindBody(const std::vector<std::string>& positional,const std::string& namesPath,
+                 const std::string& schemaPath,const std::string& graphicsPath,
+                 const std::string& outputPath,bool asJson) {
+    namespace fs=std::filesystem;
+    const auto number=[](const std::string& text) {
+        uint64_t value=0;const auto parsed=std::from_chars(text.data(),text.data()+text.size(),value);
+        if(parsed.ec!=std::errc{} || parsed.ptr!=text.data()+text.size())
+            throw std::runtime_error("body binding: indices and model ID must be complete unsigned decimal values");
+        return value;
+    };
+    const auto entry=number(positional[1]),body=number(positional[2]),alternative=number(positional[3]),model=number(positional[4]);
+    if(entry>SIZE_MAX || body>SIZE_MAX || alternative>SIZE_MAX || model>UINT32_MAX)
+        throw std::runtime_error("body binding: index or model ID overflow");
+    const auto input=fs::u8path(positional[0]),names=namesPath.empty()?input.parent_path()/"names.bin":fs::u8path(namesPath);
+    const auto output=fs::u8path(outputPath),graphicsFile=fs::u8path(graphicsPath);
+    const auto bankBytes=albion::definitionwrite::cloneBytes(input),nameBytes=albion::definitionwrite::cloneBytes(names);
+    const auto schema=forge::defschema::Schema::load(fs::u8path(schemaPath));
+    const auto graphics=forge::big::File::open(graphicsFile);auto plan=forge::bin::File::open(names,input);
+    const auto result=forge::defedit::setCreatureBodyModel(plan,schema,size_t(entry),size_t(body),size_t(alternative),uint32_t(model),graphics);
+    const albion::definitionwrite::CreatureBodyContract contract{schema,graphics,bankBytes,nameBytes,
+        size_t(entry),size_t(body),size_t(alternative),uint32_t(model)};
+    albion::definitionwrite::publishCreatureBody(plan,names,input,graphicsFile,output,contract);
+    const json report{{"entry_index",entry},{"body_part",body},{"alternative",alternative},
+        {"offset",result.offset},{"old_model_id",result.oldModelId},{"new_model_id",result.newModelId},
+        {"bin",output.string()},{"assets_shared",true},{"runtime_compatibility_verified",false}};
+    if(asJson)std::puts(report.dump(2).c_str());
+    else std::printf("Bound body part %zu alternative %zu in entry %zu to model %u (assets shared; runtime compatibility unverified)\n",
+        size_t(body),size_t(alternative),size_t(entry),uint32_t(model));
+    return 0;
+}
+
 int defsClone(const std::string& binPath,const std::string& namesPath,const std::string& donor,
-              const std::string& newName,const std::string& outPath,bool asJson) {
+              const std::string& newName,const std::string& outPath,bool asJson,const std::string& creatureSchemaPath={},
+              const std::optional<std::pair<std::string,std::string>>& visualNames={}) {
     namespace fs=std::filesystem;
     const fs::path input=fs::u8path(binPath),names=namesPath.empty()?input.parent_path()/"names.bin":fs::u8path(namesPath);
     auto file=forge::bin::File::open(names,input);std::optional<size_t> exact;
@@ -7618,12 +7654,36 @@ int defsClone(const std::string& binPath,const std::string& namesPath,const std:
         if(parsed.ec!=std::errc{} || parsed.ptr!=donor.data()+donor.size())
             throw std::runtime_error("defs clone: choose an exact donor name or complete unsigned index");
     }
-    const auto added=forge::defedit::cloneEntry(file,index,newName);const auto output=fs::u8path(outPath);
-    albion::definitionwrite::publishClone(file,names,input,output,true);
+    const auto output=fs::u8path(outPath);std::optional<forge::defschema::Schema> creatureSchema;
+    if(!creatureSchemaPath.empty()) {
+        if(input.filename()!="game.bin" || output.filename()!="game.bin")
+            throw std::runtime_error("defs clone-creature: source and destination must be game.bin");
+        creatureSchema=forge::defschema::Schema::load(fs::u8path(creatureSchemaPath));
+    }
+    size_t added;
+    std::optional<forge::defedit::CreatureVisualCloneResult> visual;
+    if(visualNames) {
+        if(!creatureSchema) throw std::runtime_error("defs clone-creature-private: --schema is required");
+        visual=forge::defedit::cloneCreatureVisuals(file,*creatureSchema,index,newName,visualNames->first,visualNames->second);
+        added=visual->rootIndex;
+        const albion::definitionwrite::CreatureVisualCloneContract contract{*creatureSchema,index,newName,visualNames->first,visualNames->second};
+        albion::definitionwrite::publishClone(file,names,input,output,true,nullptr,{},&contract);
+    } else {
+        added=creatureSchema?forge::defedit::cloneCreature(file,*creatureSchema,index,newName):forge::defedit::cloneEntry(file,index,newName);
+        albion::definitionwrite::publishClone(file,names,input,output,true,creatureSchema?&*creatureSchema:nullptr,
+            creatureSchema?std::optional<size_t>(index):std::nullopt);
+    }
     const auto& entry=file.entries()[added];
-    if(asJson) std::puts(json{{"bin",output.string()},{"names",(output.parent_path()/"names.bin").string()},
+    json report{{"bin",output.string()},{"names",(output.parent_path()/"names.bin").string()},
         {"donor_index",index},{"entry_index",added},{"definition",entry.definition},{"entry_name",entry.name},
-        {"index_in_definition",entry.indexInDefinition},{"payload_size",entry.data.size()}}.dump(2).c_str());
+        {"index_in_definition",entry.indexInDefinition},{"payload_size",entry.data.size()}};
+    if(visual) {
+        report["body_index"]=visual->bodyIndex;report["appearance_index"]=visual->appearanceIndex;
+        report["body_name"]=file.entries()[visual->bodyIndex].name;
+        report["appearance_name"]=file.entries()[visual->appearanceIndex].name;
+        report["visual_components_private"]=true;report["assets_shared"]=true;
+    }
+    if(asJson) std::puts(report.dump(2).c_str());
     else std::printf("Cloned record %zu to %zu: %s\n",index,added,entry.name.c_str());
     return 0;
 }
@@ -14309,19 +14369,42 @@ int main(int argc, char** argv) {
             return uiSetCardModel(gameRoot, schemaPath, entryName, (uint32_t)meshId,
                                   outRoot, inPlace);
         }
-        if(args.size()>=2 && args[0]=="defs" && args[1]=="clone") {
-            std::string names,out;bool asJson=false;std::vector<std::string> positional;
+        if(args.size()>=2 && args[0]=="defs" && args[1]=="bind-body-model") {
+            std::string names,schema,graphics,out;bool asJson=false;std::vector<std::string> positional;
+            for(size_t i=2;i<args.size();++i) {
+                const auto& arg=args[i];
+                if(arg=="--names" || arg=="--schema" || arg=="--graphics" || arg=="--out") {
+                    if(i+1>=args.size() || args[i+1].starts_with("--"))throw std::runtime_error("body binding: option requires a path");
+                    auto& value=arg=="--names"?names:arg=="--schema"?schema:arg=="--graphics"?graphics:out;
+                    if(!value.empty())throw std::runtime_error("body binding: duplicate option "+arg);
+                    value=args[++i];
+                }else if(arg=="--json")asJson=true;
+                else if(arg.starts_with("--"))throw std::runtime_error("body binding: unknown option "+arg);
+                else positional.push_back(arg);
+            }
+            if(positional.size()!=5 || schema.empty() || graphics.empty() || out.empty())
+                throw std::runtime_error("body binding: expected <game.bin> <entry-index> <body-part> <alternative> <model-id> --schema <schema.json> --graphics <graphics.big> --out <game.bin>");
+            return defsBindBody(positional,names,schema,graphics,out,asJson);
+        }
+        if(args.size()>=2 && args[0]=="defs" && (args[1]=="clone" || args[1]=="clone-creature" || args[1]=="clone-creature-private")) {
+            const bool privateVisual=args[1]=="clone-creature-private";
+            const bool creature=args[1]!="clone";
+            std::string names,out,creatureSchema;bool asJson=false;std::vector<std::string> positional;
             for(size_t i=2;i<args.size();++i) {
                 const auto& argument=args[i];
-                if(argument=="--names" || argument=="--out") {
+                if(argument=="--names" || argument=="--out" || (creature && argument=="--schema")) {
                     if(i+1>=args.size() || args[i+1].rfind("--",0)==0) throw std::runtime_error("defs clone: option requires a path");
-                    if(argument=="--names") names=args[++i];else out=args[++i];
+                    if(argument=="--names") names=args[++i];else if(argument=="--schema") creatureSchema=args[++i];else out=args[++i];
                 } else if(argument=="--json") asJson=true;
                 else if(argument.rfind("--",0)==0) throw std::runtime_error("defs clone: unknown option "+argument);
                 else positional.push_back(argument);
             }
-            if(positional.size()!=3 || out.empty()) throw std::runtime_error("defs clone: usage: defs clone <bin> <donor-name-or-index> <new-name> --out <bin> [--names <names.bin>] [--json]");
-            return defsClone(positional[0],names,positional[1],positional[2],out,asJson);
+            if(positional.size()!=(privateVisual?5u:3u) || out.empty()) throw std::runtime_error(privateVisual?
+                "defs clone-creature-private: expected <game.bin> <donor-name-or-index> <root-name> <body-name> <appearance-name> --schema <schema.json> --out <game.bin>":
+                "defs clone: usage: defs clone <bin> <donor-name-or-index> <new-name> --out <bin> [--names <names.bin>] [--json]");
+            if(creature && creatureSchema.empty()) throw std::runtime_error("defs clone-creature: --schema <schema.json> is required");
+            return defsClone(positional[0],names,positional[1],positional[2],out,asJson,creatureSchema,
+                privateVisual?std::optional<std::pair<std::string,std::string>>(std::make_pair(positional[3],positional[4])):std::nullopt);
         }
         // forge defs set-field <bin> [--names <names.bin>] <entryName> <field>
         //   <value> [--schema <schema.json>] [--out <out.bin>] [--json]

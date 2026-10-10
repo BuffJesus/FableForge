@@ -1,4 +1,4 @@
-> Latest session checkpoint: [2026-10-10 continuation](HANDOFF_2026-10-10.md). RC2 passes all 54 CTests and 57 selected extracted workflows; GitHub release integration is next.
+> Paused at user request: [Creature visual workflows and next-session entry point](HANDOFF_CREATURE_CLONE_2026-10-10.md). Last tested/pushed implementation 5a91d6f: coordinated skinned CLI import/Restore and 140 native graph plans pass. Four source files contain uncommitted, unbuilt GUI scaffolding; widgets and acceptance remain unfinished. Resume only when asked. Runtime compatibility unverified; RC2 unchanged.
 
 # Albion Atlas -> 1.0: what it should do, what it can't, and how we get there
 
@@ -2456,3 +2456,177 @@ forge-tools defs clone <bin> <donor-name-or-index> <new-name> --out <bin> [--nam
 Thirty-five CLI cases pass: exact/numeric/unnamed/duplicate-index donors, invalid selectors/names, fresh and in-place publication, existing outputs, incompatible/missing pools, orphan recovery, physical aliases, rollback after a locked name-file rename, Restore and running-owner/junction refusal using an owned dummy helper. Original source files remain exact. Both clone/BIN-writer CTest targets pass. A full retail-bank export preserves all 14,764 prior records and identity-table rows, appends the exact donor and one correctly keyed name, and restores creation outputs without changing native hashes. Nineteen field-publication and fourteen selector neighbors pass. C evidence: definition-clone-038ldrlw, retail-definition-clone-export-rdt8kq3r, definition-publication-lz8k6ia0 and definition-selector-a95ictqb. GUI cloning remains pending.
 
 The user explicitly requested GitHub milestone releases/updates on 2026-10-09. Prepare 0.18.1-rc.2 as a prerelease in the isolated C release checkout, preserving the working lane and excluding the separately owned test_dialogueaudio.cpp edits. Existing GitHub rc.1 is retained; do not overwrite it. Source publication, CI and exact RC2 package validation are in progress.
+
+## GUI definition clone continuation, 2026-10-10
+
+The isolated development branch adds Clone selected definition, a bounded new-name
+draft and Create confirmation around the proven paired publisher. Prior records,
+identity slots and name offsets remain intact; references retain their original
+targets. Opaque, numeric-named, unnamed and indexed duplicate-name donors are supported.
+Whole captured source bank/name bytes, destination identity, pack validity and
+compatible outputs are checked before publication. Shared definition draft state
+protects Close and Install; the created record is reselected by explicit index.
+
+Thirty-eight real-control GUI cases pass at both sizes across game/frontend/script
+banks, folder/pack output, refusals, cancellation, stale sources and Restore.
+All 34 neighboring scalar-draft cases and both core clone/BIN-writer targets pass.
+Actual retail inputs through the new GUI preserve all 14,764 prior records and raw
+identity rows; independent donor/key/ordinal checks and explicit-output Restore pass,
+with native compiled-bank hashes unchanged. The development-version rebuild and
+extracted package pass: 112 identities, 132 links, seven selected workflows,
+120 not run and zero skips. Archive SHA256:
+`73fb4dae506f4a387bc26bcf64e464a1276c29253e77f0aae6ad6cb92c5a9349`.
+The packaged GUI also passes the independent retail clone/Restore check.
+This is separate from RC2's unchanged archive; no full-suite or live-game claim.
+Evidence and resume: [GUI clone handoff](HANDOFF_GUI_CLONE_2026-10-10.md).
+
+### Partial-output texture context follow-up
+
+A folder-clone regression reproduced `context_ready=0` after writing only compiled
+definitions. Context loading now combines authored definitions with native textures
+when output textures are absent. Existing corrupt banks, directories or status
+errors do not fall back. Eight focused clone cases at both sizes, two scalar-folder
+cases and the 14,764-record retail clone/Restore check pass, including a ready-context
+assertion and unchanged input hashes. No texture files are copied or authored.
+Exact extracted follow-up acceptance passes 112 identities, 132 links and four
+selected workflows (including 44 clone/34 scalar cases), 123 not run, zero skips.
+Archive SHA256: `9be422f1097e0cee629a5450de6e4a8e230217b93da711438b5d66d668d26e3b`.
+The packaged retail GUI check also passes the ready-context requirement and Restore.
+The initial clone checkpoint and RC2 archive remain intact. See the GUI clone
+handoff for evidence; Unicode GUI wide-string authoring is next.
+
+### GUI Unicode wide-string authoring, 2026-10-10
+
+The development GUI edits complete valid CWideString originals and drafts up to
+127 UTF-8 bytes using the proven strict native UTF-16LE converter. Supplementary
+input is preserved through a shared 32-bit ImGui character ABI. C0/C1 controls,
+malformed surrogates/UTF-8, overlong originals and incomplete/opaque-tailed strings
+refuse. Narrow strings and clone names remain ASCII-only. Exact no-ops keep original
+bytes; transactional publication and all existing draft/write guards remain.
+Five targeted CTests, 42 GUI wide cases, 24 narrow neighbors and the both-size
+14,764-record retail Unicode delta/Restore check pass. The final control tightening
+passes targeted reruns. Exact extracted acceptance passes 113 identities, 132 links,
+nine selected workflows, 119 not run and zero skips. Archive SHA256:
+`ed71aa9bf5ee94ad2d155b24de6fdc71c7af4e457531a4950ec92c53294cd74a`.
+The packaged retail GUI check preserves all identities, unrelated payloads and names,
+and passes Restore with native hashes unchanged. Broader font
+coverage remains open: Latin/Greek render, but inspected CJK/emoji use replacement
+glyphs despite correct stored bytes. See [Unicode handoff](HANDOFF_GUI_UNICODE_2026-10-10.md).
+
+### System glyph fallback, 2026-10-10
+
+Windows Fonts are located through the native directory API. Body/bold/title/small
+keep their primary Segoe faces and merge available CJK/emoji fallback glyphs.
+Immutable file bytes are shared across roles and scale rebuilds; no font is bundled
+or installed. Six system/no-font/primary-only cases pass at both sizes across three
+scale passes and all roles. CJK and monochrome emoji are now visible in inspected
+native/synthetic drafts, superseding the prior replacement-glyph limitation when
+the relevant system fonts are installed. Optional absence stays usable and explicit.
+Unicode head `2d8abff` passes Windows CI run 38062819381.
+
+Exact extracted archive passes 114 identities, 134 links and eight selected
+workflows, 121 not run and zero skips; the font report has zero skipped glyph groups
+on this machine. Archive SHA256:
+`581cc3201f1382c21bf4c0895b09ae0c8df16d6c4e2217f04d2bbc77517bfe3c`.
+This does not prove universal font coverage, text shaping, colour emoji, gameplay or
+another-machine behavior. See [font handoff](HANDOFF_GUI_FONTS_2026-10-10.md).
+
+### Confirmed GroupDef target picker, 2026-10-10
+
+Decoded game-bank int32 GroupDef drafts now offer searched native-index choices
+for confirmed Thing/terrain-theme families. Wrong-family, missing and stale target
+identities refuse before publication; unresolved originals retain exact no-op bytes.
+Other integers/banks remain uninterpreted and raw CLI editing is unchanged.
+The current retail villager schema does not decode its GroupDef type, so it remains
+read-only; no speculative schema change. All 32 synthetic cases and six retail-copy
+Object/Building/theme cases pass, independently preserving 14,764 records except
+the selected four-byte delta, exact identities/names and Restore; native inputs stay
+unchanged. The dev skill selected affected tests; the format-I/O skill required the
+independent raw-delta and untouched-byte checks.
+
+Exact extracted archive passes 115 identities, 136 documentation links and eight
+selected workflows (including 32 picker, six retail, 34 scalar and name/tree/group
+neighbors), 120 not run and two unrelated missing-corpus skips. SHA256:
+`cf6d013ef97fd8fe3fcf128f3dcebf8c156a3d272a32d852bed4750b8cc733dd`.
+No full-suite, clean-machine or gameplay claim. See
+[GroupDef handoff](HANDOFF_GROUP_PICKER_2026-10-10.md).
+
+### Creature GroupDef schema recovery, 2026-10-10
+
+The prior villager read-only limitation is now resolved for GroupDef only. Original
+FableWin bytes, derived/base transfer bodies and PDB names confirm the inherited
+signed int32 type. All 517 retail Creature records independently match unique
+four-byte boundaries and decoded values. No neighboring unknown types change.
+Eight real Object/Building/Creature/theme picker cases pass at both sizes with
+exact unrelated records/identities/names, Restore and unchanged native hashes.
+Both affected CTests pass; compact Creature picker inspected.
+
+Separate archive SHA256:
+`495961b1ab015cc6c6fab6c1508050184be1b9144fa715ad4c93eaad176effb7`.
+Exact extracted acceptance passes 116 identities, 138 links and five selected
+workflows (including the extracted-schema 517-record check, eight retail edits,
+32 synthetic cases and tree/group neighbors), 124 not run and two unrelated
+missing-corpus FMP skips. No full-suite, clean-machine or gameplay claim.
+The debug-evidence skill required native/PDB confirmation before promotion;
+format-I/O required independent boundaries and unchanged-byte/Restore checks.
+See [Creature schema handoff](HANDOFF_CREATURE_GROUP_2026-10-10.md).
+
+### Creature donor self-reference foundation, 2026-10-10
+
+Canonical defrelocate now recognizes the verified Creature CDefs prefix, retaining
+the same strict clean/encode checks and unresolved-candidate refusal. Independent
+raw audit covers all 517 retail donors and 1,521 self slots: 509 relocate using only
+those slots, eight remain refused for outside-prefix matches. Header/CRC, shared
+references and every other payload byte stay exact; native compiled hashes unchanged.
+Three affected relocation/namespace/FMP CTests pass. No clone publisher or GUI
+feature is claimed for this foundation; generic clone still copies exact bytes.
+Distinct self-retargeted cloning and own appearance/body references remain next.
+Picker head b49dcf2 passes Windows CI 38065042651. See
+[creature donor handoff](HANDOFF_CREATURE_CLONE_2026-10-10.md).
+
+Distinct defedit::cloneCreature now precomputes strict self-only relocation before
+canonical append. Shared entries, loaded pool and all prior slots remain exact;
+unknown matches/empty listings refuse before mutation. Generic clone remains an
+exact byte copy. Five affected CTests pass (inventory 56, not full suite), and the
+independent retail container gate passes 508 appended donors plus nine refusals,
+including exact identities, name crc0/ordinals, original raw pool and per-clone
+deltas with unchanged native hashes. Paired publication/Restore and GUI promotion
+remain next; own appearance/body cloning remains unfinished. No new package or
+gameplay claim. Schema head d2678ed CI 38065569483 passes.
+
+Paired `defs clone-creature` now requires an explicit schema and game-bank paths.
+The publisher recomputes the expected self-only clone from fresh source before
+using existing namespace, offline, transaction and recovery guards. Generic exact
+cloning retains its donor-byte requirement. Thirty synthetic CLI cases, six native
+input/owned output cases, five affected CTests and 35 generic CLI neighbors pass.
+Native hashes stay unchanged; fresh/existing outputs independently verify all
+14,764 prior records, raw identity rows/pool, appended crc0/ordinal and Restore.
+Exact extracted checkpoint passes 117 identities, 141 links and six workflows,
+including 44 unchanged GUI clone cases; 125 not run and two unrelated missing-corpus
+skips. ZIP SHA256 `732db7d64d142e7f7f9138d26345aaf25c1a36d651269074bba8c43b4908fc92`.
+Distinct Creature GUI action is next; own appearance/body cloning remains open.
+No full-suite, clean-machine or gameplay claim. See the creature donor handoff.
+
+Distinct game-bank CREATURE Clone creature controls now use the verified self-only
+core API and paired publisher. Preflight rejects unresolved/malformed/empty donors;
+draft/confirmation explicitly keep components shared. Thirty-six synthetic source
+GUI cases and six read-only native-input/owned-output cases at each window size
+pass, including all-record/raw-pool preservation and exact Restore. Final compact
+confirmation is visually checked; six focused cases pass after the wording change.
+Generic exact clone remains unchanged. Own appearance/body cloning stays open;
+exact extracted GUI checkpoint passes 117 identities, 141 links and eight selected
+workflows, including all 44 exact-clone GUI neighbors. 126 not run and two unrelated
+missing-corpus skips remain explicit. ZIP SHA256
+`51d135c1e95f4fb51cfe4a501f164a7064aa3c1577d4467c137c789a54ffca4e`.
+Evidence and remaining scope are recorded in the creature handoff.
+
+Private visual ownership recovery now independently observes all 517 Creature
+roots: 502 have both CCreatureDef/CAppearanceDef rows, fourteen omit appearance,
+NULLDEF is empty. Native original-byte serialization/lookup and matching PDB
+confirm DefIndex and OriginalParentDefIndex plus copy-on-write parent handling.
+In-memory canonical relocation observations round-trip all 502 three-node graphs;
+477 have no unresolved candidates, 25 retain findings (eight roots/twenty
+appearance payloads with overlap). No graph clone eligibility/private writer is
+claimed. One affected CTest and independent raw-delta/hash checks pass. Next:
+recover unresolved appearance asset domains, then coordinated private-clone API.
+No copied native install or new GUI archive for this evidence continuation.

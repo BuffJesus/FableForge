@@ -32,6 +32,7 @@
 #include <string_view>
 
 #include "forge/bin.hpp"
+#include "forge/big.hpp"
 #include "forge/defschema.hpp"
 
 namespace forge::defedit {
@@ -47,6 +48,20 @@ struct SetFieldResult {
     size_t oldPayloadSize = 0;  // payload byte length before the edit
     size_t newPayloadSize = 0;  // payload byte length after the edit
 };
+
+struct CreatureBodyModelResult {
+    size_t entryIndex, bodyPart, alternative, offset;
+    uint32_t oldModelId, newModelId;
+};
+// Change exactly one RandomAppearanceMorph body-model word in memory. Requires
+// a clean exact CCreatureDef decode, complete supported prefix and unique type-5
+// current/replacement IDs in one MBANK_ALLMESHES bank. No mesh payload, texture,
+// names or other definition bytes change. Invalid requests refuse before mutation.
+// Identity/type checks do NOT establish skeleton or runtime compatibility.
+// Callers must publish through the guarded existing-entry transaction.
+CreatureBodyModelResult setCreatureBodyModel(bin::File& file,
+    const defschema::Schema& schema,size_t entryIndex,size_t bodyPart,size_t alternative,
+    uint32_t modelId,const big::File& graphics);
 
 // Edit one field of the entry named `entryName` (empty name never matches;
 // use the index overload for unnamed sub-defs). Locates the field by CRC tag,
@@ -70,6 +85,29 @@ SetFieldResult setField(bin::File& file, const defschema::Schema& schema,
 // Publishing requires a paired bank/name-pool transaction, unlike setField.
 size_t cloneEntry(bin::File& file, size_t donorIndex, std::string newName);
 size_t cloneEntry(bin::File& file, std::string_view donorName, std::string newName);
+
+// Distinct Creature clone: relocate only verified self references to the final
+// append index, preserving shared components, all prior records and name offsets.
+// Requires a clean CREATURE CDefs layout; unresolved matching words refuse before
+// mutation. No private appearance/body cloning or publication is performed here.
+size_t cloneCreature(bin::File& file, const defschema::Schema& schema,
+                     size_t donorIndex, std::string newName);
+
+struct CreatureVisualCloneResult {
+    size_t rootIndex, bodyIndex, appearanceIndex;
+};
+// Append a private root/CCreatureDef/CAppearanceDef graph in memory. Explicit
+// names must be unique printable ASCII (127-byte maximum) and introduce no
+// compiled-name CRC ambiguity. Only the two selected visual CDefs rows receive
+// new component indices/new-root original parents; every other CDefs row stays
+// byte-identical, retaining shared gameplay ownership. Verified references in
+// all three payloads relocate; unresolved candidates refuse the whole plan.
+// All prior slots and loaded name records stay exact. A disposable File holds
+// every append until validation succeeds, so refusal never mutates the caller.
+// Models, textures and animations remain shared. No files/publication here.
+CreatureVisualCloneResult cloneCreatureVisuals(bin::File& file,
+                     const defschema::Schema& schema, size_t donorIndex,
+                     std::string rootName, std::string bodyName, std::string appearanceName);
 
 // The raw value bytes of one field (everything between its tag and the next
 // tag), for the types encodeValue does not parse -- maps, vectors, nested

@@ -697,6 +697,10 @@ bool Automation::tick(App& app) {
     }
     else if (cmd == "model_select") { if (!app.selectModel(rest)) fail("model_select: " + rest); else note("ok   " + line); ++pc_; }
     else if (cmd == "model_search") { std::snprintf(app.modelSearch_, sizeof app.modelSearch_, "%s", rest == "-" ? "" : rest.c_str()); note("ok   " + line); ++pc_; }
+    else if(cmd=="definition_clone" || cmd=="definition_clone_refused" || cmd=="definition_clone_creature" || cmd=="definition_clone_creature_refused") {
+        const bool creature=cmd=="definition_clone_creature" || cmd=="definition_clone_creature_refused";
+        if(app.beginDefinitionClone(creature)!=(cmd=="definition_clone" || cmd=="definition_clone_creature")) fail("definition clone returned an unexpected result");else note("ok   "+line);++pc_;
+    }
     else if(cmd=="definition_edit" || cmd=="definition_edit_refused") {
         size_t field=0;const auto parsed=std::from_chars(rest.data(),rest.data()+rest.size(),field);
         const bool ok=parsed.ec==std::errc{} && parsed.ptr==rest.data()+rest.size() && app.beginDefinitionEdit(field);
@@ -709,7 +713,8 @@ bool Automation::tick(App& app) {
         if(app.saveDefinitionEdit()!=(cmd=="definition_save")) fail("definition save returned an unexpected result");else note("ok   "+line);++pc_;
     }
     else if(cmd=="definition_cancel") {
-        app.definitionEditing_=false;app.definitionEditConfirm_=false;note("ok   "+line);++pc_;
+        app.definitionEditing_=false;app.definitionCloning_=false;app.definitionEditConfirm_=false;
+        app.definitionCloneFile_={};app.definitionCloneNamesBytes_.clear();app.definitionCloneBankBytes_.clear();note("ok   "+line);++pc_;
     }
     else if(cmd=="wait_definitions") {
         app.pollDefinitions();waitOn(!app.definitionsBusy() && app.definitionLoaded_,"definitions");
@@ -1668,12 +1673,26 @@ bool Automation::tick(App& app) {
         else note("ok   " + line);
         ++pc_;
     }
+    else if(cmd=="assert_font_glyph" || cmd=="assert_font_glyph_missing") {
+        std::istringstream args(rest);std::string role,code,extra;args>>role>>code;
+        uint32_t point=0;const auto parsed=std::from_chars(code.data(),code.data()+code.size(),point,16);
+        ImFont* font=role=="body"?app.fontBody_:role=="bold"?app.fontBold_:role=="title"?app.fontTitle_:role=="small"?app.fontSmall_:nullptr;
+        if(!font || parsed.ec!=std::errc{} || parsed.ptr!=code.data()+code.size() || code.empty() ||
+           point>0x10ffff || (point>=0xd800 && point<=0xdfff) || (args>>extra)) fail("Invalid font role or Unicode code point: "+rest);
+        else if(font->IsGlyphInFont(ImWchar(point))!=(cmd=="assert_font_glyph")) fail("Unexpected font glyph availability: "+rest);
+        else note("ok   "+line);
+        ++pc_;
+    }
     else if (cmd == "assert_log") {   // assert_log <text>: some app log line contains the text
         if (!app.logContains(rest)) fail("assert_log: no log line contains '" + rest + "'"); else note("ok   " + line);
         ++pc_;
     }
-    else if (cmd == "assert_widget") {
-        if (!widgets_.count(rest)) fail("widget not on screen: " + rest); else note("ok   " + line);
+    else if (cmd == "clear_widget_registry") {
+        widgets_.clear();widgetClips_.clear();note("ok   " + line);++pc_;
+    }
+    else if (cmd == "assert_widget" || cmd == "assert_widget_absent") {
+        const bool present=widgets_.count(rest)!=0;
+        if (present!=(cmd=="assert_widget")) fail("unexpected widget presence: " + rest); else note("ok   " + line);
         ++pc_;
     }
     else if (cmd == "dump_widget") {

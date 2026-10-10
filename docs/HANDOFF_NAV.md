@@ -1,4 +1,4 @@
-> Latest session checkpoint: [2026-10-10 continuation](HANDOFF_2026-10-10.md). RC2 passes all 54 CTests and 57 selected extracted workflows; GitHub release integration is next.
+> Paused at user request: [Creature visual workflows and next-session entry point](HANDOFF_CREATURE_CLONE_2026-10-10.md). Last tested/pushed implementation 5a91d6f: coordinated skinned CLI import/Restore and 140 native graph plans pass. Four source files contain uncommitted, unbuilt GUI scaffolding; widgets and acceptance remain unfinished. Resume only when asked. Runtime compatibility unverified; RC2 unchanged.
 
 # Navigation lane, 2026-09-27
 

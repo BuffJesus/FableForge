@@ -581,7 +581,9 @@ Settings persistence is disabled under `--auto` so runs are deterministic.
 | `assert_file_contains <path> <text...>` | the file exists and contains the text (the rest of the line, e.g. `ScriptName UiNamedBarrel;`) |
 | `assert_state <key> <value>` | see `dump_state` for keys |
 | `assert_state_min <key> <n>` / `assert_state_max <key> <n>` | a numeric state key is at least / at most n (e.g. `texture_thumbs_made`, the Textures list thumbnails decoded so far) |
-| `assert_widget <widget>` | the widget was drawn this frame |
+| `assert_widget <widget>` | the widget has been registered (registrations persist across frames) |
+| `clear_widget_registry` | clear retained widget rectangles; wait for redraw before checking current presence |
+| `assert_widget_absent <widget>` | the widget is not registered; clear the registry and wait for redraw first to test current absence |
 | `assert_log <text>` | some app log line contains the text (background job notes, e.g. `1 stitched`) |
 | `world_tab 0\|1`, `world_select <map>`, `world_move <map> <x> <y>`, `world_move_refused ...`, `world_owner <map> <region>`, `world_sees <region> <map> <0\|1>`, `world_stitch <0\|1> [feather]`, `world_revert`, `world_undo`, `world_redo`, `world_apply`, `wait_world` | the World tab: queue moves / region edits, stitch seams after the apply (feather -1 = auto), write them; state keys `world_*` |
 | `dump_state` | write every state key to the log |
@@ -1081,6 +1083,43 @@ Definitions inspection uses `assets_tab 6`, `wait_definitions`, `definition_bank
 
 Definition scalar drafts use `definition_edit <field-index>`, `definition_value <value>`, `definition_save`, and `definition_cancel`. The edit/value/save `_refused` variants check refusals. `definition_editing` and `definition_edit_failed` report draft state. Saving reselects the explicit native index, even when another record has a numeric name.
 
+CWideString drafts accept strict UTF-8 up to 127 bytes (not characters). Real
+`input_text` includes supplementary input through 32-bit ImGui characters. C0/C1
+controls refuse at Save; malformed UTF-8 and byte-overflow values refuse in the
+automation setter. Narrow strings and clone names retain ASCII-only input.
+`definition_wide` independently checks native UTF-16LE bytes and malformed-original
+refusal. `definition_wide_retail` drives both window sizes against read-only retail
+inputs, compares every record/table/name byte and restores only owned output.
+
+`assert_font_glyph <body|bold|title|small> <hex-codepoint>` checks actual source
+glyph availability without accepting the replacement glyph; `_missing` checks
+absence. Malformed code points, surrogates and unknown roles fail the assertion.
+`FABLEFORGE_AUTOMATION_FONT_DIR` overrides the font directory only when automation
+is active. `font_fallback` checks all four roles across repeated scale/atlas rebuilds
+and system/no-font/primary-only fixtures. Optional absent language/emoji groups are
+explicitly reported in its `skipped_glyph_groups`; `--require-wide` requires the
+installed CJK and emoji sources for a stronger local proof. No system fonts are
+modified or bundled; only primary-font copies in owned scratch fixtures are used.
+
+Definition clone drafts use `definition_clone` (or the real
+`btn_definition_clone` control), `definition_value <new-name>`, `definition_save`
+and `definition_cancel`. `definition_clone_refused` checks draft/load refusal;
+`definition_cloning` distinguishes a clone from a field draft. Real name entry
+uses `input_definition_edit_value`; `btn_definition_save` and
+`btn_definition_save_confirm` exercise the Create confirmation. The
+`definition_clone_ui` package workflow covers game/frontend/script banks,
+numeric/unnamed/duplicate-name donors, folder/pack outputs, stale sources,
+invalid names, cancellation, Close/Install guards and paired Restore at both sizes.
+
+The distinct Creature mode uses `definition_clone_creature` or the real
+`btn_definition_clone_creature` control, plus the same name/Save/Cancel widgets.
+`definition_clone_creature_refused` checks preflight refusal;
+`definition_creature_cloning` distinguishes it from an exact clone draft.
+`creature_clone_ui` covers 36 synthetic cases across both window sizes.
+`creature_clone_gui_retail_1440x900` and `_800x600` independently compare
+all prior retail records, verified self-only deltas, paired recovery and explicit
+Restore on owned outputs. Appearance/body/components remain shared.
+
 `definition_group` reports the validated game-bank group entry index, or `-`. `btn_definition_group` follows it by index after the current frame, protecting numeric names and the current decoded view.
 
 Definition vector drafts expose `input_definition_vector_0`, `_1` and (for C3DVector) `_2` for real coordinate input. `definition_value` accepts the existing comma-separated writer syntax for these drafts. The dedicated `definition_vectors` package workflow independently verifies every other payload byte, exact no-ops and malformed input/layout refusals at both sizes.
@@ -1098,3 +1137,5 @@ Definition tree widgets: `definition_type_node_<type-index>`, `definition_group_
 
 
 `combo_definition_edit_name` opens the existing-name chooser for four-byte CDefString drafts. `input_definition_name_search` filters pool names or offsets; `definition_name_option_<byte-offset>` and `definition_name_option_none` select an existing name or -1. Duplicate pool names have separate offset choices. Saving refuses changed references that are not exact string starts in the captured owning pool.
+
+`combo_definition_edit_group` opens the confirmed game-bank int32 GroupDef picker. `input_definition_group_search` filters target names or native indices; `definition_group_option_<native-index>` selects that explicit index, not a name lookup. Only confirmed owner/family combinations participate. Changed wrong-family, missing or stale target identities refuse; unchanged legacy bytes remain a no-op. Synthetic picker and read-only retail-copy workflows cover publication, exact deltas and explicit-output Restore.

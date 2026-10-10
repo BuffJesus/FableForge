@@ -1,8 +1,44 @@
 #pragma once
 #include <optional>
+#include <algorithm>
 #include "forge/bin.hpp"
 #include "forge/defdecode.hpp"
 namespace albion::definitionread {
+// Confirmed placement/theme families only. Other integers or categories do not
+// imply a writable reference, even when a browser can display their group.
+inline const char* groupFamily(const forge::bin::Entry& owner) {
+    if(owner.definition=="OBJECT" || owner.definition=="BUILDING" || owner.definition=="CREATURE") return "THING_GROUP";
+    if(owner.definition=="ENGINE_THEME") return "ENGINE_THEME_GROUP";
+    return nullptr;
+}
+inline bool groupChoice(const forge::bin::File& file,const forge::bin::Entry& owner,size_t index) {
+    const auto family=groupFamily(owner);
+    return family && index<file.entries().size() && file.entries()[index].definition==family;
+}
+// Native CParentDefClassBase stores counted {class CRC, DefIndex, original
+// parent} triples after three flag bytes. GetSubDef resolves the first index
+// by class key. This read-only link does not establish private ownership.
+inline std::optional<size_t> creatureVisualTarget(const forge::bin::File& file,
+        const forge::bin::Entry& entry,const forge::defdecode::Decoded& decoded,std::string_view kind) {
+    if(entry.definition!="CREATURE" || (kind!="CCreatureDef" && kind!="CAppearanceDef") ||
+       !decoded.clean() || entry.data.size()<5 || decoded.fields.empty() ||
+       decoded.fields.front().name!="Components" ||
+       std::any_of(decoded.fields.begin(),decoded.fields.end(),[](const auto& field){return !field.tagOk;})) return std::nullopt;
+    const size_t count=size_t(entry.data[3]) | size_t(entry.data[4])<<8;
+    const size_t end=5+12*count;
+    if(!count || end>entry.data.size() || decoded.prefixLen!=end ||
+       forge::defdecode::encode(decoded)!=entry.data) return std::nullopt;
+    const auto word=[&](size_t at) {
+        return uint32_t(entry.data[at]) | uint32_t(entry.data[at+1])<<8 |
+            uint32_t(entry.data[at+2])<<16 | uint32_t(entry.data[at+3])<<24;
+    };
+    size_t matches=0;uint32_t index=0;
+    for(size_t row=0;row<count;++row) if(word(5+12*row)==forge::defdecode::fieldTag(kind)) {
+        ++matches;index=word(9+12*row);
+    }
+    if(matches!=1 || index>=file.entries().size() || file.entries()[index].definition!=kind) return std::nullopt;
+    return size_t(index);
+}
 // Game-bank GroupDef stores a runtime entry index. The existing placement palette
 // resolves it only when the target definition is a *_GROUP type.
 inline std::optional<size_t> groupTarget(const forge::bin::File& file,const forge::defdecode::Decoded& decoded) {

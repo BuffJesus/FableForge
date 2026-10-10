@@ -2,7 +2,10 @@
 #include "theme.hpp"
 #include "windowsprocess.hpp"
 #include "definitionfield.hpp"
+#include "definitionclone.hpp"
+#include "definitionbody.hpp"
 #include "definitionread.hpp"
+#include "forge/fmplinks.hpp"
 #include "texturebrowse.hpp"
 #include "modpack.hpp"
 #include "../vendor/embedded_schema.hpp"
@@ -14,10 +17,12 @@
 #include <cmath>
 #include <numeric>
 #include <stdexcept>
+#include <unordered_map>
 namespace albion::gui {
 namespace fs=std::filesystem;
 namespace {
 int definitionASCIIChar(ImGuiInputTextCallbackData* data) {return data->EventChar<32 || data->EventChar>126;}
+int definitionUnicodeChar(ImGuiInputTextCallbackData* data) {return data->EventChar<32 || (data->EventChar>=127 && data->EventChar<=159);}
 std::string definitionLower(std::string value) {
     for(auto& c:value) c=char(std::tolower(static_cast<unsigned char>(c)));return value;
 }
@@ -120,8 +125,11 @@ void App::browseDefinition(const std::string& name) {
     setDefinitionBank("game.bin");definitionSearch_[0]=0;definitionType_.clear();definitionFilterDirty_=true;definitionBrowseRequest_=name;
 }
 bool App::setDefinitionEditValue(const std::string& value) {
-    if(!definitionEditing_ || value.size()>=sizeof definitionEditValue_ ||
-       std::any_of(value.begin(),value.end(),[](unsigned char c){return c==0 || c>=128;})) return false;
+    if(!definitionEditing_ || value.size()>=sizeof definitionEditValue_) return false;
+    if(definitionEditType_=="CWideString") {
+        try {std::vector<uint8_t> validated;forge::unicode::appendUtf16z(validated,value);}
+        catch(const std::exception&) {return false;}
+    } else if(std::any_of(value.begin(),value.end(),[](unsigned char c){return c==0 || c>=128;})) return false;
     std::snprintf(definitionEditValue_,sizeof definitionEditValue_,"%s",value.c_str());definitionEditConfirm_=false;return true;
 }
 bool App::beginDefinitionEdit(size_t field) {
@@ -136,12 +144,142 @@ bool App::beginDefinitionEdit(size_t field) {
         if(!packDest_.empty()) {if(!modpack::isPack(fs::u8path(packDest_))) throw std::runtime_error("Choose a valid FableForge pack.");(void)modpack::load(fs::u8path(packDest_));}
         definitionEditIndex_=*definitionSelected_;definitionEditExpected_=definitionFile_.entries()[definitionEditIndex_];
         definitionEditExpectedNames_=definitionFile_.originalNames();definitionEditNames_=definitionLoadedNames_;definitionEditBank_=definitionLoadedBank_;
+        definitionEditExpectedGroups_.clear();
+        if(definitionBank_=="game.bin" && selected.name=="GroupDef" && selected.type=="int32" && definitionread::groupFamily(definitionEditExpected_))
+            for(size_t i=0;i<definitionFile_.entries().size();++i) if(definitionread::groupChoice(definitionFile_,definitionEditExpected_,i)) {
+                const auto& group=definitionFile_.entries()[i];
+                forge::bin::Entry identity{group.definition,group.name,group.indexInDefinition,{}};
+                definitionEditExpectedGroups_.emplace(i,std::move(identity));
+            }
         definitionEditDestination_=fs::u8path(packDest_.empty()?saveRoot():packDest_)/"data"/"CompiledDefs"/definitionBank_;
-        definitionEditField_=selected.name;definitionEditType_=selected.type;definitionEditing_=true;
-        definitionNameSearch_[0]=0;setDefinitionEditValue(definitionwrite::fieldValue(selected));return true;
+        definitionEditField_=selected.name;definitionEditType_=selected.type;definitionEditing_=true;definitionCloning_=false;
+        definitionNameSearch_[0]=0;
+        if(!setDefinitionEditValue(definitionwrite::fieldValue(selected))) {
+            definitionEditing_=false;throw std::runtime_error("The field value does not fit a supported definition draft.");
+        }
+        return true;
     } catch(const std::exception& error) {definitionEditError_=error.what();return false;}
 }
+bool App::beginDefinitionBodyModel(size_t bodyPart,size_t alternative) {
+    definitionEditError_.clear();definitionEditSuccess_.clear();
+    try {
+        if(definitionEditing_)throw std::runtime_error("Save or cancel the current definition draft first.");
+        if(definitionsBusy() || modFilesBusy() || !definitionSelected_ || definitionBank_!="game.bin" ||
+           definitionPaths()!=std::pair{definitionLoadedNames_,definitionLoadedBank_})
+            throw std::runtime_error("Choose a body component in the current game bank.");
+        if(!packDest_.empty()) {if(!modpack::isPack(fs::u8path(packDest_)))throw std::runtime_error("Choose a valid FableForge pack.");(void)modpack::load(fs::u8path(packDest_));}
+        auto current=forge::bin::File::open(definitionLoadedNames_,definitionLoadedBank_);
+        definitionwrite::verifyEntries(definitionFile_,current);
+        const auto decoded=forge::defdecode::decode(current.entries()[*definitionSelected_],definitionSchema_);
+        const auto layout=forge::fmplinks::creaturePrefixLayout(decoded.prefix);
+        const auto slot=std::find_if(layout.bodyModels.begin(),layout.bodyModels.end(),[&](const auto& value){return value.bodyPart==bodyPart && value.alternative==alternative;});
+        if(slot==layout.bodyModels.end())throw std::runtime_error("This body model alternative is absent.");
+        uint32_t id=0;for(size_t n=0;n<4;++n)id|=uint32_t(current.entries()[*definitionSelected_].data.at(slot->offset+n))<<(8*n);
+        const auto graphicsPath=graphicsBigPath();auto graphics=forge::big::File::open(graphicsPath);
+        (void)forge::defedit::setCreatureBodyModel(current,definitionSchema_,*definitionSelected_,bodyPart,alternative,id,graphics);
+        definitionCloneNamesBytes_=definitionwrite::cloneBytes(definitionLoadedNames_);
+        definitionCloneBankBytes_=definitionwrite::cloneBytes(definitionLoadedBank_);
+        definitionCloneFile_=std::move(current);definitionBodyGraphics_=std::move(graphics);definitionBodyGraphicsPath_=graphicsPath;
+        definitionBodyPart_=bodyPart;definitionBodyAlternative_=alternative;definitionEditIndex_=*definitionSelected_;
+        definitionEditNames_=definitionLoadedNames_;definitionEditBank_=definitionLoadedBank_;
+        definitionEditDestination_=fs::u8path(packDest_.empty()?saveRoot():packDest_)/"data"/"CompiledDefs"/definitionBank_;
+        definitionEditField_="Body "+std::to_string(bodyPart)+" / alternative "+std::to_string(alternative);
+        definitionEditType_="body-model";definitionEditing_=true;definitionCloning_=false;definitionEditConfirm_=false;
+        definitionNameSearch_[0]=0;
+        std::snprintf(definitionEditValue_,sizeof definitionEditValue_,"%u",id);return true;
+    }catch(const std::exception& error){definitionEditError_=error.what();return false;}
+}
+bool App::beginDefinitionClone(bool creature,bool privateVisual) {
+    definitionEditError_.clear();definitionEditSuccess_.clear();
+    try {
+        if(definitionEditing_) throw std::runtime_error("Save or cancel the current definition draft first.");
+        if(definitionsBusy() || modFilesBusy() || !definitionSelected_ ||
+           definitionPaths()!=std::pair{definitionLoadedNames_,definitionLoadedBank_})
+            throw std::runtime_error("Choose a record from the current loaded definition bank.");
+        if(!packDest_.empty()) {if(!modpack::isPack(fs::u8path(packDest_))) throw std::runtime_error("Choose a valid FableForge pack.");(void)modpack::load(fs::u8path(packDest_));}
+        auto current=forge::bin::File::open(definitionLoadedNames_,definitionLoadedBank_);
+        definitionwrite::verifyEntries(definitionFile_,current);
+        if(privateVisual && !creature) throw std::runtime_error("Private visuals require a Creature donor.");
+        if(creature) {
+            if(definitionBank_!="game.bin" || current.entries()[*definitionSelected_].definition!="CREATURE")
+                throw std::runtime_error("Choose a Creature donor in the game bank.");
+            // Preflight the strict layout/refusal path without changing the
+            // captured donor bank or choosing the user's eventual new name.
+            auto probe=current;size_t suffix=0;std::string probeName;
+            do {probeName="FORGE_CREATURE_DRAFT_"+std::to_string(suffix++);}
+            while(std::any_of(current.entries().begin(),current.entries().end(),[&](const auto& entry){return entry.name==probeName;}));
+            if(privateVisual) {
+                std::array<std::string,3> probeNames;
+                std::set<uint32_t> keys;
+                for(const auto& entry:current.entries()) keys.insert(forge::bin::nameCrc(entry.name));
+                for(auto& name:probeNames) {
+                    do{name="FORGE_PRIVATE_DRAFT_"+std::to_string(suffix++);}
+                    while(keys.contains(forge::bin::nameCrc(name)));
+                    keys.insert(forge::bin::nameCrc(name));
+                }
+                (void)forge::defedit::cloneCreatureVisuals(probe,definitionSchema_,*definitionSelected_,probeNames[0],probeNames[1],probeNames[2]);
+            } else (void)forge::defedit::cloneCreature(probe,definitionSchema_,*definitionSelected_,probeName);
+        }
+        definitionCloneNamesBytes_=definitionwrite::cloneBytes(definitionLoadedNames_);
+        definitionCloneBankBytes_=definitionwrite::cloneBytes(definitionLoadedBank_);
+        definitionCloneFile_=std::move(current);
+        definitionEditIndex_=*definitionSelected_;
+        definitionEditNames_=definitionLoadedNames_;definitionEditBank_=definitionLoadedBank_;
+        definitionEditDestination_=fs::u8path(packDest_.empty()?saveRoot():packDest_)/"data"/"CompiledDefs"/definitionBank_;
+        const auto& donor=definitionFile_.entries()[definitionEditIndex_];
+        definitionEditField_=donor.name.empty()?"(unnamed record)":donor.name;
+        definitionEditType_=privateVisual?"clone-creature-private":creature?"clone-creature":"clone";definitionEditing_=true;definitionCloning_=true;
+        definitionEditConfirm_=false;definitionEditValue_[0]=0;
+        definitionCloneBodyName_[0]=0;definitionCloneAppearanceName_[0]=0;return true;
+    } catch(const std::exception& error) {definitionEditError_=error.what();return false;}
+}
+bool App::saveDefinitionClone() {
+    definitionEditError_.clear();definitionEditSuccess_.clear();
+    try {
+        if(!definitionEditing_ || !definitionCloning_) throw std::runtime_error("Choose a record to clone first.");
+        if(definitionsBusy() || modReadersBusy() || gameWriteBlocked("clone definition")) throw std::runtime_error("Wait for loads and writes, and close the destination game.");
+        const auto destination=fs::u8path(packDest_.empty()?saveRoot():packDest_)/"data"/"CompiledDefs"/definitionBank_;
+        if(definitionPaths()!=std::pair{definitionEditNames_,definitionEditBank_} || destination!=definitionEditDestination_)
+            throw std::runtime_error("Definition source or destination changed; start the clone again.");
+        if(definitionEditBank_!=destination && fs::exists(destination)) throw std::runtime_error("The destination bank appeared; refresh before cloning.");
+        if(!packDest_.empty()) {if(!modpack::isPack(fs::u8path(packDest_))) throw std::runtime_error("Choose a valid FableForge pack.");(void)modpack::load(fs::u8path(packDest_));}
+        if(definitionwrite::cloneBytes(definitionEditNames_)!=definitionCloneNamesBytes_ ||
+           definitionwrite::cloneBytes(definitionEditBank_)!=definitionCloneBankBytes_)
+            throw std::runtime_error("The source bank or name pool changed; start the clone again.");
+        auto cloned=definitionCloneFile_;
+        const bool creature=definitionEditType_=="clone-creature";
+        const bool privateVisual=definitionEditType_=="clone-creature-private";
+        size_t added;
+        if(privateVisual) {
+            const auto result=forge::defedit::cloneCreatureVisuals(cloned,definitionSchema_,definitionEditIndex_,
+                definitionEditValue_,definitionCloneBodyName_,definitionCloneAppearanceName_);
+            added=result.rootIndex;
+            const definitionwrite::CreatureVisualCloneContract contract{definitionSchema_,definitionEditIndex_,
+                definitionEditValue_,definitionCloneBodyName_,definitionCloneAppearanceName_};
+            definitionwrite::publishClone(cloned,definitionEditNames_,definitionEditBank_,destination,true,nullptr,{},&contract);
+        } else {
+            added=creature?forge::defedit::cloneCreature(cloned,definitionSchema_,definitionEditIndex_,definitionEditValue_):
+                forge::defedit::cloneEntry(cloned,definitionEditIndex_,definitionEditValue_);
+            definitionwrite::publishClone(cloned,definitionEditNames_,definitionEditBank_,destination,true,
+                creature?&definitionSchema_:nullptr,creature?std::optional<size_t>(definitionEditIndex_):std::nullopt);
+        }
+        definitionEditSuccess_="Created "+std::string(definitionEditValue_)+(privateVisual?" with private body and appearance definitions (assets shared).":".");
+        definitionEditing_=false;definitionCloning_=false;definitionEditConfirm_=false;
+        definitionCloneFile_={};definitionCloneNamesBytes_.clear();definitionCloneBankBytes_.clear();
+        definitionLoaded_=false;definitionBrowseRequest_.reset();definitionBrowseIndex_=added;
+        if(definitionBank_=="game.bin") {
+            const auto targetRoot=destination.parent_path().parent_path().parent_path();
+            if(packDest_.empty() || (!ctx_.gameRoot().empty() && paths::resolvedPath(targetRoot)==paths::resolvedPath(ctx_.gameRoot()))) {
+                defThumbs_.clear();defList_.clear();themeGroupOf_.clear();envDefs_.clear();soundDefs_.clear();familyNames_.clear();issuesRev_=~0ull;
+                ctxError_.clear();reloadWhenContextReady_=true;
+                startContextLoad(packDest_.empty()?saveRoot():packDest_);
+            }
+        }
+        rescanBackups();pushLog(definitionEditSuccess_,3);return true;
+    } catch(const std::exception& error) {definitionEditError_=error.what();pushLog("clone definition: "+definitionEditError_,1);return false;}
+}
 bool App::saveDefinitionEdit() {
+    if(definitionCloning_) return saveDefinitionClone();
     definitionEditError_.clear();definitionEditSuccess_.clear();
     try {
         if(!definitionEditing_) throw std::runtime_error("Choose a field to edit first.");
@@ -151,8 +289,27 @@ bool App::saveDefinitionEdit() {
             throw std::runtime_error("Definition source or destination changed; start the edit again.");
         if(definitionEditBank_!=destination && fs::exists(destination)) throw std::runtime_error("The destination bank appeared; refresh before editing.");
         if(!packDest_.empty()) {if(!modpack::isPack(fs::u8path(packDest_))) throw std::runtime_error("Choose a valid FableForge pack.");(void)modpack::load(fs::u8path(packDest_));}
-        const bool changed=definitionwrite::replaceField(definitionEditNames_,definitionEditBank_,destination,definitionEditIndex_,
-            definitionEditExpected_,definitionEditExpectedNames_,definitionSchema_,definitionEditField_,definitionEditValue_);
+        bool changed;
+        if(definitionEditType_=="body-model") {
+            if(graphicsBigPath()!=definitionBodyGraphicsPath_ ||
+               !definitionwrite::sameBodyGraphics(definitionBodyGraphics_,forge::big::File::open(definitionBodyGraphicsPath_)))
+                throw std::runtime_error("The graphics source changed; start the body edit again.");
+            if(definitionwrite::cloneBytes(definitionEditBank_)!=definitionCloneBankBytes_ ||
+               definitionwrite::cloneBytes(definitionEditNames_)!=definitionCloneNamesBytes_)
+                throw std::runtime_error("The source bank or name pool changed; start the body edit again.");
+            uint32_t id=0;const std::string_view value=definitionEditValue_;
+            const auto parsed=std::from_chars(value.data(),value.data()+value.size(),id);
+            if(parsed.ec!=std::errc{} || parsed.ptr!=value.data()+value.size())throw std::runtime_error("Choose a complete unsigned decimal model ID.");
+            auto plan=definitionCloneFile_;
+            const auto result=forge::defedit::setCreatureBodyModel(plan,definitionSchema_,definitionEditIndex_,definitionBodyPart_,definitionBodyAlternative_,id,definitionBodyGraphics_);
+            changed=result.oldModelId!=result.newModelId;
+            if(changed) {
+                const definitionwrite::CreatureBodyContract contract{definitionSchema_,definitionBodyGraphics_,definitionCloneBankBytes_,definitionCloneNamesBytes_,
+                    definitionEditIndex_,definitionBodyPart_,definitionBodyAlternative_,id};
+                definitionwrite::publishCreatureBody(plan,definitionEditNames_,definitionEditBank_,definitionBodyGraphicsPath_,destination,contract);
+            }
+        }else changed=definitionwrite::replaceField(definitionEditNames_,definitionEditBank_,destination,definitionEditIndex_,
+            definitionEditExpected_,definitionEditExpectedNames_,definitionSchema_,definitionEditField_,definitionEditValue_,&definitionEditExpectedGroups_);
         definitionEditSuccess_=changed?"Saved "+definitionEditField_+".":"The field is unchanged.";
         definitionEditing_=false;definitionEditConfirm_=false;definitionLoaded_=false;definitionBrowseRequest_.reset();definitionBrowseIndex_=definitionEditIndex_;
         if(changed && definitionBank_=="game.bin") {
@@ -179,8 +336,29 @@ void App::drawDefinitionBrowser(float pad,float inner,float cardInner) {
     }
     ImGui::SetCursorPosX(pad);theme::beginCard("##definitionbrowser",inner,true);theme::label("Definitions");
     drawPackDestination(cardInner,true);
+    if(!definitionEditing_) {
+        ImGui::BeginDisabled(definitionsBusy() || modFilesBusy() || !definitionSelected_);
+        if(theme::ghostButton("Clone selected definition",ImVec2(cardInner,0))) beginDefinitionClone();
+        auto_.registerWidget("btn_definition_clone");ImGui::EndDisabled();
+        if(definitionSelected_ && *definitionSelected_<definitionFile_.entries().size() && definitionBank_=="game.bin" &&
+           definitionFile_.entries()[*definitionSelected_].definition=="CREATURE") {
+            ImGui::BeginDisabled(definitionEditing_ || definitionsBusy() || modFilesBusy());
+            if(theme::ghostButton("Clone creature",ImVec2(cardInner,0))) beginDefinitionClone(true);
+            auto_.registerWidget("btn_definition_clone_creature");ImGui::EndDisabled();
+            ImGui::BeginDisabled(definitionsBusy() || modFilesBusy());
+            if(theme::ghostButton("Clone private creature visuals",ImVec2(cardInner,0))) beginDefinitionClone(true,true);
+            auto_.registerWidget("btn_definition_clone_creature_private");ImGui::EndDisabled();
+        }
+    }
     if(definitionEditing_) {
-        ImGui::TextWrapped("Edit %s (%s)",definitionEditField_.c_str(),definitionEditType_.c_str());
+        if(definitionCloning_) {
+            ImGui::TextWrapped("Clone %s",definitionEditField_.c_str());
+            theme::hint(definitionEditType_=="clone-creature-private"?
+                "New root, body and appearance definitions. Other gameplay components and all assets stay shared.":definitionEditType_=="clone-creature"?
+                "Retargets verified self references. Components, appearance and body stay shared.":
+                "Copies this record unchanged. References keep their existing targets.");
+        } else ImGui::TextWrapped("Edit %s (%s)",definitionEditField_.c_str(),definitionEditType_.c_str());
+        if(definitionEditType_=="body-model")theme::hint("Model ID: unique skinned type-5 mesh. All users of this component change; assets stay shared. Skeleton/runtime compatibility is not verified.");
         ImGui::TextWrapped("Destination: %s",definitionEditDestination_.string().c_str());
         if(definitionEditType_=="CDefString") {
             std::string preview=definitionEditValue_;
@@ -215,6 +393,32 @@ void App::drawDefinitionBrowser(float pad,float inner,float cardInner) {
                         if(ImGui::Selectable(label.c_str(),value==std::to_string(offset))) setDefinitionEditValue(std::to_string(offset));
                         auto_.registerWidget(("definition_name_option_"+std::to_string(offset)).c_str());ImGui::PopID();
                     }
+                }
+                ImGui::EndCombo();
+            }
+        } else if(!definitionCloning_ && definitionBank_=="game.bin" && definitionEditField_=="GroupDef" &&
+                  definitionEditType_=="int32" && definitionread::groupFamily(definitionEditExpected_)) {
+            const std::string value=definitionEditValue_;
+            std::string preview="Unresolved original: "+value;
+            uint32_t selected=0;const auto parsed=std::from_chars(value.data(),value.data()+value.size(),selected);
+            if(parsed.ec==std::errc{} && parsed.ptr==value.data()+value.size() && definitionread::groupChoice(definitionFile_,definitionEditExpected_,selected))
+                preview=std::to_string(selected)+": "+(definitionFile_.entries()[selected].name.empty()?"(unnamed group)":definitionFile_.entries()[selected].name);
+            ImGui::SetNextItemWidth(cardInner);const bool open=ImGui::BeginCombo("##definitiongroup",preview.c_str());
+            auto_.registerWidget("combo_definition_edit_group");
+            if(open) {
+                ImGui::InputText("Search groups",definitionNameSearch_,sizeof definitionNameSearch_);auto_.registerWidget("input_definition_group_search");
+                std::vector<size_t> options;const auto search=definitionLower(definitionNameSearch_);
+                for(size_t i=0;i<definitionFile_.entries().size();++i) {
+                    const auto& group=definitionFile_.entries()[i];
+                    if(definitionread::groupChoice(definitionFile_,definitionEditExpected_,i) &&
+                       (search.empty() || definitionLower(group.name).find(search)!=std::string::npos || std::to_string(i).find(search)!=std::string::npos)) options.push_back(i);
+                }
+                ImGuiListClipper clipper;clipper.Begin(int(options.size()));
+                while(clipper.Step()) for(int i=clipper.DisplayStart;i<clipper.DisplayEnd;++i) {
+                    const auto index=options[size_t(i)];const auto& group=definitionFile_.entries()[index];
+                    const auto label=std::to_string(index)+": "+(group.name.empty()?"(unnamed group)":group.name);
+                    if(ImGui::Selectable(label.c_str(),value==std::to_string(index))) setDefinitionEditValue(std::to_string(index));
+                    auto_.registerWidget(("definition_group_option_"+std::to_string(index)).c_str());
                 }
                 ImGui::EndCombo();
             }
@@ -267,19 +471,71 @@ void App::drawDefinitionBrowser(float pad,float inner,float cardInner) {
                 if(changed) setDefinitionEditValue(definitionwrite::vectorValue(values,count));
             } else ImGui::InputText("##definitionvalue",definitionEditValue_,sizeof definitionEditValue_);
         } else {
-            const bool text=definitionEditType_=="CCharString" || definitionEditType_=="CWideString";
-            if(text) ImGui::TextDisabled("Text (up to 127 ASCII characters)");
+            const bool text=definitionCloning_ || definitionEditType_=="CCharString" || definitionEditType_=="CWideString";
+            const bool wide=definitionEditType_=="CWideString";
+            if(text) ImGui::TextDisabled("%s",definitionEditType_=="clone-creature-private"?"Root name (127 ASCII characters max)":definitionCloning_?"New name (up to 127 ASCII characters)":wide?"Unicode text (up to 127 UTF-8 bytes)":"Text (up to 127 ASCII characters)");
             ImGui::SetNextItemWidth(cardInner);ImGui::InputText("##definitionvalue",definitionEditValue_,sizeof definitionEditValue_,
-                text?ImGuiInputTextFlags_CallbackCharFilter:0,text?definitionASCIIChar:nullptr);
+                text?ImGuiInputTextFlags_CallbackCharFilter:0,text?(wide?definitionUnicodeChar:definitionASCIIChar):nullptr);
         }
         auto_.registerWidget("input_definition_edit_value");
+        if(definitionEditType_=="body-model") {
+            // Use the captured directory, never a freshly loaded bank while a
+            // draft is open. Save still revalidates the directory and sources.
+            const auto* meshes=definitionBodyGraphics_.findBank("MBANK_ALLMESHES");
+            if(meshes) {
+                std::unordered_map<uint32_t,size_t> counts;
+                for(const auto& mesh:meshes->entries) ++counts[mesh.id];
+                const std::string_view value=definitionEditValue_;uint32_t selected=0;
+                const auto parsed=std::from_chars(value.data(),value.data()+value.size(),selected);
+                const bool valid=parsed.ec==std::errc{} && parsed.ptr==value.data()+value.size();
+                std::string preview="Choose a named model";
+                for(const auto& mesh:meshes->entries) if(valid && mesh.id==selected && mesh.type==5 && counts[mesh.id]==1) {
+                    preview=std::to_string(mesh.id)+": "+(mesh.name.empty()?"(unnamed model)":mesh.name);break;
+                }
+                ImGui::SetNextItemWidth(cardInner);
+                const bool open=ImGui::BeginCombo("##definitionbodymodel",preview.c_str());
+                auto_.registerWidget("combo_definition_body_model");
+                if(open) {
+                    ImGui::InputText("Search models",definitionNameSearch_,sizeof definitionNameSearch_);
+                    auto_.registerWidget("input_definition_body_model_search");
+                    const auto search=definitionLower(definitionNameSearch_);
+                    std::vector<size_t> options;
+                    for(size_t i=0;i<meshes->entries.size();++i) {
+                        const auto& mesh=meshes->entries[i];
+                        if(mesh.type==5 && counts[mesh.id]==1 && (search.empty() ||
+                           definitionLower(mesh.name).find(search)!=std::string::npos ||
+                           std::to_string(mesh.id).find(search)!=std::string::npos)) options.push_back(i);
+                    }
+                    ImGuiListClipper clipper;clipper.Begin(int(options.size()));
+                    while(clipper.Step()) for(int i=clipper.DisplayStart;i<clipper.DisplayEnd;++i) {
+                        const auto& mesh=meshes->entries[options[size_t(i)]];
+                        const auto label=std::to_string(mesh.id)+": "+(mesh.name.empty()?"(unnamed model)":mesh.name);
+                        if(ImGui::Selectable(label.c_str(),valid && selected==mesh.id)) setDefinitionEditValue(std::to_string(mesh.id));
+                        auto_.registerWidget(("definition_body_model_option_"+std::to_string(mesh.id)).c_str());
+                    }
+                    ImGui::EndCombo();
+                }
+            }
+        }
+        if(definitionCloning_ && definitionEditType_=="clone-creature-private") {
+            ImGui::TextDisabled("Body name (127 ASCII characters max)");ImGui::SetNextItemWidth(cardInner);
+            ImGui::InputText("##privatebody",definitionCloneBodyName_,sizeof definitionCloneBodyName_,ImGuiInputTextFlags_CallbackCharFilter,definitionASCIIChar);
+            auto_.registerWidget("input_definition_clone_body");
+            ImGui::TextDisabled("Appearance name (127 ASCII characters max)");ImGui::SetNextItemWidth(cardInner);
+            ImGui::InputText("##privateappearance",definitionCloneAppearanceName_,sizeof definitionCloneAppearanceName_,ImGuiInputTextFlags_CallbackCharFilter,definitionASCIIChar);
+            auto_.registerWidget("input_definition_clone_appearance");
+        }
         if(!definitionEditConfirm_) {
-            if(theme::ghostButton("Save field",ImVec2(cardInner,0))) definitionEditConfirm_=true;
+            if(theme::ghostButton(definitionCloning_?"Create definition":"Save field",ImVec2(cardInner,0))) definitionEditConfirm_=true;
             auto_.registerWidget("btn_definition_save");
-            if(theme::ghostButton("Cancel edit",ImVec2(cardInner,0))) {definitionEditing_=false;definitionEditConfirm_=false;}
+            if(theme::ghostButton("Cancel edit",ImVec2(cardInner,0))) {definitionEditing_=false;definitionCloning_=false;definitionEditConfirm_=false;definitionCloneFile_={};definitionCloneNamesBytes_.clear();definitionCloneBankBytes_.clear();}
             auto_.registerWidget("btn_definition_edit_cancel");
         } else {
-            const int answer=confirmRow("Write this field to the destination bank?","Save",cardInner,S(28),"btn_definition_save_confirm");
+            const char* question=definitionCloning_?(definitionEditType_=="clone-creature-private"?
+                "Create three private definitions (assets shared)?":definitionEditType_=="clone-creature"?
+                "Create creature with shared components?":"Create this definition in the destination bank?"):
+                definitionEditType_=="body-model"?"Rebind this body model (shared users; compatibility unverified)?":"Write this field to the destination bank?";
+            const int answer=confirmRow(question,definitionCloning_?"Create":"Save",cardInner,S(28),"btn_definition_save_confirm");
             if(answer>0) saveDefinitionEdit();if(answer) definitionEditConfirm_=false;
         }
     }
@@ -417,6 +673,44 @@ void App::drawDefinitionViewport(const ImVec2&,const ImVec2&) {
     }
     if(!definitionDecodeError_.empty()) {ImGui::TextWrapped("%s",definitionDecodeError_.c_str());auto_.registerWidget("definition_decode_error");}
     ImGui::BeginChild("##definitiondetail",ImGui::GetContentRegionAvail());
+    if(definitionBank_=="game.bin" && definitionDecoded_ && entry.definition=="CCreatureDef" &&
+       definitionDecoded_->clean() && forge::defdecode::encode(*definitionDecoded_)==entry.data) {
+        try {
+            const auto layout=forge::fmplinks::creaturePrefixLayout(definitionDecoded_->prefix);
+            if(!layout.bodyModels.empty()) {
+                theme::hint("Body-part model alternatives. Binding changes shared component users; assets remain shared.");
+                for(const auto& slot:layout.bodyModels) {
+                    uint32_t id=0;
+                    for(size_t n=0;n<4;++n)id|=uint32_t(entry.data.at(slot.offset+n))<<(8*n);
+                    const auto key=std::to_string(slot.bodyPart)+"_"+std::to_string(slot.alternative);
+                    const auto label="Open body "+std::to_string(slot.bodyPart)+" / alternative "+
+                        std::to_string(slot.alternative)+" model "+std::to_string(id);
+                    ImGui::BeginDisabled(definitionEditing_ || modFilesBusy() || meshReplaceFuture_.valid());
+                    if(ImGui::SmallButton(label.c_str()) && selectModelById(id)) assetsTab_=1;
+                    auto_.registerWidget(("definition_body_model_"+key).c_str());ImGui::EndDisabled();
+                    ImGui::BeginDisabled(definitionEditing_ || definitionsBusy() || modFilesBusy());
+                    if(ImGui::SmallButton(("Bind body "+std::to_string(slot.bodyPart)+" / alternative "+std::to_string(slot.alternative)).c_str()))
+                        beginDefinitionBodyModel(slot.bodyPart,slot.alternative);
+                    auto_.registerWidget(("definition_bind_body_"+key).c_str());ImGui::EndDisabled();
+                }
+            }
+        } catch(const std::exception&) {
+            // Unsupported counted prefixes stay inspectable, with no guessed links.
+        }
+    }
+    if(definitionBank_=="game.bin" && definitionDecoded_ && entry.definition=="CREATURE") {
+        for(const auto& [kind,label,widget]:std::array<std::tuple<const char*,const char*,const char*>,2>{
+                std::tuple{"CCreatureDef","Open body definition","btn_definition_body"},
+                std::tuple{"CAppearanceDef","Open appearance definition","btn_definition_appearance"}}) {
+            if(const auto target=definitionread::creatureVisualTarget(definitionFile_,entry,*definitionDecoded_,kind)) {
+                const auto text=std::string(label)+" (entry "+std::to_string(*target)+")";
+                ImGui::BeginDisabled(definitionEditing_);
+                if(ImGui::SmallButton(text.c_str())) definitionBrowseIndex_=*target;
+                auto_.registerWidget(widget);ImGui::EndDisabled();
+            }
+        }
+        theme::hint("Component edits affect every creature that shares that definition.");
+    }
     if(*definitionSelected_<definitionMembers_.size() && !definitionMembers_[*definitionSelected_].empty()) {
         const auto& members=definitionMembers_[*definitionSelected_];
         if(ImGui::CollapsingHeader(("Group members ("+std::to_string(members.size())+")").c_str(),ImGuiTreeNodeFlags_DefaultOpen)) {

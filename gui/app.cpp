@@ -143,17 +143,49 @@ const char* kModeNames[] = {"Textured", "Wireframe", "Walkable", "Height"};
 void App::buildFonts(float scale) {
     ImGuiIO& io = ImGui::GetIO();
     io.Fonts->Clear();
-    const char* fontsDir = "C:\\Windows\\Fonts\\";
-    auto tryFont = [&](const char* file, float size) -> ImFont* {
-        const std::string p = std::string(fontsDir) + file;
-        if (!fs::exists(p)) return nullptr;
-        return io.Fonts->AddFontFromFileTTF(p.c_str(), std::round(size * scale));
+    wchar_t windowsDir[MAX_PATH]{};
+    const UINT windowsLength=GetWindowsDirectoryW(windowsDir,MAX_PATH);
+    fs::path fontsDir=windowsLength && windowsLength<MAX_PATH?fs::path(windowsDir)/"Fonts":fs::path();
+    if(auto_.active()) {
+        wchar_t diagnosticFonts[4096]{};
+        const DWORD length=GetEnvironmentVariableW(L"FABLEFORGE_AUTOMATION_FONT_DIR",diagnosticFonts,4096);
+        if(length && length<4096) fontsDir=fs::path(diagnosticFonts);
+    }
+    auto tryFont = [&](const char* file, float size, ImFont* mergeInto=nullptr) -> ImFont* {
+        if(fontsDir.empty()) return nullptr;
+        auto found=fontFileData_.find(file);
+        if(found==fontFileData_.end()) {
+            const auto path=fontsDir/file;std::error_code error;
+            const auto bytes=fs::file_size(path,error);
+            if(error || !bytes || bytes>64*1024*1024) return nullptr;
+            std::vector<unsigned char> data(size_t(bytes),0);
+            std::ifstream stream(path,std::ios::binary);
+            if(!stream.read(reinterpret_cast<char*>(data.data()),std::streamsize(data.size()))) return nullptr;
+            found=fontFileData_.emplace(file,std::move(data)).first;
+        }
+        ImFontConfig config;
+        config.FontDataOwnedByAtlas=false;
+        config.MergeMode=mergeInto!=nullptr;config.DstFont=mergeInto;
+        std::snprintf(config.Name,sizeof config.Name,"%s",file);
+        auto& data=found->second;
+        return io.Fonts->AddFontFromMemoryTTF(data.data(),int(data.size()),std::round(size * scale),&config);
+    };
+    auto addFallbacks = [&](ImFont* font,float size) {
+        // Preserve primary glyphs; merge only missing glyphs. Optional language
+        // fonts vary by Windows installation. One CJK face avoids redundant banks.
+        for(const char* file:{"msyh.ttc","msgothic.ttc","YuGothR.ttc","malgun.ttf"})
+            if(tryFont(file,size,font)) break;
+        if(!tryFont("seguiemj.ttf",size,font)) tryFont("seguisym.ttf",size,font);
     };
     fontBody_ = tryFont("segoeui.ttf", 17.0f);
-    fontBold_ = tryFont("seguisb.ttf", 17.0f);
-    fontTitle_ = tryFont("seguisb.ttf", 24.0f);
-    fontSmall_ = tryFont("segoeui.ttf", 14.0f);
     if (!fontBody_) fontBody_ = io.Fonts->AddFontDefault();
+    addFallbacks(fontBody_,17.0f);
+    fontBold_ = tryFont("seguisb.ttf", 17.0f);
+    if(fontBold_) addFallbacks(fontBold_,17.0f);
+    fontTitle_ = tryFont("seguisb.ttf", 24.0f);
+    if(fontTitle_) addFallbacks(fontTitle_,24.0f);
+    fontSmall_ = tryFont("segoeui.ttf", 14.0f);
+    if(fontSmall_) addFallbacks(fontSmall_,14.0f);
     if (!fontBold_) fontBold_ = fontBody_;
     if (!fontTitle_) fontTitle_ = fontBody_;
     if (!fontSmall_) fontSmall_ = fontBody_;
@@ -894,10 +926,17 @@ void App::startContextLoad(const std::string& fromRoot) {
     modelRoot_ = fromRoot.empty() ? installPath_ : fromRoot;
     ctxPending_ = std::make_shared<te::Context>();
     const fs::path root = fromRoot.empty() ? fs::u8path(installPath_) : fs::u8path(fromRoot);
+    fs::path textures = root / "data" / "graphics" / "pc" / "textures.big";
+    // Definition-only save folders keep their authored defs but borrow the
+    // original install's textures. An existing bad output must still fail.
+    std::error_code textureStatus;
+    const bool outputTexturesExist = fs::exists(textures, textureStatus);
+    if (!fromRoot.empty() && !outputTexturesExist && !textureStatus)
+        textures = fs::u8path(installPath_) / "data" / "graphics" / "pc" / "textures.big";
     auto ctx = ctxPending_;
-    ctxFuture_ = std::async(std::launch::async, [ctx, root]() {
+    ctxFuture_ = std::async(std::launch::async, [ctx, root, textures]() {
         std::string err;
-        const bool ok = ctx->load(root, root / "data" / "graphics" / "pc" / "textures.big", err);
+        const bool ok = ctx->load(root, textures, err);
         // no textures.big (a trimmed install): keep the ENGINE_THEME defs so theme
         // paint, navigation and blank levels still work without the albedo bake
         if (!ok) { std::string derr; ctx->loadDefs(root, derr); }
@@ -1931,6 +1970,8 @@ std::vector<std::string> App::stateDump() const {
     }
     v.push_back("definition_name_refs="+std::to_string(definitionNameRefs));
     v.push_back("definition_editing="+std::to_string(definitionEditing_));
+    v.push_back("definition_cloning="+std::to_string(definitionCloning_));
+    v.push_back("definition_creature_cloning="+std::to_string(definitionCloning_ && definitionEditType_=="clone-creature"));
     v.push_back("definition_edit_failed="+std::to_string(!definitionEditError_.empty()));
     v.push_back("definition_ready="+std::to_string(bool(definitionDecoded_)));
     v.push_back("definition_failed="+std::to_string(!definitionError_.empty() || !definitionSelectionError_.empty() || !definitionDecodeError_.empty()));
