@@ -1164,3 +1164,26 @@ help now returns zero and the rerun passes. Generated docs/CLI.md refreshed.
 These are argument-only checks, not positive CLI import acceptance; next retain
 tiny donor source fixtures and independently test successful CLI publications and
 Restore before GUI wiring. Native graph, package and runtime gates remain open.
+
+Positive public CLI acceptance now passes in creature-cli-grenrlbw using retained
+tiny source-install fixtures emitted by the rebuilt native-donor harness packet
+skinned-input-donors-dkvikiu6. Five native skeleton donors each exercise untextured,
+existing ID 7, DXT1/DXT3/ARGB image append and four-file in-place publication:
+25 fresh + five in-place imports/Restore. Independent Python checks all six prior
+definition records and raw identity rows/pool prefix, the exact three appended
+payloads (private references plus body word at offset 27), original mesh/texture
+payloads, donor raw LOD0/ghost skeleton spans, geometry/weights, texture references
+and blue/original plus red-green/new pixels. All fixture source hashes stay exact.
+Output paths contain spaces, percent and ampersand; commands run outside checkout.
+Twenty-five CLI prewrite refusals cover absent part/alternative, non-Creature donor,
+missing texture ID and mismatched source rig. No refusal creates an output tree.
+Skin-input CTest passes after fixture-emission change; owned forge rebuilt.
+
+Initial CLI test assumed the descriptor contained a texture row for ID zero;
+it actually lists nonzero referenced IDs. Pixel check initially used wrong DXT
+format constants, corrected to established 0x1f/0x20. Mismatched-rig diagnostics
+can identify parent mismatch rather than a missing joint; gate now requires the
+specific donor-skin-mapping diagnostic. No production guards/tolerances relaxed.
+Failed-run tiny outputs were removed through authoritative Restore; logs retained.
+No full native definition corpus, GUI, package or runtime acceptance claimed.
+Next: native definition-graph coverage and donor/mesh/texture GUI workflow.

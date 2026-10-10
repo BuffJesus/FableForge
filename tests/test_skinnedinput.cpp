@@ -69,11 +69,12 @@ static int donorGate(char** argv) {
     const auto model=albion::meshimport::loadSkinnedModel(argv[4]);
     // Small independent definition graph; the donor's real skeleton/payload
     // remains lazy/read-only, with no full archive serialization or copies.
-    const auto schema=forge::defschema::Schema::loadText(R"({
+    const std::string schemaText=R"({
         "CREATURE":{"fields":[{"name":"Components","type":"uint32"},{"name":"Self","type":"CDefIndex"},{"name":"Other","type":"int32"}]},
         "CCreatureDef":{"fields":[{"name":"Link","type":"CDefIndex"},{"name":"Other","type":"int32"}]},
         "CAppearanceDef":{"fields":[{"name":"Link","type":"CDefIndex"},{"name":"Other","type":"int32"}]}
-    })");
+    })";
+    const auto schema=forge::defschema::Schema::loadText(schemaText);
     const auto field=[](Bytes& bytes,const char* name,uint32_t value){word(bytes,forge::defdecode::fieldTag(name));word(bytes,value);};
     const auto root=[&](bool donorRoot) {
         Bytes bytes{1,0,1,3,0};
@@ -294,6 +295,17 @@ static int donorGate(char** argv) {
             stream.write(reinterpret_cast<const char*>(bytes->data()),std::streamsize(bytes->size()));require(bool(stream),"donor output write failed");
         }
     }
+    // Retain only these tiny fixture banks for the separate public CLI gate.
+    // Never copy the original full native graphics/texture archives.
+    const auto fixtureRoot=fs::path(argv[4]).parent_path()/"source-install";
+    require(!fs::exists(fixtureRoot),"CLI fixture destination must be fresh");
+    for(const auto& [from,relative]:std::array<std::pair<fs::path,fs::path>,4>{{
+        {namesPath,"data/CompiledDefs/names.bin"},{bankPath,"data/CompiledDefs/game.bin"},
+        {graphicsPath,"data/graphics/graphics.big"},{texturesPath,"data/graphics/pc/textures.big"}}}) {
+        fs::create_directories((fixtureRoot/relative).parent_path());
+        require(fs::copy_file(from,fixtureRoot/relative),"CLI fixture copy failed");
+    }
+    write(fs::path(argv[4]).parent_path()/"schema.json",Bytes(schemaText.begin(),schemaText.end()));
     std::cout<<"authored glTF -> donor remap -> stored/compressed readback PASS: "<<id<<'\n';return 0;
 }
 int main(int argc,char** argv) {
