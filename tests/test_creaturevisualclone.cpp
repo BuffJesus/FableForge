@@ -9,6 +9,12 @@
 #include <iostream>
 #include <stdexcept>
 #include <nlohmann/json.hpp>
+#ifdef _WIN32
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#endif
 
 using Bytes=std::vector<uint8_t>;
 static void require(bool ok,const char* why){if(!ok)throw std::runtime_error(why);}
@@ -280,6 +286,33 @@ int main(int argc,char** argv)try{
         }catch(const std::runtime_error&){denied=true;}
         require(denied&&callbackCalled&&!fs::exists(late)&&!fs::exists(late.parent_path()/"names.bin"),
                 "late publication refusal installed outputs");
+#ifdef _WIN32
+        // Hold a prepared file without FILE_SHARE_DELETE. Installation has
+        // already renamed earlier banks when this Windows rename must fail.
+        for(const auto& lockedName:{std::string("names.bin"),std::string("game.bin.forge-created")}) {
+            const auto rollback=temp.path()/("body-rollback-"+lockedName)/"game.bin";
+            HANDLE held=INVALID_HANDLE_VALUE;bool lockReached=false;denied=false;std::string failure;
+            try {
+                albion::definitionwrite::publish(plan,bodyNames,rollback,true,[&] {
+                    for(const auto& child:fs::directory_iterator(rollback.parent_path())) {
+                        if(!child.is_directory() || !child.path().filename().string().starts_with("forge-def-prepare-"))continue;
+                        const auto prepared=child.path()/"new"/lockedName;
+                        held=CreateFileW(prepared.c_str(),GENERIC_READ,FILE_SHARE_READ,nullptr,OPEN_EXISTING,FILE_ATTRIBUTE_NORMAL,nullptr);
+                        require(held!=INVALID_HANDLE_VALUE,"could not lock prepared rollback fixture");
+                        lockReached=true;break;
+                    }
+                    require(lockReached,"prepared rollback fixture missing");
+                });
+            }catch(const std::runtime_error& error){denied=true;failure=error.what();}
+            if(held!=INVALID_HANDLE_VALUE)CloseHandle(held);
+            require(denied&&lockReached,"locked later publication file did not refuse");
+            require(failure.find("rename")!=std::string::npos && failure.find(lockedName)!=std::string::npos,
+                    "rollback fixture did not fail at the intended later rename");
+            for(const auto& name:{"game.bin","names.bin","game.bin.forge-created","names.bin.forge-created"})
+                require(!fs::exists(rollback.parent_path()/name),"partial body publication rollback left installed file");
+            require(read(bodyBank)==bankBytes&&read(bodyNames)==nameBytes,"body rollback altered source banks");
+        }
+#endif
         auto stale=bankBytes;stale[0]^=1;write(bodyBank,stale);
         denied=false;try{albion::definitionwrite::publishCreatureBody(plan,bodyNames,bodyBank,graphicsPath,temp.path()/"stale-body"/"game.bin",proof);}
         catch(const std::runtime_error&){denied=true;}

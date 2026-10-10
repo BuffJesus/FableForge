@@ -701,3 +701,15 @@ existence and prior bytes. Initial compile caught a test-only assignment to a
 reference-bearing contract; use a separately constructed proof copy instead.
 Three affected CTests pass again. Complete race/locked-file rollback matrix and
 CLI/UI promotion still remain; no broad suite or new package claim.
+
+Windows partial-install rollback checks now use tiny owned prepared files held
+without FILE_SHARE_DELETE: names.bin forces refusal after bank installation;
+game.bin.forge-created forces refusal after both banks install. Both routes
+verify the exception identifies the intended rename, no bank/name/creation marker
+remains installed, and source bank/name bytes remain exact. This tests the shared
+existing-entry transaction used by body publication, not a forced race hook in
+the typed wrapper. Conditional Windows-only coverage exercised locally; other
+platforms do not run these lock cases. No all-races/full-matrix claim.
+The locking handle is released after observing refusal. Temporary fixture cleanup
+remains confined to its exclusively created test directory. Next: explicit-index
+body-binding CLI with required schema/graphics/output paths, then GUI drafts.
