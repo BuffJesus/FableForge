@@ -1,4 +1,5 @@
 #include "forge/defdecode.hpp"
+#include "forge/unicode.hpp"
 
 #include <algorithm>
 #include <array>
@@ -314,6 +315,27 @@ std::string formatValue(const DecodedField& f) {
         const auto formatted = std::to_chars(buf, buf + sizeof(buf), x);
         if (formatted.ec == std::errc{}) return std::string(buf, formatted.ptr);
         return hex();
+    }
+    if (f.type == "CWideString") {
+        if(v.size()<2 || v.size()%2) return hex();
+        try {
+            size_t cursor=0;const auto text=unicode::readUtf16z(v,cursor);
+            if(cursor!=v.size()) return hex(); // Preserve visible unsupported trailers.
+            std::string result="\"";
+            for(unsigned char byte:text) switch(byte) {
+            case '"': result+="\\\"";break;
+            case '\\': result+="\\\\";break;
+            case '\n': result+="\\n";break;
+            case '\r': result+="\\r";break;
+            case '\t': result+="\\t";break;
+            case '\b': result+="\\b";break;
+            case '\f': result+="\\f";break;
+            default:
+                if(byte<32 || byte==127) {std::snprintf(buf,sizeof buf,"\\u%04x",unsigned(byte));result+=buf;}
+                else result+=char(byte);
+            }
+            result+='"';return result;
+        } catch(const std::runtime_error&) {return hex();}
     }
     if (f.type == "CCharString") {
         std::string s = "\"";

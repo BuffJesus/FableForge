@@ -121,14 +121,17 @@ fe::Scene load(const std::string& mapName, const Options& options, const te::Con
     fs::path graphics = options.gameRoot / "data" / "graphics" / "graphics.big";
     if (!fs::exists(graphics)) graphics = options.gameRoot / "data" / "graphics" / "pc" / "graphics.big";
     if (!options.graphicsBig.empty()) graphics = options.graphicsBig;
-    if (!fe::openMeshBank(graphics, err)) { warn("graphics.big: " + err); if (statsOut) *statsOut = st; return scene; }
+    scene.meshBank=fe::acquireMeshBank(graphics,err);
+    if (!scene.meshBank) { warn("graphics.big: " + err); if (statsOut) *statsOut = st; return scene; }
 
     std::map<uint32_t, int> meshIndexById;
     std::map<uint32_t, int> textureToImage;
     std::map<std::string, int> defWarned;
+    bool particleBankReady=false;
     if (options.particles) {
         std::string ferr;
-        if (!effects::openBank(options.gameRoot, ferr)) warn("particle effects unavailable: " + ferr);
+        particleBankReady=effects::openBank(options.gameRoot, ferr);
+        if (!particleBankReady) warn("particle effects unavailable: " + ferr);
     }
     // Mesh for a model id, decoded once per scene; -1 when it cannot be decoded.
     auto acquireMesh = [&](uint32_t modelId, const std::string& def) -> int {
@@ -136,12 +139,12 @@ fe::Scene load(const std::string& mapName, const Options& options, const te::Con
         if (known != meshIndexById.end()) return known->second;
         std::string merr;
         const auto g0 = std::chrono::steady_clock::now();
-        const auto geo = fe::cachedMesh(modelId, merr);
+        const auto geo = fe::cachedMesh(scene.meshBank, modelId, merr);
         geoSeconds += std::chrono::duration<double>(std::chrono::steady_clock::now() - g0).count();
         if (!geo) { meshIndexById[modelId] = -1; if (!defWarned[def]++) warn(def + ": " + merr); return -1; }
         std::vector<std::string> mw;
         const auto t0 = std::chrono::steady_clock::now();
-        fe::Mesh m = fe::makeMesh(modelId, fe::meshName(modelId), def, *geo, options.textures, context, scene.images, textureToImage, mw);
+        fe::Mesh m = fe::makeMesh(modelId, fe::meshName(scene.meshBank, modelId), def, *geo, options.textures, context, scene.images, textureToImage, mw);
         texSeconds += std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
         for (const auto& w : mw) warn(w);
         scene.meshes.push_back(std::move(m));
@@ -196,7 +199,7 @@ fe::Scene load(const std::string& mapName, const Options& options, const te::Con
         };
         quad(-hw, 0, hw, 0);
         quad(0, -hw, 0, hw);
-        forge::meshpreview::Material mat; mat.id = 0; mat.diffuseTexture = sp.sprite;
+        forge::meshpreview::Material mat; mat.id = 0; mat.diffuseTexture = sp.sprite>0 ? uint32_t(sp.sprite) : 0;
         g.materials.push_back(mat);
         fe::SubMesh part;
         part.material = 0; part.diffuseTexture = sp.sprite > 0 ? uint32_t(sp.sprite) : 0; part.image = imageIndex; part.hasAlpha = true;
@@ -212,8 +215,11 @@ fe::Scene load(const std::string& mapName, const Options& options, const te::Con
     auto placeParticle = [&](const std::string& fxName, float x, float y, float z) {
         ++st.particles;
         if (!options.particles) return;
+        // Old owning handles remain valid across reloads, but a failed open
+        // must not export their cached assets as if they came from this read.
+        if (!particleBankReady) { ++st.particlesUnknown; return; }
         const auto fx = effects::byName(options.gameRoot,fxName);
-        if (!fx) { ++st.particlesUnknown; if (!defWarned["fx:" + fxName]++) warn("particle effect " + fxName + " is not in effects.big"); return; }
+        if (!fx) { ++st.particlesUnknown; if (!defWarned["fx:" + fxName]++) warn("particle effect " + fxName + " has no unique match in effects.big"); return; }
         bool any = false;
         for (const auto& sp : fx->sprites) {
             const float size = std::max(std::max(sp.startSize, sp.endSize) * 2.0f, 0.1f);
@@ -276,7 +282,7 @@ fe::Scene load(const std::string& mapName, const Options& options, const te::Con
     spawnChildren = [&](uint32_t parentModel, const fe::Instance& parent, float objectScale, int depth) {
         if (depth > 4) return;
         std::string merr;
-        const auto geo = fe::cachedMesh(parentModel, merr);
+        const auto geo = fe::cachedMesh(scene.meshBank, parentModel, merr);
         if (!geo) return;
         for (const auto& h : geo->helpers) {
             if (h.name.empty()) continue;
@@ -348,7 +354,7 @@ fe::Scene load(const std::string& mapName, const Options& options, const te::Con
             overrideName = unquote(*ov);
             if (overrideName == "NULL") overrideName.clear();
         }
-        if (!overrideName.empty()) modelId = fe::meshIdByName(overrideName);
+        if (!overrideName.empty()) modelId = fe::meshIdByName(scene.meshBank, overrideName);
         if (modelId == 0) {
             const int code = context.graphicModelId(def, modelId, &graphicScale);
             if (code == 0) { ++st.noDef; if (!defWarned[def]++) warn(def + ": not in game.bin"); continue; }

@@ -5,14 +5,43 @@ and input hashes. BIN reference inventories remain evidence, not permission to
 write merged banks: external references are outside this tool's scope.
 """
 import argparse
-from collections import Counter
+from collections import Counter, defaultdict
 import hashlib
 import json
 from pathlib import Path
 import struct
 import subprocess
 
-from test_fmp_links import read_bank
+from test_fmp_links import read_bank, crc0
+
+
+def lookup_groups(targets):
+    """Candidates for the compiled native CRC lookup, without choosing ties."""
+    groups = defaultdict(list)
+    for slot, (definition, name) in sorted(targets.items()):
+        # LoadBinaryDefinitions inserts unnamed rows too. A nonempty query
+        # hashing to zero can therefore match anonymous rows. Only an empty
+        # query bypasses this table (GetDefGlobalIndexFromName returns zero).
+        groups[crc0(name)].append({"slot": slot, "definition": definition, "name": name})
+    return dict(groups)
+
+
+def named_lookup_groups(groups):
+    """Groups queried by existing nonempty row names, retaining all candidates."""
+    return {crc: rows for crc, rows in groups.items() if any(row['name'] for row in rows)}
+
+
+def lookup_changes(targets, source_slots):
+    planned = lookup_groups(targets)
+    original = named_lookup_groups(lookup_groups({slot: targets[slot] for slot in source_slots}))
+    changed = []
+    for crc, entries in sorted(original.items()):
+        if entries != planned[crc]:
+            changed.append({"crc": crc, "source_candidates_in_planned_slots": entries,
+                            "planned_candidates": planned[crc]})
+    return {"source_crc_groups": len(original),
+            "added_crc_groups": len(named_lookup_groups(planned).keys() - original.keys()),
+            "changed_existing_groups": changed}
 
 
 def names(root):
@@ -113,6 +142,37 @@ def audit(tool, schema, baseline, sources):
                     'prepared payload differs from independent exact deltas'
             prepared_sources.append(source['prepared_game'])
     assert set(targets) == set(range(report['entries'])), 'missing/unowned output slots'
+    # FableWin LoadBinaryDefinitions 0305D150 inserts stored name CRCs;
+    # GetDefGlobalIndexFromName 03062820 performs CRC-only lookup. Insert
+    # 03064E40 appends duplicates, and Find 03064CD0 uses lower_bound.
+    # Do not infer a stable winner among duplicate keys.
+    for root in [baseline, *sources]:
+        assert all(stored == crc0(name) for stored, name in names(root).values()), \
+            f'name pool contains CRC/text disagreement: {root}'
+    groups = named_lookup_groups(lookup_groups(targets))
+    report['compiled_name_lookup'] = {
+        'scope': 'CRC candidate inventory only; no duplicate winner, runtime alias or source admission claim',
+        'groups': len(groups),
+        'ambiguous_groups': [{'crc': crc, 'candidates': entries}
+                             for crc, entries in sorted(groups.items()) if len(entries) > 1],
+        'sources': []}
+    for source, bank in zip(report['sources'], decoded, strict=True):
+        mapping = dict(source['game_map'])
+        lookup = lookup_changes(targets, [mapping.get(slot, slot) for slot in range(len(bank))])
+        lookup['root'] = source['root']
+        report['compiled_name_lookup']['sources'].append(lookup)
+    core_lookup = report['core_name_lookup']
+    assert core_lookup['ambiguous_groups'] == [
+        {'crc': crc, 'slots': [r['slot'] for r in entries]}
+        for crc, entries in sorted(groups.items()) if len(entries) > 1], 'core CRC ambiguity mismatch'
+    for actual, expected in zip(core_lookup['sources'], report['compiled_name_lookup']['sources'], strict=True):
+        assert actual == {'source_crc_groups': expected['source_crc_groups'],
+                          'added_crc_groups': expected['added_crc_groups'],
+                          'changed_existing_groups': [
+                              {'crc': row['crc'],
+                               'source_slots_in_plan': [r['slot'] for r in row['source_candidates_in_planned_slots']],
+                               'planned_slots': [r['slot'] for r in row['planned_candidates']]}
+                              for row in expected['changed_existing_groups']]}, 'core lookup change mismatch'
     ordinals = {}
     counts_by_definition = Counter()
     for target in range(report['entries']):
@@ -133,7 +193,10 @@ def audit(tool, schema, baseline, sources):
     report['input_sha256'] = before
     report['tool_sha256'] = hashlib.sha256(tool.read_bytes()).hexdigest()
     report['schema_sha256'] = hashlib.sha256(schema.read_bytes()).hexdigest()
+    report['audit_script_sha256'] = hashlib.sha256(Path(__file__).read_bytes()).hexdigest()
+    report['bank_reader_sha256'] = hashlib.sha256(Path(__file__).with_name('test_fmp_links.py').read_bytes()).hexdigest()
     report['independent_checks'] = ['all source record identities preserved',
+        'core CRC candidate ambiguities and changes match independent lookup inventory',
         'baseline slots and name offsets unchanged', 'source record mappings injective',
         'anonymous/ambiguous source additions never coalesced', 'all output slots owned',
         'all name references retain exact CRC/string', 'name pool has no overlaps or gaps',

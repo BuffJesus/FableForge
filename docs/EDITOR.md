@@ -47,11 +47,14 @@ listed in that plan are eligible. If preparation fails, the stage manifest and
 originals remain for retry.
 `src/backups.{hpp,cpp}` scans the
 install for both (root BWD, data/Levels, the loose FinalAlbion folder,
-CompiledDefs, graphics and graphics/pc, FSE) and puts things back: originals are copied over
+CompiledDefs, graphics and graphics/pc, Misc/pc, each immediate data/lang language
+folder, FSE) and puts things back: originals are copied over
 the live file (the backup stays as the baseline), created files are deleted.
 Refused while Fable.exe runs *from this install* (`backups::gameRunningIn`: the process's image path under the root; a scratch tree or another copy is not blocked; every GUI writer shares the check in `App::gameWriteBlocked`, plus the live-link heartbeat). CLI `forge backups` (list, which differ) and
 `restore [--forget]`; GUI: the Setup panel lists them with *Restore the retail
 files* (confirm). Scripts: `restore_all`, state `backups_differ`.
+Restore waits for active text-bank loads. After files are restored, the Text
+browser reloads its index so it displays the restored content.
 
 Later edits to a file marked as created retain that marker as their baseline; they
 do not create an original backup. This includes repeated terrain writes and WAD
@@ -671,18 +674,136 @@ and triangle counts, primitives, bones, helper points, and the object/creature/
 building definitions that reference the mesh. Material texture buttons open the
 corresponding entry in **Textures**. **Refresh** reloads the graphics-bank index.
 Browsing does not write game files. Skinned meshes show a static pose; animation
-playback, collision previews and mesh replacement are not part of this browser.
+playback and collision previews are not part of this browser.
 
 ![Models browser with barrel preview](walkthrough/w11_models.png)
 
 Use **Import model...** on this page for the existing import workflow below.
 
+Use **Replace geometry...** on a selected static model to replace its geometry
+from a GLB, glTF or OBJ file. The source must have the same material slot count
+and order. glTF slots follow first use in the imported primitives; different
+material indices remain separate even when display names match. Existing
+material records, texture references, mesh identity and
+collision shape are retained; definitions that reference that identity stay
+linked. Bounds and geometry counts are updated, and the preview refreshes.
+The save root receives the graphics bank; a separate output folder leaves the
+base installation unchanged. In-place replacement creates the usual backup.
+Replacement currently requires one LOD, canonical material slots/root matrix, no helpers,
+bones, cloth or animated blocks, and no safe-radius override. Unsupported donors
+are refused before writing. Collision rebuilding and modpack recipe integration
+remain pending; this workflow has not been verified in-game.
+
+The equivalent command is `forge mesh-replace <model.glb|.gltf|.obj>
+<MESH_NAME|id> [--stored] [--install <root>]`.
+
+## Browse text
+
+Open **Assets > Text** to search a language's text bank by name, numeric ID or
+content. Select a string to read and copy its content; the detail card shows its
+speaker, speech-bank reference, identifier and tags. Select a group to follow
+its member links. Missing or ambiguous members remain visible without a link.
+Malformed entries show their decode error. Narrator lists display the indexed
+speaker names from the bank header. Browsing is read-only.
+
+**Edit selected string** opens a content draft in the viewport. **Save text**
+asks for confirmation and writes to the bank in the destination folder. If that
+folder has no bank, Forge copies the loaded bank there and tracks the new file;
+Restore on that folder removes the created bank. The source bank stays intact.
+The **Speaker** picker lists existing narrators, including the empty speaker.
+Changing it updates both the speaker name and its narrator index. Otherwise the
+speaker stays intact. **Speech bank** and **Identifier** edit the existing string's
+references; new values must be ASCII and shorter than 4096 bytes. Empty references
+are allowed. Unsupported original byte values remain read-only. Tags and their
+positions, record ID and other archive metadata stay intact. **Cancel edit** discards the draft. An open text draft holds the window close prompt: **Review text** returns here,
+**Cancel** keeps the draft, and **Discard** closes without saving it. Original
+backups are retained once through the normal backup manager. If the bank changed
+on disk, refresh and start the edit again. Noncanonical payloads are refused so
+unknown bytes cannot be lost. Drafts are limited to 1 MiB; groups and narrators
+remain read-only. Use **Goes into** to choose a FableForge mod pack; **Save text**
+writes its language bank, and **Mods > Deploy** composes changed strings with
+other mods. Reads prefer the chosen pack, then the save folder, then the base.
+The first save copies the loaded bank; records differing from the composition
+baseline become this pack's changes. Switching destination requires a fresh draft.
+To undo saved bank edits, use `forge restore --install <pack-folder>`: a created
+bank is removed, while an existing bank returns to its one-time original.
+Existing recovery records for an absent destination must be resolved first.
+
+**Dialogue tags** selects the ordered instructions attached to the string. Edit
+a tag's ASCII name and stored position, use **Add tag** to append one, or
+**Remove selected tag** to remove it. Positions are signed character indices;
+changing content does not automatically move tags. Original unsupported names
+remain read-only and survive other edits. These controls edit stored metadata;
+they do not verify whether an animation or camera cue exists in the game.
+
+**New string from donor** starts a draft from the selected string. Enter a new
+name and content, then use **Save text** and its confirmation. The donor stays
+intact; the new record copies its metadata, receives a free ID, and uses the new
+name as its identifier. You can choose another existing speaker or speech-bank reference for the new line.
+Empty or existing names, exhausted IDs, and stale or
+unsupported donors refuse before publication. Choose a donor whose speaker,
+speech-bank reference and tags suit the new string.
+
+The CLI equivalent, `forge-tools text show <text.big> <name-or-id> --json`,
+uses exact names before complete decimal IDs and refuses ambiguous matches.
+Narrator-list output includes the indexed names from its header.
+
+CLI `text set` and `text import` verify a prepared bank before replacing the
+destination. In-place edits retain the original as `.forge-orig` and standard
+installed text-bank writes refuse while Fable runs from that installation.
+For banks with narrator headers, speaker names must already exist in that bank's
+narrator list. CLI set/import update the associated index with the speaker text;
+unknown or ambiguous names and malformed narrator records refuse before writing.
+
+Object properties offer **View text** for readable-object text and information
+display front/back text. This opens the referenced entry in the current language
+without changing the object. Missing or ambiguous references show an error.
+
+The browser reads the chosen pack's bank first, then the save folder, then
+from the selected installation. Change language or save folder to reload that
+bank; **Refresh** rereads the current bank. **Export all entries** saves the whole
+loaded bank to a new UTF-8 TSV, including entries hidden by search. Choose an
+existing output folder and a new `.tsv` filename; existing files are preserved.
+The export includes metadata, tags, groups, narrator names and entry errors.
+Stored single-byte metadata and tag names map to Latin-1 code points in UTF-8
+output; this leaves bank bytes unchanged. CLI `text show --json` uses the same
+conversion and reports `metadata_byte_encoding: "latin1"`. Groups and narrator
+lists remain read-only. The English retail bank's 28,913 entries load with
+no string/group decode errors, including 2,105 groups.
+
 ## Custom models (Import model)
 
 GLB files must use the version 2 container with complete, aligned chunks. The
-glTF reader checks declared buffer and accessor ranges, including interleaved
-vertex data. Sparse accessors are unsupported and report an error; export a
-model with ordinary buffer-backed attributes before importing it.
+glTF reader supports ordinary, interleaved and sparse vertex data, with embedded
+or external buffers. Triangle lists, strips and fans become static triangles;
+point and line geometry is skipped with a note. Unsupported required extensions
+produce an error naming the extension. Optional extensions use the basic geometry
+and report which features were ignored.
+Positions and normals use floating-point components. Texture coordinates also
+support normalized unsigned 8-bit or 16-bit components; other attribute encodings
+are rejected before import.
+If texture tiling exceeds the model writer's range, the direct-import card and
+import log identify the affected model part and vertex count. Reduce the tiling
+in the source model to avoid clipped texture coordinates.
+
+After a direct import, select `MESH_<NAME>` in Models and open its material's
+**Diffuse** button to inspect the imported image in Textures. A failed import
+shows its error in the import window and keeps the previous model preview.
+
+Each mesh part supports up to 65,535 vertices. With collision enabled, the combined
+hull supports up to 65,536 vertices across all parts; simplify the model or disable
+collision if it exceeds that limit. The workflow creates static props and does
+not import animation. If a glTF model uses an active morph shape, bake the desired
+shape into a static mesh before exporting; the importer refuses active morphs
+rather than importing their base geometry. A selected scene's active skin
+instance also requires a baked static posed mesh; skeletal deformation is not
+applied by this importer. Rotations and transforms are checked before use, and large
+geometry counts are checked before allocating the attribute/index arrays.
+
+OBJ faces can contain up to 1,024 corners. Simple planar concave faces are
+triangulated while retaining their winding and corner UVs/normals. For larger
+faces, self intersections or non-planar concave faces, export triangles from your
+modelling tool before importing.
 
 The *Assets* tab's *Models* page (the Objects tab links to it) takes a `.glb` / `.gltf` / `.obj` (Y up, 1 unit =
 1 metre; glTF node transforms are applied, OBJ `usemtl` groups become primitives), a NAME
@@ -698,7 +819,7 @@ decoded back through the preview reader before anything is written; one-time
 *Add an object* (the def/texture context reloads) and places like any prop. CLI:
 `forge mesh-import <model> <NAME> [--texture png | --texture-id n] [--donor OBJECT_...]`,
 `forge-tools mesh-info <graphics.big> <MESH_NAME|id|--max-id>` to inspect an entry.
-A collision hull is written too: `MESH_<NAME>_PHYSICS`, a type-3 entry in EgoCore's
+A collision hull is written too: `MESH_<NAME>[PHYSICS]`, a type-3 entry in EgoCore's
 `3DMF` form (the model's own triangles) that the render mesh's Info names as
 `PhysicsIndex` -- retail pairs every prop that way (`MESH_OBJECT_BARREL[PHYSICS]` id 168
 <- barrel Info physics 168); the hull carries retail's full chunk set (TRIS, SMTH, VERT,
@@ -971,8 +1092,17 @@ install's bank. Switching between banks refreshes its rows and clears the old
 selection and preview; destinations using the same bank retain them.
 It lists every bank, supports search by
 name or id, previews an entry, exports it as PNG, replaces it from any image (the slot
-keeps its allocated size and pixel format, mips are rebuilt, the entry is validated
-against the retail contract) or adds a new entry to `GBANK_MAIN_PC`. With an object
+keeps its allocated size, frame dimensions, pixel format and transparency mode; larger or smaller
+images are resized to the slot, mips are rebuilt, and the entry is validated
+against the retail contract) or adds a new entry to `GBANK_MAIN_PC`. Image replacement
+supports single-frame 2D textures; animated and volume entries are refused so their
+extra frames or slices are preserved. Existing DXT1 and DXT3 cutout textures keep
+their cutout setting. DXT1 uses one-bit alpha: image alpha below 128 becomes
+transparent, and 128 or above becomes opaque. Other unsupported transparency
+combinations and format conversions of cutout slots are refused. New DXT images
+use at least a 4x4 allocation; an explicitly smaller allocation or a compressed
+replacement slot below that size is refused. Compressed mip chains stop when
+the shorter side reaches four pixels. With an object
 selected in the editor its mesh's diffuse textures are listed on top, so retexturing a
 barrel is: select it, click its texture, *Replace from image*. One-time
 `textures.big.forge-orig` backup; refused while the game runs. Imports are prepared
@@ -1083,6 +1213,9 @@ undone; applying that move is refused because the map is no longer installed.
 
 Refused while Fable runs, and on an install EgoCore has deployed to. The rules of the merge
 are in `docs/modding/MOD_PACKS.md`; CLI: `forge-tools mods ...`.
+Direct CLI `mods merge` and `mods build` also refuse an output folder containing
+a running Fable process, preserving any previous build. Quit that process and
+retry. This applies even when the output differs from the selected base install.
 
 ### Region entrance (FinalAlbion.gtg)
 
@@ -1117,7 +1250,8 @@ filler* (existing saves see it at once). CLI: `--own-region new`. The
 `region-props` command sets a region's RegionDef / minimap / display name /
 world-map flag in the WLD and all three BWD copies.
 Region text refuses unsupported quotes, newlines and NUL before writes; minimap
-names must be bare tokens without whitespace, quotes or semicolons. Apostrophes
+names must start with a letter or underscore and contain only letters, digits
+or underscores. Apostrophes
 and semicolons within quoted display names are preserved.
 
 **2026-09-17:** the minimap texture is now *appended* to `textures.big` under its own
@@ -1293,3 +1427,42 @@ pen there. Release Space to follow the pointer again. Shift keeps its existing
 Raise/Lower, Walkable/Blocked and Shore inversion. Escape, Ctrl/Alt, text entry,
 a popup, switching tools or maps clears the pin. Copy/Paste region tools use
 their existing drag controls.
+
+## Definitions browser
+
+Assets > Definitions inspects game.bin, frontend.bin and script.bin. Search by name, type or native entry index, and use the type filter to narrow the list. Unnamed records remain accessible by their index. Confirmed schema matches show typed fields; unsupported records show their complete raw payload. Right-click a field value to copy it. Refresh reloads the bank and clears the selection.
+
+Object properties offer **Open definition** to select the object's named game-bank definition. Browsing does not change the object or bank. Closing Forge offers **Review definition** for an open field draft and keeps other text/dialogue drafts. Saved fields preserve every other record payload. Existing banks retain their original backup; newly created output-folder or pack banks have creation markers for Restore. Setup Restore applies to its selected install; recover a separate folder with `forge restore --install <folder>`. The browser uses paired names.bin from the same output or install folder as the chosen bank; missing names are an error. Confirmed int32, uint32, float, bool, C2DVector, C3DVector, CRGBColour and supported CCharString/CWideString fields offer **Edit field**. Enter the value in the draft, use the checkbox for a boolean, or enter vector coordinates in the X/Y/Z boxes, or use the colour swatch and R/G/B/A channels, and use **Save field**, then confirm. **Cancel edit** discards it. Choose the output destination before opening the draft; changing it requires starting the edit again. Unsupported types and unexpected byte lengths remain read-only. Cloning is not implemented.
+
+The CLI `defs set-field` writer preserves its source name table when exporting a separate bank. It checks the prepared records and destination pool before publication. Outputs named game.bin, frontend.bin or script.bin retain recovery records for Restore, and refuse writes while the destination game runs.
+
+Fixed-size definition fields with unexpected payload lengths remain protected: `defs set-field` refuses the edit rather than discarding unknown trailing bytes. This applies even when all field tags are recognized.
+
+Game-bank records with a confirmed `GroupDef` reference offer **Open group**. It follows the native entry index and requires a group record in the same bank; unsupported or invalid references have no jump. Selecting a group shows its confirmed members; click a member to return to that definition. Membership is read from the current game bank in the background, and unsupported records are omitted. Open drafts keep this navigation disabled. An unchanged fixed-width draft retains the exact original representation, including existing noncanonical boolean bytes and floating-point NaN bits.
+
+Definition `CRGBColour` CLI input uses red, green, blue, alpha (0-255; omitted alpha defaults to 255). The writer converts to the native blue, green, red, alpha byte order. Existing unexpected lengths refuse.
+
+Inline CCharString and CWideString drafts accept up to 127 printable ASCII characters, including empty text. Unicode input is filtered. Existing non-ASCII, long, unterminated or opaque-tailed strings remain read-only and exact. The shared writer requires one complete NUL-terminated original string before replacement. Unsupported wide strings and name-table references remain inspectable.
+
+CWideString uses UTF-16LE with a final zero code unit, without a count prefix. The CLI writer currently accepts ASCII text for this type and refuses non-ASCII input; existing Unicode values remain intact until an explicit supported replacement. Odd lengths, missing or embedded terminators and opaque trailers refuse before writes.
+
+Definitions are grouped by type and confirmed game-bank group. Search includes group names and native indices. Opening a definition expands its tree and reveals the selected row.
+
+Confirmed object Graphic fields offer Open model by native ID. Missing or ambiguous IDs preserve the current preview. Definition drafts protect this navigation.
+
+Wide-string CLI edits accept valid UTF-8 and save native UTF-16LE. The GUI currently edits short printable ASCII wide strings; other originals remain inspectable.
+
+Terrain-theme texture fields offer Open texture for confirmed positive main-bank IDs. Unsupported and ambiguous targets preserve the current preview; definition drafts protect navigation.
+
+Definition groups sort by name and show native indices to distinguish duplicate or numeric names.
+
+Complete wide strings display as quoted UTF-8; malformed values and unsupported trailers display their complete raw bytes. Long previews end at a UTF-8 character boundary, and Copy full value retains the full string.
+
+
+Definition CDefString fields show a readable name when their byte offset identifies a complete string in the loaded bank's names pool. The raw offset stays visible. These labels identify names in the owning pool.
+
+
+Four-byte definition name references can now be edited with an existing-name chooser. Search finds names or byte offsets; duplicate names appear with distinct offsets. No name stores -1. Saving keeps the existing name pool and refuses stale references. Original unsupported offsets can remain unchanged.
+
+
+The CLI can clone a definition: `forge-tools defs clone <bank.bin> <donor-name-or-index> <new-name> --out <output-bank.bin>`. It copies the whole donor payload and saves the bank/name-pool pair with recovery records. Existing outputs must match the loaded bank and pool. GUI clone controls are still pending.

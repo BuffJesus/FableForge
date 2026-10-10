@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Preserve prior build files when the final publish encounters a locked target."""
+"""Preserve prior build files on publish failures or a running destination."""
 import argparse
 import contextlib
 import ctypes
@@ -7,6 +7,7 @@ from ctypes import wintypes
 import hashlib
 import json
 import os
+import re
 from pathlib import Path
 import subprocess
 import tempfile
@@ -89,10 +90,38 @@ def main():
                 assert (output/'unrelated.txt').read_bytes() == b'keep unrelated file'
                 assert not list(output.glob('.forge-mod-output-*'))
                 checks.append(route + '-retry')
+    helper_source=work/'hold.cpp'
+    helper_source.write_text('#include <windows.h>\n#include <cstdio>\nint main(){puts("ready");fflush(stdout);Sleep(60000);}\n',encoding='utf-8')
+    compiler=re.search(r'^CMAKE_CXX_COMPILER:(?:FILEPATH|STRING)=(.+)$',
+                      (repo/'build/CMakeCache.txt').read_text(encoding='utf-8'),re.MULTILINE).group(1)
+    for route in ('merge','build'):
+        output=work/(route+'-running');write_bank(output,(99,98,97,96))
+        helper=output/'Fable.exe'
+        subprocess.run([compiler,str(helper_source),'-o',str(helper)],capture_output=True,check=True,timeout=60)
+        before=snapshot(output)
+        command=[str(tool),'mods',route,str(base),str(output)]
+        if route=='merge': command+=['--with',str(source)]
+        command+=['--json']
+        process=subprocess.Popen([str(helper)],stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,
+                                 creationflags=subprocess.CREATE_NO_WINDOW)
+        try:
+            assert process.stdout.readline().strip()=='ready'
+            result=subprocess.run(command,capture_output=True,timeout=90,cwd=repo)
+            (work/(route+'-running.log')).write_bytes(result.stdout+result.stderr)
+            assert result.returncode!=0 and b'Fable.exe is running' in result.stdout+result.stderr,route
+            assert snapshot(output)==before,route+': running output changed'
+            assert not list(output.glob('.forge-mod-output-*'))
+            checks.append(route+'-running')
+        finally:
+            process.terminate();process.communicate(timeout=10)
+        result=subprocess.run(command,capture_output=True,timeout=90,cwd=repo)
+        assert result.returncode==0,result.stderr
+        assert read_values(output)==(1,2,3,4)
+        checks.append(route+'-after-exit')
     assert original_inputs == {str(root): snapshot(root) for root in (base, source)}
     (work/'result.json').write_text(json.dumps({'passed': checks, 'inputs_unchanged': True,
         'scope': 'non-staged direct merge and registered build output publication'}, indent=2), encoding='utf-8')
-    print('PASS:', len(checks), 'publish lock/collision/refusal and retry cases')
+    print('PASS:', len(checks), 'publish lock/collision/running-destination refusal and retry cases')
 
 
 if __name__ == '__main__':

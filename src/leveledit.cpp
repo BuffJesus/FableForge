@@ -101,6 +101,13 @@ const forge::tng::CtcBlock* physicsOf(const forge::tng::Thing& t) {
     return phys;
 }
 
+bool finiteFrame(const Frame& frame) {
+    if(!std::isfinite(frame.scale)) return false;
+    for(size_t axis=0;axis<3;++axis)
+        if(!std::isfinite(frame.pos[axis]) || !std::isfinite(frame.forward[axis]) || !std::isfinite(frame.up[axis])) return false;
+    return true;
+}
+
 namespace {
 // Every tng::File edit re-indexes the whole file, so a frame is ~12 re-indexes: fine on one
 // thing, slow when pasting dozens into a big map (Document::paste stages each block in its own
@@ -146,8 +153,8 @@ bool parseUid(const std::string& raw, uint64_t& out) {
 }
 
 void normalise3(float v[3]) {
-    const float l = std::sqrt(v[0] * v[0] + v[1] * v[1] + v[2] * v[2]);
-    if (l > 1e-12f) { v[0] /= l; v[1] /= l; v[2] /= l; }
+    const double l=std::hypot(double(v[0]),double(v[1]),double(v[2]));
+    if (l > 1e-12f) for(size_t axis=0;axis<3;++axis) v[axis]=float(v[axis]/l);
 }
 
 std::string readFile(const fs::path& p) {
@@ -176,14 +183,17 @@ void frameToMatrix(const Frame& f, float m[16]) {
 }
 
 bool matrixToFrame(const float m[16], Frame& f) {
-    const float l1 = std::sqrt(m[4] * m[4] + m[5] * m[5] + m[6] * m[6]);
-    const float l2 = std::sqrt(m[8] * m[8] + m[9] * m[9] + m[10] * m[10]);
-    const float l0 = std::sqrt(m[0] * m[0] + m[1] * m[1] + m[2] * m[2]);
+    if(!std::all_of(m,m+16,[](float value){return std::isfinite(value);})) return false;
+    const double l1=std::hypot(double(m[4]),double(m[5]),double(m[6]));
+    const double l2=std::hypot(double(m[8]),double(m[9]),double(m[10]));
+    const double l0=std::hypot(double(m[0]),double(m[1]),double(m[2]));
     if (l1 < 1e-9f || l2 < 1e-9f || l0 < 1e-9f) return false;
-    f.forward[0] = -m[4] / l1; f.forward[1] = -m[5] / l1; f.forward[2] = -m[6] / l1;
-    f.up[0] = m[8] / l2; f.up[1] = m[9] / l2; f.up[2] = m[10] / l2;
+    const double scale=((l0+l1+l2)/3.0)/0.01;
+    if(scale>std::numeric_limits<float>::max()) return false;
+    f.forward[0] = float(-m[4] / l1); f.forward[1] = float(-m[5] / l1); f.forward[2] = float(-m[6] / l1);
+    f.up[0] = float(m[8] / l2); f.up[1] = float(m[9] / l2); f.up[2] = float(m[10] / l2);
     f.pos[0] = m[12]; f.pos[1] = m[13]; f.pos[2] = m[14];
-    f.scale = ((l0 + l1 + l2) / 3.0f) / 0.01f;
+    f.scale = float(scale);
     return true;
 }
 
@@ -2215,7 +2225,7 @@ bool Document::setLocked(size_t index,bool locked) {
 
 void Document::setFrame(size_t index, const Frame& frame) {
     if (index >= file_.things().size()) throw std::out_of_range("setFrame: bad thing index");
-    if (isLocked(index)) return;
+    if (isLocked(index) || !finiteFrame(frame)) return;
     if (!physicsOf(file_.things()[index])) throw std::runtime_error("setFrame: thing has no physics block");
     pushUndo();
     writeFrame(file_, index, frame,worldX_,worldY_);
@@ -2224,6 +2234,7 @@ void Document::setFrame(size_t index, const Frame& frame) {
 
 void Document::setOwnedFrame(size_t index, const Frame& frame) {
     if (index >= file_.things().size()) throw std::out_of_range("setOwnedFrame: bad thing index");
+    if (!finiteFrame(frame)) return;
     if (!physicsOf(file_.things()[index])) throw std::runtime_error("setOwnedFrame: thing has no physics block");
     pushUndo();
     writeFrame(file_, index, frame,worldX_,worldY_);
@@ -2246,6 +2257,8 @@ bool Document::setHeight(size_t index, float height) {
 void Document::setProperty(size_t index, const std::string& key, const std::string& value) {
     if (index >= file_.things().size()) throw std::out_of_range("setProperty: bad thing index");
     if (isLocked(index) && lower(key)=="objectscale") return;
+    if (forge::tng::isIdentifierProperty(file_.things()[index].type,key) && !forge::tng::isUnquotedIdentifier(value))
+        throw std::invalid_argument(key + " must be an unquoted identifier");
     pushUndo();
     file_.setThingProperty(index, key, value);
     ++revision_;
@@ -2310,14 +2323,26 @@ std::vector<Document::PropertyRow> Document::propertiesOf(size_t index) const {
     std::vector<PropertyRow> out;
     if (index >= file_.things().size()) return out;
     const auto& t = file_.things()[index];
-    const bool trackNode = lower(t.type) == "tracknode";
+    const auto type=lower(t.type);
+    const bool trackNode = type == "tracknode";
+    const bool physical=type=="object" || type=="marker" || type=="building" ||
+        type=="village" || type=="holy site" || trackNode || type=="switch" || type=="aicreature";
+    const auto topLevelKind=[&](const forge::tng::Property& property) {
+        const auto key=lower(property.key);
+        // Confirmed native float transfers retain their type when written as integers.
+        if ((physical && (key=="health" || key=="objectscale" || key=="anglexy" || key=="angleyz" || key=="anglexz")) ||
+            (type=="switch" && (key=="triggerradius" || key=="timetochangeenvironmentdef")) ||
+            (type=="aicreature" && (key=="initialposx" || key=="initialposy" || key=="initialposz")))
+            return PropertyRow::Kind::Float;
+        return kindOf(property.value);
+    };
     for (const auto& p : t.properties) {
         if (hiddenProperty("", p.key)) continue;
         if (trackNode && lower(p.key) == "scriptname") continue;   // renamed through the Tracks card (the whole chain)
         // a key written twice (ScriptName on some things): one row, showing the copy the loader reads (the last)
         auto dup = std::find_if(out.begin(), out.end(), [&](const PropertyRow& r) { return r.ctc.empty() && lower(r.key) == lower(p.key); });
-        if (dup != out.end()) { dup->value = p.value; dup->kind = kindOf(p.value); continue; }
-        out.push_back({"", p.key, p.value, kindOf(p.value)});
+        if (dup != out.end()) { dup->value = p.value; dup->kind = topLevelKind(p); continue; }
+        out.push_back({"", p.key, p.value, topLevelKind(p)});
     }
     for (const auto& b : t.ctcBlocks)
         for (const auto& p : b.properties)
@@ -2378,6 +2403,11 @@ bool Document::setComponentOverride(size_t index,const std::string& ctc,const st
     } else {
         const auto [end,error]=std::from_chars(value.data(),value.data()+value.size(),number);
         if(error!=std::errc() || end!=value.data()+value.size() || !std::isfinite(number) || std::abs(number)>std::numeric_limits<float>::max()) return false;
+        // Preserve the authored double-range check, but also require representable
+        // float storage: a tiny double must not silently become zero in the game.
+        float storage=0;
+        const auto [storageEnd,storageError]=std::from_chars(value.data(),value.data()+value.size(),storage);
+        if(storageError!=std::errc() || storageEnd!=value.data()+value.size() || !std::isfinite(storage)) return false;
     }
     if(metadata->hasRange && (number<metadata->min || number>metadata->max)) return false;
     if(row->present && row->row.value==stored) return true;
@@ -2400,27 +2430,41 @@ bool Document::resetComponentOverride(size_t index,const std::string& ctc,const 
 
 bool Document::setPropertyValue(size_t index, const std::string& ctc, const std::string& key, const std::string& value) {
     if (index >= file_.things().size() || hiddenProperty(ctc, key)) return false;
+    // Property-grid edits serialize one directive per line, even for quoted text.
+    if (value.find_first_of("\r\n\0", 0, 3) != std::string::npos) return false;
     if (isLocked(index)) {
         const auto block=lower(ctc),field=lower(key);
         if (block.empty() && field=="objectscale") return false;
+        const bool position=field=="positionx" || field=="positiony" || field=="positionz";
         if ((block=="ctcphysicsstandard" || block=="ctcphysicsnavigator") &&
-            (field=="positionx" || field=="positiony" || field=="positionz" ||
-             field=="rhsetforwardx" || field=="rhsetforwardy" || field=="rhsetforwardz" ||
+            (position || field=="rhsetforwardx" || field=="rhsetforwardy" || field=="rhsetforwardz" ||
              field=="rhsetupx" || field=="rhsetupy" || field=="rhsetupz")) return false;
+        // Light inherits native Base position storage, without Standard's RHS fields.
+        if (block=="ctcphysicslight" && position) return false;
     }
     std::optional<PropertyRow> row;
     for (const auto& r : propertiesOf(index))
         if (r.ctc == ctc && lower(r.key) == lower(key)) row = r;
     if (!row) return false;
+    const bool identifierName = ctc.empty() && forge::tng::isIdentifierProperty(file_.things()[index].type,key);
+    if (identifierName && !forge::tng::isUnquotedIdentifier(value)) return false;
     if (row->value == value) return true;
     using K = PropertyRow::Kind;
     const K k = kindOf(value);
     // keep the field's kind: an int field takes ints, a float field ints or floats, a string a quoted string
-    const bool fits = row->kind == K::Raw ? (!value.empty() && value.find(';') == std::string::npos && value.find('\n') == std::string::npos)
+    const bool fits = identifierName ? true
+                    : row->kind == K::Raw ? (!value.empty() && value.find(';') == std::string::npos && value.find('\n') == std::string::npos)
                     : row->kind == K::Float ? (k == K::Float || k == K::Int)
                     : row->kind == K::String ? (k == K::String && value.find('"', 1) == value.size() - 1)
                     : k == row->kind;
     if (!fits) return false;
+    if (row->kind == K::Float && !identifierName) {
+        std::string_view numeric=value;
+        if (numeric.starts_with('+')) numeric.remove_prefix(1);
+        float parsed=0;
+        const auto [end,error]=std::from_chars(numeric.data(),numeric.data()+numeric.size(),parsed);
+        if (error!=std::errc() || end!=numeric.data()+numeric.size() || !std::isfinite(parsed)) return false;
+    }
     pushUndo();
     if (ctc.empty()) { if (!file_.setThingPropertyAll(index, key, value)) file_.setThingProperty(index, key, value); }   // every copy of a doubled key
     else {
@@ -2520,6 +2564,8 @@ std::vector<Document::Track> Document::tracks() const {
 }
 
 size_t Document::placeTrackNode(float x, float y, float z, const std::string& name) {
+    if (!forge::tng::isScriptName(name))
+        throw std::invalid_argument("ScriptName must be an unquoted identifier");
     pushUndo();
     const uint64_t uid = forge::thingplacer::nextUid(file_);
     char pos[160];
@@ -2549,10 +2595,14 @@ bool Document::linkTrackNodes(size_t a, size_t b, std::string& error) {
     if (chainA.back() != a && chainA.front() == a) std::reverse(chainA.begin(), chainA.end());
     if (chainB.front() != b && chainB.back() == b) std::reverse(chainB.begin(), chainB.end());
     if (chainA.back() != a || chainB.front() != b) { error = "a node inside a track already has two links"; return false; }
+    std::string name=trackNameOf(file_.things()[chainA.front()]);
+    if (!placeholderTrackName(name) && !forge::tng::isScriptName(name)) {
+        error = "rename the selected track with a letter or underscore first; use ASCII letters, digits and underscores";
+        return false;
+    }
     pushUndo();
     std::vector<size_t> joined = chainA;
     joined.insert(joined.end(), chainB.begin(), chainB.end());
-    std::string name=trackNameOf(file_.things()[joined.front()]);
     if (placeholderTrackName(name)) name=nextTrackTempName();
     // re-link the whole joined chain in order (a flipped part gets its links swapped)
     for (size_t i = 0; i < joined.size(); ++i) {
@@ -2581,8 +2631,7 @@ bool Document::flipTrack(size_t node) {
 }
 
 bool Document::renameTrack(size_t node, const std::string& name) {
-    if (!isTrackNode(node) || name.empty()) return false;
-    for (const char c : name) if (!(std::isalnum(static_cast<unsigned char>(c)) || c == '_')) return false;
+    if (!isTrackNode(node) || !forge::tng::isScriptName(name)) return false;
     pushUndo();
     nameChain(trackChain(node), name);
     ++revision_;
@@ -2657,7 +2706,7 @@ bool Document::listEditable(size_t index, const std::string& ctc, const std::str
 }
 
 bool Document::addListEntry(size_t index, const std::string& ctc, const std::string& base, const std::string& value) {
-    if (!listEditable(index,ctc,base) || kindOf(value)!=PropertyRow::Kind::String || value.find_first_of(";\r\n")!=std::string::npos) return false;
+    if (!listEditable(index,ctc,base) || kindOf(value)!=PropertyRow::Kind::String || value.find_first_of(";\r\n\0",0,4)!=std::string::npos) return false;
     const auto cur = listEntries(index, ctc, base);
     pushUndo();
     const std::string after = cur.empty() ? std::string() : base + "[" + std::to_string(cur.size() - 1) + "]";
@@ -3032,6 +3081,7 @@ std::optional<size_t> Document::setDayNight(size_t index, int mode) {
     const auto split = splitDayNight(section);
     if (split.second == mode) return index;
     const std::string target = split.first + (mode == 1 ? "%DayOnly" : mode == 2 ? "%NightOnly" : "");
+    if (!forge::tng::isSafeSectionName(target)) return std::nullopt;
     beginBatch();   // the new section and the move are one undo step
     try {
         bool have = false;
@@ -3201,6 +3251,8 @@ std::vector<size_t> Document::duplicateGroup(const std::vector<size_t>& indices)
 }
 
 size_t Document::place(forge::thingplacer::Placement placement) {
+    if (!placement.scriptName.empty() && !forge::tng::isScriptName(placement.scriptName))
+        throw std::invalid_argument("ScriptName must be an unquoted identifier");
     pushUndo();
     try {
         const auto r = forge::thingplacer::place(file_, std::move(placement));
@@ -3213,6 +3265,8 @@ size_t Document::place(forge::thingplacer::Placement placement) {
 }
 
 size_t Document::placeFishingSpot(const float pos[3], const std::string& reward, const std::string& scriptName) {
+    if (!scriptName.empty() && !forge::tng::isScriptName(scriptName))
+        throw std::invalid_argument("ScriptName must be an unquoted identifier");
     pushUndo();
     try {
         // the retail block: 32 MARKER_FISHING_SPOT things across FinalAlbion share it,
@@ -3254,6 +3308,8 @@ size_t Document::placeFishingSpot(const float pos[3], const std::string& reward,
 
 size_t Document::placeCreatureGenerator(const float pos[3], const std::vector<std::string>& families,
                                         float radius, int activeLimit, const std::string& scriptName) {
+    if (!scriptName.empty() && !forge::tng::isScriptName(scriptName))
+        throw std::invalid_argument("ScriptName must be an unquoted identifier");
     if (families.empty()) throw std::invalid_argument("a spawner needs at least one creature family");
     pushUndo();
     try {
@@ -3311,6 +3367,8 @@ size_t Document::placeCreatureGenerator(const float pos[3], const std::vector<st
 }
 
 size_t Document::placeCreature(const float pos[3], const float forward[2], const std::string& definition, const std::string& scriptName, int player) {
+    if (!scriptName.empty() && !forge::tng::isScriptName(scriptName))
+        throw std::invalid_argument("ScriptName must be an unquoted identifier");
     if (definition.empty()) throw std::invalid_argument("a creature needs a definition");
     pushUndo();
     try {
@@ -3369,6 +3427,8 @@ size_t Document::placeCreature(const float pos[3], const float forward[2], const
 }
 
 size_t Document::placeVillage(const float pos[3], const std::string& definition, const std::string& scriptName, int player) {
+    if (!scriptName.empty() && !forge::tng::isScriptName(scriptName))
+        throw std::invalid_argument("ScriptName must be an unquoted identifier");
     if (definition.empty()) throw std::invalid_argument("a village needs a definition");
     pushUndo();
     try {
@@ -3424,6 +3484,8 @@ size_t Document::placeVillage(const float pos[3], const std::string& definition,
 }
 
 size_t Document::placeEmitter(const float pos[3], const std::string& effectName, const std::string& scriptName) {
+    if (!scriptName.empty() && !forge::tng::isScriptName(scriptName))
+        throw std::invalid_argument("ScriptName must be an unquoted identifier");
     if (effectName.empty()) throw std::invalid_argument("an emitter needs an effect name");
     pushUndo();
     try {

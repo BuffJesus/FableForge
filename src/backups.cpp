@@ -1,4 +1,5 @@
 #include "backups.hpp"
+#include "textdestination.hpp"
 
 #include "forge/stage.hpp"
 
@@ -25,6 +26,14 @@ namespace fs = std::filesystem;
 namespace albion::backups {
 
 namespace {
+
+bool restoreTextOffline(const fs::path& file,std::string& error) {
+    try {
+        if(textwrite::loweredPathComponent(file.filename().string())=="text.big")
+            textwrite::requireTextDestinationOffline(file);
+        return true;
+    } catch(const std::exception& ex) {error=ex.what();return false;}
+}
 
 bool endsWith(const std::string& s, const char* suffix) {
     const size_t n = std::strlen(suffix);
@@ -174,7 +183,13 @@ std::vector<Entry> scan(const fs::path& gameRoot) {
     scanDir(gameRoot / "data" / "graphics", out);
     scanDir(gameRoot / "data" / "graphics" / "pc", out);
     scanDir(gameRoot / "data" / "Misc" / "pc", out);
-    scanDir(gameRoot / "data" / "lang" / "English", out);
+    const auto languages = gameRoot / "data" / "lang";
+    std::error_code languageError;
+    if (fs::is_directory(languages, languageError)) {
+        for (const auto& language : fs::directory_iterator(languages)) {
+            if (language.is_directory()) scanDir(language.path(), out);
+        }
+    }
     scanDir(gameRoot / "FSE", out);
     scanDir(gameRoot / "FSE" / "PartyMode", out);
     std::sort(out.begin(), out.end(), [](const Entry& a, const Entry& b) { return a.file < b.file; });
@@ -204,11 +219,22 @@ bool gameRunningIn(const fs::path& gameRoot) {
     std::error_code ec;
     fs::path root = fs::weakly_canonical(gameRoot, ec);
     if (ec) root = gameRoot;
-    std::wstring rootW = root.wstring();
-    for (auto& c : rootW) { if (c == L'/') c = L'\\'; c = wchar_t(towlower(c)); }
+    auto normalize=[](std::wstring value) {
+        for(auto& c:value) {if(c==L'/') c=L'\\';c=wchar_t(towlower(c));}
+        return value;
+    };
+    auto prefix=[&](const fs::path& value) {
+        auto name=normalize(value.wstring());
+        if(!name.empty() && name.back()!=L'\\') name+=L'\\';
+        return name;
+    };
     // Match a directory boundary: install-other/Fable.exe is not running from
     // install, while install/Fable.exe and install/bin/Fable.exe both are.
-    if (!rootW.empty() && rootW.back() != L'\\') rootW += L'\\';
+    std::vector<std::wstring> roots{prefix(root)};
+    bool rootsResolved=false;
+    auto matches=[&](const std::wstring& image) {
+        return std::any_of(roots.begin(),roots.end(),[&](const auto& candidate){return image.rfind(candidate,0)==0;});
+    };
     HANDLE snap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
     if (snap == INVALID_HANDLE_VALUE) return false;
     PROCESSENTRY32W pe; pe.dwSize = sizeof pe;
@@ -222,9 +248,15 @@ bool gameRunningIn(const fs::path& gameRoot) {
             const bool ok = QueryFullProcessImageNameW(h, 0, buf, &n) != 0;
             CloseHandle(h);
             if (!ok) { found = true; break; }
-            std::wstring img(buf, n);
-            for (auto& c : img) { if (c == L'/') c = L'\\'; c = wchar_t(towlower(c)); }
-            if (img.rfind(rootW, 0) == 0) { found = true; break; }
+            try {
+                if(!rootsResolved) {
+                    roots.push_back(prefix(paths::resolvedPath(gameRoot)));rootsResolved=true;
+                }
+                const std::wstring rawImage(buf,n);
+                if(matches(normalize(rawImage)) || matches(normalize(paths::resolvedPath(fs::path(rawImage)).wstring()))) {
+                    found=true;break;
+                }
+            } catch(const std::exception&) {found=true;break;} // cannot resolve ownership: preserve the install
         } while (Process32NextW(snap, &pe));
     }
     CloseHandle(snap);
@@ -236,6 +268,7 @@ bool gameRunningIn(const fs::path& gameRoot) {
 }
 
 bool restore(const Entry& e, bool keepBackup, std::string& error) {
+    if(!restoreTextOffline(e.file,error)) return false;
     std::error_code ec;
     if (e.created) {
         fs::remove(e.file, ec);
@@ -268,6 +301,9 @@ bool restore(const Entry& e, bool keepBackup, std::string& error) {
 size_t restoreAll(const fs::path& gameRoot, bool keepBackup, std::vector<std::string>& notes, std::string& error) {
     if (gameRunningIn(gameRoot)) { error = "Fable.exe is running; quit the game first (the engine holds these files open)"; return 0; }
     const auto before = scan(gameRoot);
+    for(const auto& e:before) {
+        if(!restoreTextOffline(e.file,error)) {notes.push_back("failed: "+error);return 0;}
+    }
     // Older writers could add an original to a file already marked as created.
     // Neither record establishes which baseline is authoritative. Reject before
     // consuming a stage or changing any target, even if the target is missing.
@@ -302,6 +338,10 @@ size_t restoreAll(const fs::path& gameRoot, bool keepBackup, std::vector<std::st
     if (fs::exists(forge::stage::manifestPath(gameRoot), ec)) {
         try {
             const auto plan = forge::stage::inspectRecovery(gameRoot);
+            for(const auto& staged:plan) {
+                std::string ownerError;
+                if(!restoreTextOffline(staged.target,ownerError)) throw std::runtime_error(ownerError);
+            }
             std::vector<Entry> rebase;
             for (const auto& staged : plan) {
                 const auto key = targetKey(staged.target);
@@ -327,6 +367,10 @@ size_t restoreAll(const fs::path& gameRoot, bool keepBackup, std::vector<std::st
                 if (!restore(baseline, true, rebaseError))
                     throw std::runtime_error("cannot rebase editor baseline: " + rebaseError);
                 notes.push_back("rebased " + baseline.file.filename().string() + " onto the staged original (it was taken on top of the stage)");
+            }
+            for(const auto& staged:plan) {
+                std::string ownerError;
+                if(!restoreTextOffline(staged.target,ownerError)) throw std::runtime_error(ownerError);
             }
             const auto r = forge::stage::revert(gameRoot);
             notes.push_back("reverted the staged deploy: " + std::to_string(r.restored.size()) + " restored, " + std::to_string(r.removed.size()) + " removed");

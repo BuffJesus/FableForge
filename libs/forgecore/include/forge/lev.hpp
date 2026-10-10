@@ -2,15 +2,16 @@
 // Reader for Fable TLC .lev terrain files. Byte layout recovered from the
 // decompiled FableMod.LEV (ChocolateBox DecompiledDLLs), the library that
 // SilverChest.LevBridge uses — our theme-grid ground truth:
-//   LEVHeader   (25B): u32 headerSize, u16 version(==6404), u8 pad[3],
-//                      u32 reserved1, u32 obsOffset, u32 reserved2, u32 navOffset
-//   LEVMapHeader(22B): u8 size, u8 mapVersion(==8), u8 pad[3] (pad[2] is a
-//                      sub-version, 8 or 9), u32 uidLo, u32 uidHi,
-//                      i32 width, i32 height, u8 flag
+//   CFileFormatLevel (25B): u32 byteLength=25, u8 serialiseVersion=4,
+//     u32 mapOffset=25, thingOffset, brushOffset, oldNavigationOffset, navOffset.
+//     The historical u16 "6404" check combines version 4 and offset byte 25.
+//   CFileFormatMapHeader prefix (22B): u32 byteLength=67614/67618,
+//     u8 serialiseVersion=8/9, u64 UID, u32 width,height, u8 usingExtraCells.
+//     The palettes below are included in this map-header byte length.
 //   256 ground themes: char name[128] + u32 value
 //   u32 fileVersion, u32 soundCount, 256 atmos themes (char name[128] + u32
 //     value: the ENVIRONMENT themes painted per game-map cell),
-//   (sub-version 9 only) u32 extra,
+//   (sub-version 9 only) u32 StaticMapChecksum,
 //   (soundCount-1) x { u32 len, char name[len] } SOUND_THEME names (index 0 =
 //     the implicit NULL),
 //   cells: (height+1)*(width+1) x 21B -- u32 21 + u8 7 record header, float

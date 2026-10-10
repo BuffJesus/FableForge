@@ -83,7 +83,9 @@ def main():
                 inputs = {str(p): snapshot(p) for p in sources}
                 failure = run(*command(route, output), good=False)
                 assert f'mods text entry: English/{symbol} from Broken' in failure.stderr
-                assert 'selected payload cannot be preserved by the string codec' in failure.stderr
+                reason = ('textbig: unterminated tag name' if label == 'unterminated tag'
+                          else 'selected payload cannot be preserved by the string codec')
+                assert reason in failure.stderr, failure.stderr
                 assert before == (snapshot(output) if output.exists() else {})
                 assert inputs == {str(p): snapshot(p) for p in sources}
                 checks.append({'route': route, 'case': label, 'symbol': symbol, 'refused_preserved': True})

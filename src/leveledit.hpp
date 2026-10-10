@@ -184,6 +184,7 @@ public:
     // a missing flag is inserted, but unrelated component schemas are not created.
     bool isLocked(size_t index) const;
     bool setLocked(size_t index, bool locked);
+    // Non-finite frame components refuse without mutation or undo/history changes.
     void setFrame(size_t index, const Frame& frame);
     // The native owner move ignores the child's own editor lock. Call only for
     // descendants returned by ownedFramesAfter for an unlocked edited parent.
@@ -250,6 +251,7 @@ public:
     std::vector<std::string> ctcBlocksOf(size_t index) const;
     // Sets one field (value as the .tng spells it: TRUE, 3, 1.5, "text"); one undo
     // step. False when the value does not fit the field's kind or the field is absent.
+    // Values cannot contain CR, LF or NUL. Refusals do not create undo entries.
     bool setPropertyValue(size_t index, const std::string& ctc, const std::string& key, const std::string& value);
     static PropertyRow::Kind kindOf(const std::string& value);
     // Indexed list fields (CTCCreatureGenerator CreatureFamilies[n]; no count field,

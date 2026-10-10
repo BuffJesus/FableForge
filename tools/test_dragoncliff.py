@@ -10,6 +10,7 @@ import re
 import shutil
 import subprocess
 import tempfile
+from test_gbpack import pristine
 
 
 REPO = Path(__file__).resolve().parent.parent
@@ -37,8 +38,9 @@ def main() -> int:
                          "data/CompiledDefs/script.bin", "data/CompiledDefs/frontend.bin",
                          "data/Levels/FinalAlbion.wad", "data/Levels/FinalAlbion.wld",
                          "data/Levels/FinalAlbion.bwd", "data/Levels/FinalAlbion.gtg",
+                         "data/lang/English/text.big",
                          "data/graphics/graphics.big"):
-            src = RETAIL / relative
+            src = Path(pristine(str(RETAIL), relative))
             if src.is_file():
                 dest = root / relative
                 dest.parent.mkdir(parents=True, exist_ok=True)

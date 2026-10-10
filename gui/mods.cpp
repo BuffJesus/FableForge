@@ -79,9 +79,17 @@ void App::setSaveRoot(const std::string& root) {
     const fs::path next = fs::path(root.empty() ? installPath_ : root).lexically_normal();
     if (previous != next && fileWriteBlocked("save folder")) return;
     const fs::path previousTextures = texturesBigPath().lexically_normal();
+    const fs::path previousGraphics = graphicsBigPath().lexically_normal();
+    const bool hadModel = !modelName_.empty();
+    const uint32_t selectedModel = modelId_;
     saveRoot_ = root;
+    modelRoot_ = saveRoot();
     if (previous != fs::path(saveRoot()).lexically_normal()) resetModDestination();
     if (previousTextures != texturesBigPath().lexically_normal()) invalidateTextureViews();
+    if (modelsLoaded_ && previousGraphics != graphicsBigPath().lexically_normal()) {
+        refreshModels();
+        if (hadModel) selectModelById(selectedModel);
+    }
 }
 
 void App::resetModDestination() {
@@ -91,6 +99,9 @@ void App::resetModDestination() {
     texAddError_.clear();
     meshImportError_.clear(); customThemeError_.clear();
     meshImportSuccess_.clear();
+    meshImportNotes_.clear();
+    meshReplaceError_.clear();
+    meshReplaceSuccess_.clear();
     packDest_.clear(); packDestChosen_ = false;
     modConflicts_.clear(); modReportSummary_.clear();
     modConflictSearch_[0] = 0; modChoicesOnly_ = false;
@@ -630,7 +641,7 @@ void App::pollModsTool() {
     if (!modsQueuedVerb_.empty()) {
         if (modReadersBusy()) return;
         stopWorldTiles();
-        foliageexport::closeMeshBank(); thumbBankOpen_ = false;
+        foliageexport::closeMeshBank();
         const std::string cmd = std::move(modsQueuedCommand_);
         modsVerb_ = std::move(modsQueuedVerb_);
         modsQueuedVerb_.clear();
@@ -732,7 +743,7 @@ void App::pollModsTool() {
 }
 
 bool App::modReadersBusy() const {
-    if (ctxFuture_.valid() || previewFuture_.valid() || foliageFuture_.valid() ||
+    if (definitionsBusy() || textFuture_.valid() || ctxFuture_.valid() || previewFuture_.valid() || foliageFuture_.valid() ||
         neighbourFuture_.valid() || exportFuture_.valid() || fitFuture_.valid() ||
         worldDetailFuture_.valid() || !worldScenery_.settled) return true;
     for (const auto& worker : worldTileWorkers_)
@@ -747,7 +758,8 @@ void App::refreshAfterMods() {
     modsRefreshPending_ = false;
     foliageexport::closeMeshBank();
     invalidateTextureViews();
-    thumbBankOpen_ = false; defThumbs_.clear(); defList_.clear(); themeGroupOf_.clear();
+    textLoaded_=false;definitionLoaded_=false;
+    defThumbs_.clear(); defList_.clear(); themeGroupOf_.clear();
     envDefs_.clear(); soundDefs_.clear(); familyNames_.clear(); issuesRev_ = ~0ull;
     newLevelDonor_.clear();
     dialogueAudio_.reset(); dialogueLoaded_ = false;

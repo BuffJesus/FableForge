@@ -175,6 +175,28 @@ int main() {
     CHECK(!doc.setPropertyValue(0,"CTCPhysicsStandard","RHSetUpZ","0.0"));
     CHECK(!doc.setPropertyValue(0,"","ObjectScale","3.0"));
     CHECK(doc.text()==original && !doc.canUndo());
+    {
+        const std::string lightSource="Version 2;\r\nXXXSectionStart NULL;\r\nNewThing Object;\r\nUID 90;\r\nPlayer 4;\r\nDefinitionType \"OBJECT_BARREL_BREAKABLE\";\r\n"
+            "StartCTCPhysicsLight;\r\nPositionX 1.0;\r\nPositionY 2.0;\r\nPositionZ 3.0;\r\nEndCTCPhysicsLight;\r\n"
+            "StartCTCEditor;\r\nLockedInPlace TRUE;\r\nEndCTCEditor;\r\nEndThing;\r\nXXXSectionEnd;\r\n";
+        Document light;
+        CHECK(light.openText("Light physics lock",lightSource,error) && light.isLocked(0));
+        const auto revision=light.revision();
+        for(const std::string key:{"PositionX","PositionY","PositionZ"}) {
+            CHECK(!light.setPropertyValue(0,"CTCPhysicsLight",key,"9.0"));
+            CHECK(light.text()==lightSource && light.revision()==revision && !light.canUndo());
+        }
+        CHECK(light.setPropertyValue(0,"","Player","2"));
+        CHECK(light.undo() && light.text()==lightSource);
+        CHECK(light.setLocked(0,false));
+        const auto unlocked=light.text();
+        CHECK(light.setPropertyValue(0,"CTCPhysicsLight","PositionX","9.0"));
+        CHECK(light.undo() && light.text()==unlocked);
+        CHECK(light.undo() && light.text()==lightSource && light.canRedo());
+        const auto undoneRevision=light.revision();
+        CHECK(!light.setPropertyValue(0,"CTCPhysicsLight","PositionZ","9.0"));
+        CHECK(light.text()==lightSource && light.revision()==undoneRevision && light.canRedo());
+    }
     // Content ownership remains editable; locking protects placement, not the whole object.
     CHECK(doc.setPropertyValue(0,"","Player","2"));CHECK(doc.undo() && doc.text()==original);
     CHECK(doc.setLocked(0,false) && !doc.isLocked(0));

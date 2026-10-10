@@ -42,6 +42,26 @@ int main() {
             ++failures; std::fprintf(stderr, "def value: JSON failed: %s\n", error.what());
         }
     }
+    const std::vector<std::pair<std::vector<uint8_t>,std::string>> wideCases={
+        {{0,0},""},{{65,0,0,0},"A"},{{0xe9,0,0,0},"\xc3\xa9"},
+        {{0x22,0x6f,0,0},"\xe6\xbc\xa2"},{{0x3d,0xd8,0x42,0xde,0,0},"\xf0\x9f\x99\x82"},
+        {{'A',0,'"',0,'\\',0,'\n',0,'\t',0,1,0,0x7f,0,0,0},std::string("A\"\\\n\t\x01\x7f")}
+    };
+    for(const auto& [bytes,text]:wideCases) {
+        forge::defdecode::DecodedField wide;wide.type="CWideString";wide.value=bytes;
+        const auto formatted=forge::defdecode::formatValue(wide);
+        try {check(nlohmann::json::parse(formatted).get<std::string>()==text,"wide text is a valid exact quoted UTF-8 value");}
+        catch(const std::exception&) {check(false,"wide formatter produced invalid JSON string syntax");}
+        check(wide.value==bytes,"wide display modified source bytes");
+    }
+    const std::vector<std::pair<std::vector<uint8_t>,std::string>> malformedWide={
+        {{},"<empty>"},{{65},"41"},{{65,0},"4100"},{{65,0,0,0,66,0,0,0},"4100000042000000"},
+        {{0,0xd8,0,0},"00d80000"},{{0,0xdc,0,0},"00dc0000"},{{0,0xd8,65,0,0,0},"00d841000000"}
+    };
+    for(const auto& [bytes,expected]:malformedWide) {
+        forge::defdecode::DecodedField wide;wide.type="CWideString";wide.value=bytes;
+        check(forge::defdecode::formatValue(wide)==expected,"unsupported wide payload retains complete raw display");
+    }
     forge::defdecode::DecodedField number;
     number.type = "int32";
     number.value = {0xff, 0xff, 0xff, 0xff};

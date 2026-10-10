@@ -17,13 +17,13 @@
 // SUPPORTED TYPES (the UI-relevant set) and their valueString grammar:
 //   int32          "391" / "-2"            (decimal)
 //   uint32         "4313"                  (decimal, also 0x-hex)
-//   float          "1.5" / "-0.25"         (C float)
+//   float          "1.5" / "-0.25"         (finite C float)
 //   bool           "1"/"0"/"true"/"false"
 //   C2DVector      "x,y"                    (two floats)
 //   C3DVector      "x,y,z"                  (three floats)
 //   CRGBColour     "r,g,b" or "r,g,b,a"    (each 0-255; a defaults to 255)
-//   CWideString    "text"                  (u16 count prefix + UTF-16LE units)
-//   CDefString     "1234" (u32 ref index)  — a def-string reference, not inline
+//   CWideString    "UTF-8 text"            (NUL-terminated UTF-16LE units)
+//   CDefString     "1234" / "-1"            (signed names-table offset; raw u32/hex accepted)
 //   CCharString    "ENG_ARIAL_16"          (null-terminated ASCII)
 // Any other declared type is rejected with a clear error (caller must not guess).
 
@@ -63,6 +63,13 @@ SetFieldResult setField(bin::File& file, const defschema::Schema& schema,
 SetFieldResult setField(bin::File& file, const defschema::Schema& schema,
                         size_t entryIndex, std::string_view fieldName,
                         std::string_view valueString);
+
+// Clone an exact donor payload into a new final record slot. The name overload
+// requires one exact, nonempty donor name; the index overload supports unnamed
+// donors. Existing identities and loaded name-pool records remain unchanged.
+// Publishing requires a paired bank/name-pool transaction, unlike setField.
+size_t cloneEntry(bin::File& file, size_t donorIndex, std::string newName);
+size_t cloneEntry(bin::File& file, std::string_view donorName, std::string newName);
 
 // The raw value bytes of one field (everything between its tag and the next
 // tag), for the types encodeValue does not parse -- maps, vectors, nested

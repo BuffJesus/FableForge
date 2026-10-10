@@ -201,7 +201,14 @@ std::optional<int> runTextures(const std::string& cmd, const Args& args) {
         for (size_t i = 3; i < args.size(); ++i) {
             if (args[i] == "--install" && i + 1 < args.size()) installArg = args[++i];
             else if (args[i] == "--texture" && i + 1 < args.size()) req.texturePng = args[++i];
-            else if (args[i] == "--texture-id" && i + 1 < args.size()) req.textureId = uint32_t(std::stoul(args[++i]));
+            else if (args[i] == "--texture-id") {
+                if (i + 1 == args.size()) { std::fprintf(stderr, "--texture-id needs an unsigned decimal ID (0..4294967295)\n"); return 2; }
+                const auto& value = args[++i];
+                const auto parsed = std::from_chars(value.data(), value.data()+value.size(), req.textureId);
+                if (parsed.ec != std::errc{} || parsed.ptr != value.data()+value.size()) {
+                    std::fprintf(stderr, "--texture-id needs an unsigned decimal ID (0..4294967295)\n"); return 2;
+                }
+            }
             else if (args[i] == "--donor" && i + 1 < args.size()) req.donor = args[++i];
             else if (args[i] == "--stored") req.compress = false;
             else if (args[i] == "--no-collision") req.collision = false;
@@ -215,6 +222,23 @@ std::optional<int> runTextures(const std::string& cmd, const Args& args) {
         for (const auto& n : out.notes) std::printf("  %s\n", n.c_str());
         std::printf("%s ready: mesh %s id %u%s, def index %zu -- place it from the editor (Add an object -> search %s). Not yet seen in-game.\n",
                     out.objectName.c_str(), out.meshName.c_str(), out.meshId, out.physicsId ? (", collision hull id " + std::to_string(out.physicsId)).c_str() : ", no collision hull", out.defIndex, out.objectName.c_str());
+        return 0;
+    }
+    if(cmd=="mesh-replace") {
+        if(args.size()<3) {std::fprintf(stderr,"usage: forge mesh-replace <model.glb|.gltf|.obj> <MESH_NAME|id> [--stored] [--install <root>]\n");return 2;}
+        albion::meshimport::ReplaceRequest req;req.model=args[1];req.target=args[2];std::string installArg;
+        for(size_t i=3;i<args.size();++i) {
+            if(args[i]=="--stored") req.compress=false;
+            else if(args[i]=="--install" && i+1<args.size()) installArg=args[++i];
+            else {std::fprintf(stderr,"unknown option %s\n",args[i].c_str());return 2;}
+        }
+        const Install install=findInstall(installArg);
+        if(!install.valid) {std::fprintf(stderr,"no Fable install (use --install)\n");return 2;}
+        if(!allowInstallWrite(install)) return 1;
+        albion::meshimport::ReplaceResult out;std::string error;
+        if(!albion::meshimport::replaceModel(install.root,req,out,error)) {std::fprintf(stderr,"error: %s\n",error.c_str());return 1;}
+        for(const auto& note:out.notes) std::printf("  %s\n",note.c_str());
+        std::printf("%s replaced at mesh ID %u: %zu vertices, %zu triangles. Original collision geometry retained.\n",out.meshName.c_str(),out.meshId,out.vertices,out.triangles);
         return 0;
     }
     return std::nullopt;

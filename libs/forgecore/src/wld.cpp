@@ -3,6 +3,8 @@
 #include <fstream>
 #include <algorithm>
 #include <cctype>
+#include <charconv>
+#include <cmath>
 #include <cstddef>
 #include <limits>
 #include <sstream>
@@ -421,6 +423,22 @@ void File::setRegionText(std::string_view regionName, std::string_view key, std:
         throw std::runtime_error("wld: unknown region " + std::string(regionName));
     Region& region = regions_[target];
     // the graphic is a bare token in retail, and so are the minimap scale / offsets (numbers)
+    // Native MiniMapGraphic consumes ReadAsString, which does not accept a
+    // number or punctuation token. Clearing removes this optional directive.
+    if (tf::equalsIgnoreCase(key, "MiniMapGraphic") && !value.empty() &&
+        ((value.front()>='0' && value.front()<='9') || value.find_first_not_of(
+            "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_")!=value.npos))
+        throw std::runtime_error("wld: minimap graphic name must be an unquoted identifier");
+    const bool clearMinimap=tf::equalsIgnoreCase(key,"MiniMapGraphic") && value.empty();
+    if (tf::equalsIgnoreCase(key,"MiniMapScale") || tf::equalsIgnoreCase(key,"MiniMapOffsetX") ||
+        tf::equalsIgnoreCase(key,"MiniMapOffsetY")) {
+        if (value.empty()) throw std::runtime_error("wld: minimap setting must be a finite float");
+        float number = 0;
+        const auto parsed = std::from_chars(value.data(), value.data()+value.size(), number);
+        if (parsed.ec != std::errc{} || parsed.ptr != value.data()+value.size() ||
+            !std::isfinite(number))
+            throw std::runtime_error("wld: minimap setting must be a finite float");
+    }
     const bool quoted = !(tf::equalsIgnoreCase(key, "MiniMapGraphic") || tf::equalsIgnoreCase(key, "MiniMapScale") ||
                           tf::equalsIgnoreCase(key, "MiniMapOffsetX") || tf::equalsIgnoreCase(key, "MiniMapOffsetY"));
     if (!quoted && std::any_of(value.begin(), value.end(), [](unsigned char c) {
@@ -439,13 +457,14 @@ void File::setRegionText(std::string_view regionName, std::string_view key, std:
         if (activeRegion != region.index) continue;
         if (tf::equalsIgnoreCase(k, "RegionName")) nameLine = i;
         if (tf::equalsIgnoreCase(k, key)) {
-            rawLines_[i] = std::string(key) + " " + (quoted ? quoteWld(value) : std::string(value)) + ";" + eol;
+            if (clearMinimap) rawLines_.erase(rawLines_.begin()+static_cast<ptrdiff_t>(i));
+            else rawLines_[i] = std::string(key) + " " + (quoted ? quoteWld(value) : std::string(value)) + ";" + eol;
             written = true;
             break;
         }
         if (tf::equalsIgnoreCase(k, "EndRegion")) break;
     }
-    if (!written) {
+    if (!written && !clearMinimap) {
         if (nameLine == rawLines_.size())
             throw std::runtime_error("wld: region " + std::string(regionName) + " has no RegionName line");
         rawLines_.insert(rawLines_.begin() + static_cast<ptrdiff_t>(nameLine) + 1,

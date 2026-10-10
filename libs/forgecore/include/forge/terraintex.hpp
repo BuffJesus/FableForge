@@ -201,7 +201,8 @@ struct ImportResult {
 
 ImportResult importPng(const ImportRequest& request);
 
-// Validate an entry that already lives in a BIG.
+// Validate an entry in a BIG: unique exact name first, then unique case-insensitive
+// fallback. Ambiguous/missing queries leave bankOut/idOut unchanged.
 TextureValidation validateBigEntry(const std::filesystem::path& bigPath,
                                    std::string_view entryName,
                                    std::string* bankOut = nullptr,

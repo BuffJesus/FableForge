@@ -1,8 +1,14 @@
 #include "forge/defedit.hpp"
+#include "forge/unicode.hpp"
 
 #include <cctype>
+#include <algorithm>
+#include <cerrno>
+#include <cmath>
 #include <cstdint>
+#include <cstdlib>
 #include <cstring>
+#include <limits>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -48,8 +54,9 @@ void putFloat(std::vector<uint8_t>& b, float v) {
 int32_t parseI32(const std::string& s, const std::string& what) {
     try {
         size_t pos = 0;
-        long v = std::stol(s, &pos, 0);
-        if (pos != s.size()) throw std::invalid_argument("trailing");
+        long long v = std::stoll(s, &pos, 0);
+        if (pos != s.size() || v < std::numeric_limits<int32_t>::min() ||
+            v > std::numeric_limits<int32_t>::max()) throw std::invalid_argument("integer range or trailing input");
         return int32_t(v);
     } catch (const std::exception&) {
         throw std::runtime_error("defedit: cannot parse '" + s +
@@ -60,8 +67,11 @@ int32_t parseI32(const std::string& s, const std::string& what) {
 uint32_t parseU32(const std::string& s, const std::string& what) {
     try {
         size_t pos = 0;
-        unsigned long v = std::stoul(s, &pos, 0);
-        if (pos != s.size()) throw std::invalid_argument("trailing");
+        const auto first=s.find_first_not_of(" \t\r\n\f\v");
+        if(first!=std::string::npos && s[first]=='-') throw std::invalid_argument("negative unsigned value");
+        unsigned long long v = std::stoull(s, &pos, 0);
+        if (pos != s.size() || v > std::numeric_limits<uint32_t>::max())
+            throw std::invalid_argument("unsigned range or trailing input");
         return uint32_t(v);
     } catch (const std::exception&) {
         throw std::runtime_error("defedit: cannot parse '" + s +
@@ -71,9 +81,14 @@ uint32_t parseU32(const std::string& s, const std::string& what) {
 
 float parseFloat(const std::string& s, const std::string& what) {
     try {
-        size_t pos = 0;
-        float v = std::stof(s, &pos);
-        if (pos != s.size()) throw std::invalid_argument("trailing");
+        char* end=nullptr;
+        errno=0;
+        const float v=std::strtof(s.c_str(),&end);
+        // C libraries may report ERANGE for a representable subnormal. Keep
+        // that finite nonzero result, but refuse overflow and underflow to zero.
+        if(end==s.c_str() || end!=s.c_str()+s.size() || !std::isfinite(v) ||
+           (errno!=0 && (errno!=ERANGE || v==0)))
+            throw std::invalid_argument("expected a complete finite float");
         return v;
     } catch (const std::exception&) {
         throw std::runtime_error("defedit: cannot parse '" + s +
@@ -98,11 +113,20 @@ bool parseBool(const std::string& s) {
 
 // Encode `valueString` into the on-disk byte form for the declared `type`.
 // `oldValue` is the field's current bytes — used only to preserve exact
-// layout for CWideString (whose count-prefix width we confirm from the donor).
+// layout: fixed widths and complete native NUL-terminated strings are required.
 std::vector<uint8_t> encodeValue(const std::string& type,
                                  std::string_view valueString,
                                  const std::vector<uint8_t>& oldValue,
                                  const std::string& field) {
+    const size_t fixedSize=(type=="int32" || type=="uint32" || type=="float" ||
+                            type=="CDefString" || type=="CRGBColour" || type=="ColourRGBA")?4:
+                           type=="bool"?1:type=="C2DVector"?8:type=="C3DVector"?12:0;
+    // A tag-delimited range can include an unrecognized derived-class trailer.
+    // Replacing that entire range with a scalar would silently discard it.
+    if(fixedSize && oldValue.size()!=fixedSize)
+        throw std::runtime_error("defedit: field "+field+" has "+std::to_string(oldValue.size())+
+                                 " bytes, expected "+std::to_string(fixedSize)+
+                                 " for "+type+"; refusing to discard unsupported payload bytes");
     const std::string vs(valueString);
     std::vector<uint8_t> out;
 
@@ -115,8 +139,11 @@ std::vector<uint8_t> encodeValue(const std::string& type,
         return out;
     }
     if (type == "CDefString") {
-        // A def-string is a 4-byte reference index, not inline text.
-        putU32(out, parseU32(vs, field));
+        // Signed names-table offsets include -1 for no reference. Preserve
+        // compatibility with explicit unsigned/hex representations of the bits.
+        const auto first=vs.find_first_not_of(" \t\r\n\f\v");
+        putU32(out,first!=std::string::npos && vs[first]=='-'?
+            uint32_t(parseI32(vs,field)):parseU32(vs,field));
         return out;
     }
     if (type == "float") {
@@ -152,36 +179,42 @@ std::vector<uint8_t> encodeValue(const std::string& type,
             throw std::runtime_error("defedit: " + type + " " + field +
                                      " expects \"r,g,b\" or \"r,g,b,a\" (0-255), "
                                      "got '" + vs + "'");
-        // On-disk order matches the donor: [b0 b1 b2 a] where the decoded value
-        // for opaque colours reads 000000ff, i.e. r,g,b then alpha as the 4th
-        // byte. We write the four components in r,g,b,a source order.
-        out.push_back(parseColorByte(parts[0], field + ".r"));
-        out.push_back(parseColorByte(parts[1], field + ".g"));
-        out.push_back(parseColorByte(parts[2], field + ".b"));
-        out.push_back(parts.size() == 4 ? parseColorByte(parts[3], field + ".a")
-                                        : uint8_t(255));
+        // Native CRGBColour binary I/O writes B, G, R, A (FableWin
+        // WriteColour 03083120; ReadColour 03082170). Public input remains
+        // r,g,b,a. The explicitly named ColourRGBA layout stays R,G,B,A.
+        const auto red=parseColorByte(parts[0],field+".r");
+        const auto green=parseColorByte(parts[1],field+".g");
+        const auto blue=parseColorByte(parts[2],field+".b");
+        out.push_back(type=="CRGBColour"?blue:red);
+        out.push_back(green);
+        out.push_back(type=="CRGBColour"?red:blue);
+        out.push_back(parts.size()==4?parseColorByte(parts[3],field+".a"):uint8_t(255));
         return out;
     }
     if (type == "CCharString") {
-        // Null-terminated ASCII.
+        if(oldValue.empty() || oldValue.back()!=0 ||
+           std::find(oldValue.begin(),oldValue.end()-1,uint8_t(0))!=oldValue.end()-1)
+            throw std::runtime_error("defedit: CCharString "+field+
+                " is not one complete NUL-terminated string; refusing to discard unsupported payload bytes");
+        if(vs.find('\0')!=std::string::npos)
+            throw std::runtime_error("defedit: CCharString "+field+" cannot contain an embedded NUL");
+        // Null-terminated game bytes.
         for (char c : vs) out.push_back(uint8_t(c));
         out.push_back(0);
         return out;
     }
     if (type == "CWideString") {
-        // u16 count prefix + count UTF-16LE code units. Confirm the donor uses a
-        // 2-byte prefix (all observed CWideStrings do) before writing.
-        if (oldValue.size() < 2)
-            throw std::runtime_error(
-                "defedit: CWideString " + field +
-                " has an unexpected on-disk layout (value < 2 bytes); refusing "
-                "to guess its encoding");
-        out.push_back(uint8_t(vs.size()));
-        out.push_back(uint8_t(vs.size() >> 8));
-        for (char c : vs) {
-            out.push_back(uint8_t(c));  // ASCII low byte
-            out.push_back(0);           // UTF-16LE high byte
-        }
+        // Native TransferBinaryOut 01895C50 calls WriteNullTerminatedWString
+        // 030830D0: UTF-16LE units followed by one zero unit, without a count.
+        bool terminated=oldValue.size()>=2 && oldValue.size()%2==0 &&
+            oldValue[oldValue.size()-2]==0 && oldValue.back()==0;
+        if(terminated) for(size_t i=0;i+2<oldValue.size();i+=2)
+            if(oldValue[i]==0 && oldValue[i+1]==0) {terminated=false;break;}
+        if(!terminated) throw std::runtime_error("defedit: CWideString "+field+
+            " is not one complete NUL-terminated UTF-16 string; refusing to discard unsupported payload bytes");
+        size_t cursor=0;
+        unicode::readUtf16z(oldValue,cursor); // Refuse malformed surrogate originals.
+        unicode::appendUtf16z(out,vs);
         return out;
     }
 
@@ -314,6 +347,20 @@ SetFieldResult setField(bin::File& file, const defschema::Schema& schema,
                         size_t entryIndex, std::string_view fieldName,
                         std::string_view valueString) {
     return setFieldImpl(file, schema, entryIndex, fieldName, valueString);
+}
+
+size_t cloneEntry(bin::File& file,size_t donorIndex,std::string newName) {
+    return file.cloneEntry(donorIndex,std::move(newName));
+}
+size_t cloneEntry(bin::File& file,std::string_view donorName,std::string newName) {
+    if(donorName.empty()) throw std::runtime_error("defedit clone: use an index for an unnamed donor");
+    size_t selected=file.entries().size();
+    for(size_t i=0;i<file.entries().size();++i) if(file.entries()[i].name==donorName) {
+        if(selected!=file.entries().size()) throw std::runtime_error("defedit clone: donor name is ambiguous");
+        selected=i;
+    }
+    if(selected==file.entries().size()) throw std::runtime_error("defedit clone: donor name was not found");
+    return file.cloneEntry(selected,std::move(newName));
 }
 
 } // namespace forge::defedit

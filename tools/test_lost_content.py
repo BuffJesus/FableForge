@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Refuse full Lost Content banks; audit its explicitly content-only WAD fixture."""
+"""Refuse full Lost Content banks; audit a level/asset fixture excluding definitions and language banks."""
 import argparse
 import json
 from pathlib import Path
@@ -8,6 +8,7 @@ import shutil
 import subprocess
 import tempfile
 from mod_content_fixture import content_only, refuse_overhaul
+from test_gbpack import pristine
 
 
 REPO = Path(__file__).resolve().parent.parent
@@ -47,8 +48,9 @@ def main() -> int:
                          "data/CompiledDefs/script.bin", "data/CompiledDefs/frontend.bin",
                          "data/Levels/FinalAlbion.wad", "data/Levels/FinalAlbion.wld",
                          "data/Levels/FinalAlbion.bwd", "data/Levels/FinalAlbion.gtg",
+                         "data/lang/English/text.big",
                          "data/graphics/graphics.big"):
-            src = RETAIL / relative
+            src = Path(pristine(str(RETAIL), relative))
             if src.is_file():
                 dest = root / relative
                 dest.parent.mkdir(parents=True, exist_ok=True)

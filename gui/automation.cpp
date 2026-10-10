@@ -10,6 +10,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <charconv>
 #include <chrono>
 #include <cmath>
 #include <cstdio>
@@ -59,6 +60,12 @@ void Automation::registerWidget(const char* id) {
         // scroll moves the item's eventual rectangle for the next ancestor.
         ImVec2 itemMin = a, itemMax = b;
         for (ImGuiWindow* w = ImGui::GetCurrentWindow(); w; w = (w->Flags & ImGuiWindowFlags_ChildWindow) ? w->ParentWindow : nullptr) {
+            // Auto-height cards never scroll. While collapsing, ScrollMax can
+            // still describe the previous expanded contents; scrolling that
+            // stale range prevents the real parent from revealing the item.
+            if ((w->ChildFlags & ImGuiChildFlags_AutoResizeY) &&
+                (w->Flags & ImGuiWindowFlags_NoScrollbar) &&
+                (w->Flags & ImGuiWindowFlags_NoScrollWithMouse)) continue;
             if (w->ScrollMax.y < 1.0f) continue;   // an auto-sized card reports a float crumb
             // InnerRect stays meaningful when the child is completely outside
             // its parent's clipping rectangle.
@@ -71,7 +78,13 @@ void Automation::registerWidget(const char* id) {
             ImGui::SetScrollY(w, scroll);
             itemMin.y -= movement; itemMax.y -= movement;
         }
-        revealTarget_.clear();
+        // Newly expanded content may not contribute to the parent's ScrollMax
+        // until the next frame. Keep requesting visibility until the real
+        // click centre is inside the item's current clip rectangle.
+        const ImVec2 centre((a.x+b.x)*0.5f,(a.y+b.y)*0.5f);
+        if(centre.x>=clipMin.x && centre.x<clipMax.x && centre.y>=clipMin.y && centre.y<clipMax.y) {
+            revealTarget_.clear();deadline_=0;
+        }
     }
 }
 
@@ -143,6 +156,11 @@ bool Automation::tick(App& app) {
         if (++dragPhase_ > 4 + glide) dragPhase_ = 0;
         return true;
     }
+    if(!revealTarget_.empty()) {
+        const double revealNow=std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count();
+        if(revealNow>deadline_) {fail("timeout revealing widget: "+revealTarget_);revealTarget_.clear();deadline_=0;}
+        else return true;
+    }
     if (waitFrames_ > 0) { --waitFrames_; return true; }
     if (pc_ >= lines_.size()) { quit_ = true; return false; }
 
@@ -174,7 +192,7 @@ bool Automation::tick(App& app) {
     else if (cmd == "frames") { waitFrames_ = std::max(1, std::atoi(rest.c_str())); note("ok   " + line); ++pc_; }
     else if (cmd == "select") { app.selectMap(rest); note("ok   " + line); ++pc_; }
     else if (cmd == "filter") { app.setFilter(rest); note("ok   " + line); ++pc_; }
-    else if (cmd == "reveal") { revealTarget_ = rest; note("ok   " + line); ++pc_; waitFrames_ = 2; }   // scroll the widget's panel to it (for screenshots)
+    else if (cmd == "reveal") { revealTarget_ = rest; deadline_=now+10.0;note("ok   " + line); ++pc_; waitFrames_ = 2; }   // wait for the widget's click centre to become visible
     else if (cmd == "click") { clickTarget_ = rest; clickPhase_ = 0; note("..   " + line); ++pc_; }
     else if (cmd == "orbit") { float a = 0, b = 0; std::istringstream(rest) >> a >> b; app.camera().orbit(a, b); note("ok   " + line); ++pc_; }
     else if (cmd == "zoom") { app.camera().dolly(float(std::atof(rest.c_str()))); note("ok   " + line); ++pc_; }
@@ -679,6 +697,130 @@ bool Automation::tick(App& app) {
     }
     else if (cmd == "model_select") { if (!app.selectModel(rest)) fail("model_select: " + rest); else note("ok   " + line); ++pc_; }
     else if (cmd == "model_search") { std::snprintf(app.modelSearch_, sizeof app.modelSearch_, "%s", rest == "-" ? "" : rest.c_str()); note("ok   " + line); ++pc_; }
+    else if(cmd=="definition_edit" || cmd=="definition_edit_refused") {
+        size_t field=0;const auto parsed=std::from_chars(rest.data(),rest.data()+rest.size(),field);
+        const bool ok=parsed.ec==std::errc{} && parsed.ptr==rest.data()+rest.size() && app.beginDefinitionEdit(field);
+        if(ok!=(cmd=="definition_edit")) fail("definition field edit returned an unexpected result");else note("ok   "+line);++pc_;
+    }
+    else if(cmd=="definition_value" || cmd=="definition_value_refused") {
+        if(app.setDefinitionEditValue(rest)!=(cmd=="definition_value")) fail("definition value input returned an unexpected result");else note("ok   "+line);++pc_;
+    }
+    else if(cmd=="definition_save" || cmd=="definition_save_refused") {
+        if(app.saveDefinitionEdit()!=(cmd=="definition_save")) fail("definition save returned an unexpected result");else note("ok   "+line);++pc_;
+    }
+    else if(cmd=="definition_cancel") {
+        app.definitionEditing_=false;app.definitionEditConfirm_=false;note("ok   "+line);++pc_;
+    }
+    else if(cmd=="wait_definitions") {
+        app.pollDefinitions();waitOn(!app.definitionsBusy() && app.definitionLoaded_,"definitions");
+    }
+    else if(cmd=="definition_search") {
+        std::snprintf(app.definitionSearch_,sizeof app.definitionSearch_,"%s",rest=="-"?"":rest.c_str());app.definitionFilterDirty_=true;note("ok   "+line);++pc_;
+    }
+    else if(cmd=="definition_bank" || cmd=="definition_bank_refused") {
+        if(app.setDefinitionBank(rest)!=(cmd=="definition_bank")) fail("definition bank selection returned an unexpected result");else note("ok   "+line);++pc_;
+    }
+    else if(cmd=="definition_select" || cmd=="definition_select_refused") {
+        if(app.selectDefinition(rest)!=(cmd=="definition_select")) fail("definition selection returned an unexpected result");else note("ok   "+line);++pc_;
+    }
+    else if(cmd=="assert_definition_field") {
+        const auto split=rest.find(' ');const auto name=rest.substr(0,split);bool found=false;size_t matches=0;
+        if(split!=std::string::npos && app.definitionDecoded_) for(const auto& field:app.definitionDecoded_->fields) {
+            if(field.name==name) {++matches;found=forge::defdecode::formatValue(field)==rest.substr(split+1);}
+        }
+        if(matches!=1 || !found) fail("definition field does not match expected value");else note("ok   "+line);++pc_;
+    }
+    else if(cmd=="text_search") {std::snprintf(app.textSearch_,sizeof app.textSearch_,"%s",rest=="-"?"":rest.c_str());app.textFilterDirty_=true;note("ok   "+line);++pc_;}
+    else if(cmd=="text_language" || cmd=="text_language_refused") {
+        if(app.setTextLanguage(rest)!=(cmd=="text_language")) fail(cmd+" returned an unexpected result");else note("ok   "+line);++pc_;
+    }
+    else if(cmd=="text_select" || cmd=="text_select_refused") {
+        if(app.selectText(rest)!=(cmd=="text_select")) fail(cmd+" returned an unexpected result");else note("ok   "+line);++pc_;
+    }
+    else if(cmd=="assert_text_content") {
+        if(!app.textSelected_ || app.textRows_[*app.textSelected_].value.content!=rest) fail("selected text content differs from the requested value");
+        else note("ok   "+line);
+        ++pc_;
+    }
+    else if(cmd=="text_edit" || cmd=="text_edit_refused") {
+        if(app.beginTextEdit()!=(cmd=="text_edit")) fail(cmd+" returned an unexpected result");
+        else note("ok   "+line);++pc_;
+    }
+    else if(cmd=="text_add" || cmd=="text_add_refused") {
+        if(app.beginTextAdd()!=(cmd=="text_add")) fail(cmd+" returned an unexpected result");
+        else note("ok   "+line);++pc_;
+    }
+    else if(cmd=="text_add_name") {
+        if(!app.setTextAddName(rest)) fail("new text name was refused");else note("ok   "+line);++pc_;
+    }
+    else if(cmd=="assert_text_edit") {
+        const bool matches=rest=="-"?!app.textEditing_:app.textEditing_ && app.textEditName_==rest;
+        if(!matches) fail("text draft state differs from the requested entry");else note("ok   "+line);++pc_;
+    }
+    else if(cmd=="text_edit_content") {
+        if(!app.setTextEditContent(rest)) fail("text edit content was refused");else note("ok   "+line);++pc_;
+    }
+    else if(cmd=="text_edit_speaker" || cmd=="text_edit_speaker_refused") {
+        if(app.setTextEditSpeaker(rest=="-"?"":rest)!=(cmd=="text_edit_speaker")) fail("text speaker selection returned an unexpected result");
+        else note("ok   "+line);++pc_;
+    }
+    else if(cmd=="text_edit_speechbank" || cmd=="text_edit_speechbank_refused") {
+        if(app.setTextEditSpeechBank(rest=="-"?"":rest)!=(cmd=="text_edit_speechbank")) fail("text speech-bank edit returned an unexpected result");
+        else note("ok   "+line);++pc_;
+    }
+    else if(cmd=="text_edit_identifier" || cmd=="text_edit_identifier_refused") {
+        if(app.setTextEditIdentifier(rest=="-"?"":rest)!=(cmd=="text_edit_identifier")) fail("text identifier edit returned an unexpected result");
+        else note("ok   "+line);++pc_;
+    }
+    else if(cmd=="text_tag_set" || cmd=="text_tag_set_refused") {
+        std::istringstream input(rest);size_t index=0;int32_t position=0;std::string name;
+        if(!(input>>index>>position)) fail("text_tag_set requires index position name");
+        else {
+            std::getline(input>>std::ws,name);
+            if(app.setTextEditTag(index,position,name=="-"?"":name)!=(cmd=="text_tag_set")) fail("text tag edit returned an unexpected result");
+            else note("ok   "+line);
+        }++pc_;
+    }
+    else if(cmd=="text_tag_add" || cmd=="text_tag_add_refused") {
+        if(app.addTextEditTag()!=(cmd=="text_tag_add")) fail("text tag addition returned an unexpected result");
+        else note("ok   "+line);++pc_;
+    }
+    else if(cmd=="text_tag_remove" || cmd=="text_tag_remove_refused") {
+        size_t index=0;const auto parsed=std::from_chars(rest.data(),rest.data()+rest.size(),index);
+        if(parsed.ec!=std::errc{} || parsed.ptr!=rest.data()+rest.size()) fail("text_tag_remove requires an index");
+        else if(app.removeTextEditTag(index)!=(cmd=="text_tag_remove")) fail("text tag removal returned an unexpected result");
+        else note("ok   "+line);++pc_;
+    }
+    else if(cmd=="text_save" || cmd=="text_save_refused") {
+        if(app.saveTextEdit()!=(cmd=="text_save")) fail(cmd+" returned an unexpected result");
+        else note("ok   "+line);++pc_;
+    }
+    else if(cmd=="text_export_path") {
+        if(rest.size()>=sizeof app.textExportPath_) fail("text export path is too long");
+        else {std::memcpy(app.textExportPath_,rest.c_str(),rest.size()+1);note("ok   "+line);}
+        ++pc_;
+    }
+    else if(cmd=="text_export" || cmd=="text_export_refused") {
+        if(app.exportTextTsv(rest)!=(cmd=="text_export")) fail(cmd+" returned an unexpected result");
+        else note("ok   "+line);
+        ++pc_;
+    }
+    else if(cmd=="wait_text_export") {app.pollTextExport();waitOn(!app.textExportBusy(),"text export");}
+    else if(cmd=="assert_text_narrator") {
+        std::istringstream input(rest);size_t index=0;std::string expected;
+        if(!(input>>index)) fail("narrator assertion needs an index and name");
+        else {
+            std::getline(input>>std::ws,expected);
+            if(!app.textSelected_ || index>=app.textRows_[*app.textSelected_].narrators.size() ||
+               app.textRows_[*app.textSelected_].narrators[index]!=expected) fail("narrator name differs from the requested value");
+            else note("ok   "+line);
+        }
+        ++pc_;
+    }
+    else if(cmd=="wait_texts") {
+        if(!app.textLoaded_ && !app.textsBusy()) app.refreshTextBank();
+        app.pollTextBank();waitOn(app.textLoaded_ && !app.textsBusy(),"text bank");
+    }
     else if (cmd == "model_orbit") { std::istringstream rs(rest); rs >> app.modelYaw_ >> app.modelPitch_ >> app.modelZoom_; app.modelPitch_ = std::clamp(app.modelPitch_, -1.5f, 1.5f); app.modelZoom_ = std::clamp(app.modelZoom_, 0.5f, 8.0f); note("ok   " + line); ++pc_; }
     else if (cmd == "texture_select") { if (!app.selectTexture(rest)) fail("texture_select: " + rest); else note("ok   " + line); ++pc_; }
     else if (cmd == "texture_export") { if (!app.exportSelectedTexture(rest)) fail("texture_export failed"); else note("ok   " + line); ++pc_; }
@@ -787,6 +929,7 @@ bool Automation::tick(App& app) {
         if (app.importMesh(model, nm, png) != (cmd == "mesh_import")) fail(cmd + " returned an unexpected result: " + rest); else note("ok   " + line); ++pc_;
     }
     else if (cmd == "wait_mesh_import") { app.pollMeshImport(); waitOn(!app.meshImportBusy(), "mesh import"); }
+    else if(cmd=="wait_mesh_replace") {app.pollMeshReplace();waitOn(!app.meshReplaceBusy(),"mesh replacement");}
     else if (cmd == "mod_pick" || cmd == "mod_pick_refused") {   // mod_pick <key|*> <winner|->  (the winner is the rest after the first space; "*" = the first conflict row)
         std::string key = rest, winner;
         const size_t sp = rest.find(' ');
@@ -1259,6 +1402,15 @@ bool Automation::tick(App& app) {
     else if (cmd == "compact_stb_refused") { if (app.compactBank()) fail("compact_stb unexpectedly started"); else note("ok   " + line); ++pc_; }
     else if (cmd == "wait_compact") waitOn(!app.compactBusy(), "compaction");
     else if (cmd == "restore_all") { if (!app.restoreAllBackups()) fail("restore failed"); else note("ok   " + line); ++pc_; }
+    else if (cmd == "restore_during_text_load_refused") {
+        app.refreshTextBank();
+        if (!app.textFuture_.valid()) fail("text load did not start");
+        else if (app.restoreAllBackups()) fail("restore unexpectedly succeeded during text load");
+        else if (app.restoreError_ != "A load or write is still running; try again when it finishes.")
+            fail("restore was refused for an unexpected reason");
+        else note("ok   " + line);
+        ++pc_;
+    }
     else if (cmd == "setup") { app.setupOpen_ = std::atoi(rest.c_str()) != 0; note("ok   " + line); ++pc_; }
     else if (cmd == "scan_install") { app.scanInstall(rest); note("ok   " + line); ++pc_; }   // exercise folder changes without a native picker
     else if (cmd == "link_install") { if (!app.linkInstall()) fail("link_install failed"); else note("ok   " + line); ++pc_; }

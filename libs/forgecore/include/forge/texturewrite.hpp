@@ -4,8 +4,8 @@
 // FableTLC tools/texture_build.py (the validated Python reference) and
 // EgoCore's TextureBuilder:
 //   * allocated size is a power of two (the image is resampled to it; the
-//     real size is kept in the Info), mips chain down to 4x4 for DXT / 1x1 for
-//     ARGB with a 2x2 box filter;
+//     real size is kept in the Info), mips stop when the shorter side reaches
+//     4 for DXT / 1 for ARGB, with a 2x2 box filter;
 //   * mip 0 is stored as ONE Fable chunk: LZO1X of the first len-3 bytes then
 //     the 3 raw tail bytes, header [u16 clen] -- or the [0xFFFF][u32 clen]
 //     escape whenever the RAW chunk is >= 64 KiB (retail writes it that way for
@@ -41,7 +41,8 @@ uint32_t formatByName(const std::string& name);   // "dxt1" | "dxt3" | "argb8888
 int fullMipCount(int w, int h, uint32_t format);
 size_t mipRawLength(uint32_t format, int w, int h);
 
-std::vector<uint8_t> encodeDxt1(const Image& img);   // opaque four-colour mode
+// Cutout mode maps alpha <128 to transparent; opaque blocks retain four-colour mode.
+std::vector<uint8_t> encodeDxt1(const Image& img, bool cutoutAlpha = false);
 std::vector<uint8_t> encodeDxt3(const Image& img);   // explicit 4-bit alpha (rounded)
 std::vector<uint8_t> encodeArgb(const Image& img);   // BGRA byte order
 std::vector<uint8_t> encodeMip(uint32_t format, const Image& img);
@@ -56,6 +57,9 @@ struct Entry {
 };
 // `img` must already have the allocated (power-of-two) size; realW/realH are
 // what the Info reports as the frame size (0 = the allocated size).
-Entry buildEntry(const Image& img, uint32_t format, int realW = 0, int realH = 0, bool compressMip0 = true, int mips = 0);
+// Compressed allocations must be at least 4x4; explicit mip counts cannot
+// continue beyond the shorter-side limit.
+// cutoutAlpha selects DXT1 one-bit alpha and native transparency class 2.
+Entry buildEntry(const Image& img, uint32_t format, int realW = 0, int realH = 0, bool compressMip0 = true, int mips = 0, bool cutoutAlpha = false);
 
 } // namespace forge::texturewrite

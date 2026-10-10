@@ -226,29 +226,46 @@ def main():
         assert failed.returncode != 0 and b'changed or new unnamed definition entries' in failed.stderr, failed.stderr
         assert {p.relative_to(merged): digest(p) for p in merged.rglob('*') if p.is_file()} == before_merged
 
-    # Isolate changed, appended and moved unnamed components. None has a safe
-    # identity merely because a numeric row exists in another edited bank.
+    # Stable whole-bank namespaces now support unnamed payload edits and
+    # append-only slots. Swapping payloads within fixed slots is also an edit;
+    # it does not relocate the numeric identity table.
     vanilla_entries = read_bank(base)
     unnamed_index = next(i for i, entry in enumerate(vanilla_entries) if not entry['name'])
-    for label in ('changed', 'added', 'moved'):
+    other = next(i for i, entry in enumerate(vanilla_entries) if not entry['name'] and
+                 entry['definition'] == vanilla_entries[unnamed_index]['definition'] and
+                 entry['data'] != vanilla_entries[unnamed_index]['data'])
+    for label in ('changed', 'added', 'payload-swapped'):
         variant = list(vanilla_entries)
         if label == 'changed':
             variant[unnamed_index] = dict(variant[unnamed_index], data=variant[unnamed_index]['data']+b'guard-test')
         elif label == 'added':
             variant.append(dict(variant[unnamed_index]))
         else:
-            other = next(i for i, entry in enumerate(variant) if not entry['name'] and
-                         entry['definition'] == variant[unnamed_index]['definition'] and
-                         entry['data'] != variant[unnamed_index]['data'])
             variant[unnamed_index], variant[other] = variant[other], variant[unnamed_index]
         source = work/('unnamed-'+label)
         rewrite_bank(base, source, variant)
-        failed = subprocess.run([str(tool),'defs','merge',str(base),str(merged),'game.bin',str(source)],
+        output = work/('unnamed-composed-'+label)
+        result = subprocess.run([str(tool),'defs','merge',str(base),str(output),'game.bin',str(source)],
                                 capture_output=True,timeout=120)
-        (work/('unnamed-'+label+'.log')).write_bytes(failed.stdout+failed.stderr)
-        assert failed.returncode != 0 and b'changed or new unnamed definition entries' in failed.stderr, failed.stderr
+        (work/('unnamed-'+label+'.log')).write_bytes(result.stdout+result.stderr)
+        assert result.returncode == 0, result.stderr
+        assert read_bank(output) == read_bank(source), (label, 'whole-bank slot/payload preservation')
         assert {p.relative_to(merged): digest(p) for p in merged.rglob('*') if p.is_file()} == before_merged
-    reports['isolated_unnamed_refusals'] = ['changed', 'added', 'moved']
+    reports['stable_unnamed_composition'] = ['changed', 'added', 'payload-swapped']
+    # A genuine identity-table move still requires relocation and must refuse.
+    moved = work/'unnamed-identity-moved'
+    rewrite_bank(base, moved, vanilla_entries)
+    path = moved/'data/CompiledDefs/game.bin'
+    raw = bytearray(path.read_bytes())
+    first, second = 13+unnamed_index*12, 13+other*12
+    raw[first:first+12], raw[second:second+12] = raw[second:second+12], raw[first:first+12]
+    path.write_bytes(raw)
+    failed = subprocess.run([str(tool),'defs','merge',str(base),str(merged),'game.bin',str(moved)],
+                            capture_output=True,timeout=120)
+    (work/'unnamed-identity-moved.log').write_bytes(failed.stdout+failed.stderr)
+    assert failed.returncode != 0 and b'changed or new unnamed definition entries' in failed.stderr, failed.stderr
+    assert {p.relative_to(merged): digest(p) for p in merged.rglob('*') if p.is_file()} == before_merged
+    reports['unnamed_identity_move_refusal'] = True
 
     # A competing camera field plus an independent edit: picks must apply only
     # to the conflicting field, and the FMP symbols must follow that choice.

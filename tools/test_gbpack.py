@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-"""Full GB packs must refuse their unnamed changes; content-only copies retain the
-level/asset stress checks. Definition banks are excluded only in the owned test
+"""Original GB packs retain their compatible whole-bank identities; content-only
+copies retain the level/asset stress checks. Definition and language banks are excluded only in the owned test
 fixture, which is not a complete mod installation. Checks the
 composer's GB-pack rules: the parked WAD and the settings file are not layers, the loose levels
 are repacked into FinalAlbion.wad, the new level folder rides along, provenance covers every
@@ -11,7 +11,7 @@ install. Owned scratch under build/. Nothing touches the install.
 """
 import argparse, json, os, re, shutil, subprocess, sys, tempfile, time
 from pathlib import Path
-from mod_content_fixture import content_only, refuse_overhaul
+from mod_content_fixture import content_only, accept_stable_overhaul
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 PACKS = {
@@ -46,6 +46,8 @@ def main() -> int:
     ap.add_argument("--root", default="")
     ap.add_argument("--pack", choices=PACKS, default="seasons")
     ap.add_argument("--keep", action="store_true")
+    ap.add_argument('--skip-graphics', action='store_true',
+                    help='Exclude bulk graphics from the level/WAD fixture; individual full-source bank audits still run')
     ap.add_argument('--corpus', type=Path, default=Path(ROOT)/'work/nexus_mods/_peek')
     a = ap.parse_args()
     root = find_root(a.root)
@@ -82,8 +84,8 @@ def main() -> int:
 
     fixtures = []
     for index, (pack_name, pack_path) in enumerate(packs):
-        refuse_overhaul(tool, scratch, pack_path, work/f'rejected-{index}', ROOT, work/f'refusal-{index}')
-        fixture = content_only(pack_path, work/'content'/pack_name)
+        accept_stable_overhaul(tool, scratch, pack_path, work/f'accepted-{index}', ROOT, work/f'acceptance-{index}')
+        fixture = content_only(pack_path, work/'content'/pack_name, include_graphics=not a.skip_graphics)
         fixtures.append(fixture)
     t0 = time.time()
     options = [argument for fixture in fixtures for argument in ('--with', str(fixture))]
@@ -132,9 +134,10 @@ def main() -> int:
         for target in [Path(scratch), Path(out), *fixtures]:
             assert target.resolve().is_relative_to(work) and target.resolve() != work
             shutil.rmtree(target, ignore_errors=True)
-    (work/'result.json').write_text(json.dumps({'passed': ok, 'scope': 'full-source refusal and content-only level/asset fixtures',
+    (work/'result.json').write_text(json.dumps({'passed': ok, 'scope': 'compatible full-source bank audit and content-only level/asset fixtures',
+        'fixture_graphics_included': not a.skip_graphics,
         'wad_payloads_checked': checked, 'complete_mod_installation': False}, indent=2), encoding='utf-8')
-    print("GB full-source refusal and content-only fixture", "PASS" if ok else "FAILED")
+    print("GB full-source bank audit and content-only fixture", "PASS" if ok else "FAILED")
     return 0 if ok else 1
 
 

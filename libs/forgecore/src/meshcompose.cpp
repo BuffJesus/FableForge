@@ -3,6 +3,8 @@
 #include <algorithm>
 #include <cmath>
 #include <cstring>
+#include <limits>
+#include <map>
 #include <stdexcept>
 
 #include "forge/lzo.hpp"
@@ -18,7 +20,10 @@ void putI16(std::vector<uint8_t>& o, int16_t v) { putU16(o, uint16_t(v)); }
 void putU32(std::vector<uint8_t>& o, uint32_t v) { for (int i = 0; i < 4; ++i) o.push_back(uint8_t(v >> (8 * i))); }
 void putI32(std::vector<uint8_t>& o, int32_t v) { putU32(o, uint32_t(v)); }
 void putF32(std::vector<uint8_t>& o, float v) { uint32_t u; std::memcpy(&u, &v, 4); putU32(o, u); }
-void putStr(std::vector<uint8_t>& o, const std::string& s) { o.insert(o.end(), s.begin(), s.end()); o.push_back(0); }
+void putStr(std::vector<uint8_t>& o, const std::string& s) {
+    if(s.find('\0')!=std::string::npos) throw std::invalid_argument("embedded NUL in mesh name or material name");
+    o.insert(o.end(), s.begin(), s.end()); o.push_back(0);
+}
 
 // one Fable chunk-framed block (EgoCore WriteLZOBlock): LZO, or a stored chunk (u16 0 + raw);
 // an empty block is a lone u16 0 (the reader's clen==0 skip)
@@ -33,14 +38,21 @@ void lzoBlock(std::vector<uint8_t>& out, const std::vector<uint8_t>& block, bool
     }
 }
 
-void writeMaterial(std::vector<uint8_t>& out, int32_t id, const std::string& name, int32_t decal, int32_t diff, int32_t bump,
-                   int32_t refl, int32_t illum, int32_t mapFlags, int32_t selfIllum, bool twoSided, bool transparent,
-                   bool booleanAlpha, bool degenerate) {
+void writeMaterial(std::vector<uint8_t>& out, int32_t id, const std::string& name, int32_t decal, uint32_t diff, uint32_t bump,
+                   uint32_t refl, uint32_t illum, int32_t mapFlags, int32_t selfIllum, bool twoSided, bool transparent,
+                   bool booleanAlpha, bool degenerate,
+                   const std::optional<std::array<uint8_t,5>>& nativeFlags={},
+                   const std::array<std::string,4>& filenames={}) {
     putI32(out, id);
     putStr(out, name);
-    putI32(out, decal); putI32(out, diff); putI32(out, bump); putI32(out, refl); putI32(out, illum); putI32(out, mapFlags); putI32(out, selfIllum);
-    putU8(out, twoSided ? 1 : 0); putU8(out, transparent ? 1 : 0); putU8(out, booleanAlpha ? 1 : 0); putU8(out, degenerate ? 1 : 0);
-    putU8(out, 0);   // UseFilenames
+    putI32(out, decal); putU32(out, diff); putU32(out, bump); putU32(out, refl); putU32(out, illum); putI32(out, mapFlags); putI32(out, selfIllum);
+    if(nativeFlags) {
+        out.insert(out.end(),nativeFlags->begin(),nativeFlags->end());
+        if((*nativeFlags)[4]) for(const auto& filename:filenames) putStr(out,filename);
+    } else {
+        putU8(out, twoSided ? 1 : 0); putU8(out, transparent ? 1 : 0); putU8(out, booleanAlpha ? 1 : 0); putU8(out, degenerate ? 1 : 0);
+        putU8(out, 0);   // UseFilenames
+    }
 }
 
 void meshHeader(std::vector<uint8_t>& out, const std::string& name, const Vec3& bsc, float bsr, const Vec3& bbMin, const Vec3& bbMax) {
@@ -59,42 +71,50 @@ void identityRoot(std::vector<uint8_t>& out) {
 }
 
 void bounds(const std::vector<const Primitive*>& prims, Vec3& mn, Vec3& mx, Vec3& c, float& r) {
-    mn = {1e9f, 1e9f, 1e9f}; mx = {-1e9f, -1e9f, -1e9f};
+    const float limit=std::numeric_limits<float>::max();
+    mn = {limit,limit,limit}; mx = {-limit,-limit,-limit};
     for (const auto* p : prims)
         for (const auto& v : p->verts) {
+            if(!std::isfinite(v.x) || !std::isfinite(v.y) || !std::isfinite(v.z))
+                throw std::invalid_argument("non-finite mesh position");
             mn.x = std::min(mn.x, v.x); mn.y = std::min(mn.y, v.y); mn.z = std::min(mn.z, v.z);
             mx.x = std::max(mx.x, v.x); mx.y = std::max(mx.y, v.y); mx.z = std::max(mx.z, v.z);
         }
-    c = {(mn.x + mx.x) * 0.5f, (mn.y + mx.y) * 0.5f, (mn.z + mx.z) * 0.5f};
+    c = {float((double(mn.x)+mx.x)*0.5),float((double(mn.y)+mx.y)*0.5),float((double(mn.z)+mx.z)*0.5)};
     double r2 = 0;
     for (const auto* p : prims)
         for (const auto& v : p->verts) {
-            const double d = double(v.x - c.x) * (v.x - c.x) + double(v.y - c.y) * (v.y - c.y) + double(v.z - c.z) * (v.z - c.z);
-            r2 = std::max(r2, d);
+            const double dx=double(v.x)-c.x,dy=double(v.y)-c.y,dz=double(v.z)-c.z;
+            r2 = std::max(r2, dx*dx+dy*dy+dz*dz);
         }
-    r = float(std::sqrt(r2));
+    const double radius=std::sqrt(r2);
+    if(radius>limit) throw std::invalid_argument("mesh bounding sphere exceeds float range");
+    r = float(radius);
 }
 
 std::vector<Vec3> faceNormals(const std::vector<Vec3>& verts, const std::vector<std::array<uint32_t, 3>>& faces) {
-    std::vector<Vec3> acc(verts.size());
+    std::vector<std::array<double,3>> acc(verts.size());
     for (const auto& f : faces) {
         const Vec3 &a = verts[f[0]], &b = verts[f[1]], &c = verts[f[2]];
-        const float e1[3] = {b.x - a.x, b.y - a.y, b.z - a.z}, e2[3] = {c.x - a.x, c.y - a.y, c.z - a.z};
-        const float n[3] = {e1[1] * e2[2] - e1[2] * e2[1], e1[2] * e2[0] - e1[0] * e2[2], e1[0] * e2[1] - e1[1] * e2[0]};
-        for (uint32_t i : f) { acc[i].x += n[0]; acc[i].y += n[1]; acc[i].z += n[2]; }
+        const double e1[3] = {double(b.x)-a.x,double(b.y)-a.y,double(b.z)-a.z};
+        const double e2[3] = {double(c.x)-a.x,double(c.y)-a.y,double(c.z)-a.z};
+        const double n[3] = {e1[1]*e2[2]-e1[2]*e2[1],e1[2]*e2[0]-e1[0]*e2[2],e1[0]*e2[1]-e1[1]*e2[0]};
+        for (uint32_t i : f) for(size_t axis=0;axis<3;++axis) acc[i][axis]+=n[axis];
     }
-    for (auto& v : acc) {
-        const float l = std::sqrt(v.x * v.x + v.y * v.y + v.z * v.z);
-        if (l > 1e-12f) { v.x /= l; v.y /= l; v.z /= l; } else v = {0, 0, 1};
+    std::vector<Vec3> normals;normals.reserve(verts.size());
+    for (const auto& v : acc) {
+        const double length=std::hypot(v[0],v[1],v[2]);
+        normals.push_back(length>1e-12 ? Vec3{float(v[0]/length),float(v[1]/length),float(v[2]/length)} : Vec3{0,0,1});
     }
-    return acc;
+    return normals;
 }
 
 } // namespace
 
 uint32_t packNormal(Vec3 n) {
-    const float l = std::sqrt(n.x * n.x + n.y * n.y + n.z * n.z);
-    if (l > 1e-5f) { n.x /= l; n.y /= l; n.z /= l; }
+    const double length=std::hypot(double(n.x),double(n.y),double(n.z));
+    if(!std::isfinite(length)) throw std::invalid_argument("non-finite mesh normal");
+    if(length>1e-5f) {n.x=float(n.x/length);n.y=float(n.y/length);n.z=float(n.z/length);}
     const int ix = std::clamp(int(std::lround(n.x * 1023.0f)), -1023, 1023);
     const int iy = std::clamp(int(std::lround(n.y * 1023.0f)), -1023, 1023);
     const int iz = std::clamp(int(std::lround(n.z * 511.0f)), -511, 511);
@@ -102,17 +122,31 @@ uint32_t packNormal(Vec3 n) {
 }
 
 int16_t compressUv(float v) {
-    return int16_t(std::clamp(long(std::lround((v + 8.0f) * 2048.0f)), -32768L, 32767L));
+    if (!std::isfinite(v)) throw std::invalid_argument("non-finite mesh texture coordinate");
+    const double scaled=(double(v)+8.0)*2048.0;
+    return int16_t(std::lround(std::clamp(scaled,-32768.0,32767.0)));
+}
+
+bool uvNeedsClamping(float v) {
+    if (!std::isfinite(v)) throw std::invalid_argument("non-finite mesh texture coordinate");
+    const double rounded=std::round((double(v)+8.0)*2048.0);
+    return rounded < -32768.0 || rounded > 32767.0;
 }
 
 Composed composeStatic(const std::string& name, const std::vector<Primitive>& prims,
-                       const std::vector<Material>& materials, bool compress, int physicsIndex) {
+                       const std::vector<Material>& materials, bool compress, uint32_t physicsIndex,bool appendDegenerateMaterial) {
+    if (physicsIndex == std::numeric_limits<uint32_t>::max())
+        throw std::invalid_argument("physics entry ID uses the reserved no-hull sentinel");
     if (name.rfind("MESH_", 0) != 0) throw std::invalid_argument("mesh name must start with MESH_ (the payload classifier)");
     if (prims.empty()) throw std::invalid_argument("at least one primitive required");
+    if (prims.size()>std::numeric_limits<uint16_t>::max())
+        throw std::invalid_argument("static mesh exceeds 65535 primitive blocks");
     if (materials.empty()) throw std::invalid_argument("at least one material required");
+    if(!appendDegenerateMaterial && (!materials.back().nativeFlags || !(*materials.back().nativeFlags)[3]))
+        throw std::invalid_argument("preserved static materials require a final degenerate sentinel");
     for (const auto& p : prims) {
         if (p.verts.empty() || p.faces.empty()) throw std::invalid_argument("a primitive has no vertices or faces");
-        if (p.verts.size() > 65535) throw std::invalid_argument("vertex overflow: Fable indices are u16 (max 65535 per primitive)");
+        if (p.verts.size() > maxPrimitiveVertices) throw std::invalid_argument("vertex overflow: Fable indices are u16 (max 65535 per primitive)");
         for (const auto& f : p.faces) for (uint32_t i : f) if (i >= p.verts.size()) throw std::invalid_argument("face index out of range");
         if (p.material < 0 || size_t(p.material) >= materials.size()) throw std::invalid_argument("primitive material slot out of range");
     }
@@ -124,7 +158,7 @@ Composed composeStatic(const std::string& name, const std::vector<Primitive>& pr
 
     std::vector<uint8_t> lod;
     meshHeader(lod, name, c.sphereCentre, c.sphereRadius, c.bbMin, c.bbMax);
-    putI32(lod, int32_t(materials.size()) + 1);   // + the DegenerateTriangles sentinel
+    putI32(lod, int32_t(materials.size()) + int32_t(appendDegenerateMaterial));
     putI32(lod, int32_t(prims.size()));
     putI32(lod, 0); putI32(lod, 0);                // BoneCount, BoneNameSize
     putU8(lod, 0);                                 // ClothFlag
@@ -134,23 +168,24 @@ Composed composeStatic(const std::string& name, const std::vector<Primitive>& pr
 
     for (size_t slot = 0; slot < materials.size(); ++slot) {
         const auto& m = materials[slot];
-        const int32_t mapFlags = (m.diffuseId > 0 ? 1 : 0) | (m.bumpId > 0 ? 2 : 0) | (m.reflectId > 0 ? 4 : 0) | (m.illumId > 0 ? 8 : 0);
-        writeMaterial(lod, int32_t(slot), m.name.empty() ? name + "_mat" + std::to_string(slot) : m.name, m.decalId, m.diffuseId, m.bumpId,
-                      m.reflectId, m.illumId, mapFlags, m.selfIllum, m.twoSided, m.transparent, m.booleanAlpha, false);
+        const uint32_t mapFlags=m.originalMapFlags.value_or((m.diffuseId > 0 ? 1u : 0u) | (m.bumpId > 0 ? 2u : 0u) | (m.reflectId > 0 ? 4u : 0u) | (m.illumId > 0 ? 8u : 0u));
+        writeMaterial(lod, m.originalId.value_or(int32_t(slot)), (!m.originalId && m.name.empty()) ? name + "_mat" + std::to_string(slot) : m.name, m.decalId, m.diffuseId, m.bumpId,
+                      m.reflectId, m.illumId, int32_t(mapFlags), m.selfIllum, m.twoSided, m.transparent, m.booleanAlpha, false,m.nativeFlags,m.filenames);
     }
-    writeMaterial(lod, 0, "DegenerateTriangles", 0, 0, 0, 0, 0, 0, 0, false, false, false, true);
+    if(appendDegenerateMaterial) writeMaterial(lod, 0, "DegenerateTriangles", 0, 0, 0, 0, 0, 0, 0, false, false, false, true);
 
     for (const auto& p : prims) {
         Vec3 pmn, pmx, psc; float psr;
         bounds({&p}, pmn, pmx, psc, psr);
         const auto norms = p.normals.empty() ? faceNormals(p.verts, p.faces) : p.normals;
         const uint32_t nv = uint32_t(p.verts.size()), nf = uint32_t(p.faces.size());
-        putI32(lod, p.material); putI32(lod, 0);            // MaterialIndex, Reps
+        const int32_t materialId=materials[size_t(p.material)].originalId.value_or(p.material);
+        putI32(lod, materialId); putI32(lod, 0);            // MaterialIndex, Reps
         putF32(lod, psc.x); putF32(lod, psc.y); putF32(lod, psc.z);
         putF32(lod, psr); putF32(lod, 0.1f);                // radius, AverageStretch
         putU32(lod, 1); putU32(lod, 0); putU32(lod, nv); putU32(lod, nf); putU32(lod, 3 * nf); putU32(lod, 0x14);   // static blocks, animated blocks, verts, faces, indices, InitFlags
         putU32(lod, 1); putU32(lod, 0);                     // the counts repeated
-        putU32(lod, nf); putU32(lod, 0); putU8(lod, 0); putU8(lod, 0); putU8(lod, 0); putI32(lod, p.material);   // one CStaticBlock: the whole index buffer as a list
+        putU32(lod, nf); putU32(lod, 0); putU8(lod, 0); putU8(lod, 0); putU8(lod, 0); putI32(lod, p.material);   // block references the material array slot, unlike the primitive's material ID
         const float scale[4] = {1, 1, 1, 1}, off[4] = {0, 0, 0, 0};
         for (float v : scale) putF32(lod, v);
         for (float v : off) putF32(lod, v);
@@ -185,12 +220,12 @@ Composed composeStatic(const std::string& name, const std::vector<Primitive>& pr
     c.payload = lod;
     c.payload.insert(c.payload.end(), ghost.begin(), ghost.end());
 
-    std::vector<int32_t> texIds;
+    std::vector<uint32_t> texIds;
     for (const auto& m : materials)
-        for (int32_t t : {m.diffuseId, m.bumpId, m.reflectId, m.illumId, m.decalId})
+        for (uint32_t t : {m.diffuseId, m.bumpId, m.reflectId, m.illumId, m.decalId>0 ? uint32_t(m.decalId) : 0u})
             if (t > 0 && std::find(texIds.begin(), texIds.end(), t) == texIds.end()) texIds.push_back(t);
     auto& info = c.info;
-    putI32(info, physicsIndex);
+    putU32(info, physicsIndex);
     putF32(info, c.sphereCentre.x); putF32(info, c.sphereCentre.y); putF32(info, c.sphereCentre.z);
     putF32(info, c.sphereRadius);
     putF32(info, c.bbMin.x); putF32(info, c.bbMin.y); putF32(info, c.bbMin.z);
@@ -199,7 +234,7 @@ Composed composeStatic(const std::string& name, const std::vector<Primitive>& pr
     putU32(info, uint32_t(lod.size()));                     // LODSizes[0] (the ghost is not counted)
     putF32(info, 0.0f);                                     // SafeBoundingRadius
     putU32(info, uint32_t(texIds.size()));
-    for (int32_t t : texIds) putI32(info, t);
+    for (uint32_t t : texIds) putU32(info, t);
     return c;
 }
 
@@ -222,6 +257,19 @@ struct ChunkWriter {
 } // namespace
 
 std::vector<uint8_t> composePhysicsUncompressed(const std::vector<Primitive>& prims, const std::string& subMeshName) {
+    // This composer joins all parts into one hull with uint16 triangle indices.
+    constexpr size_t vertexLimit=size_t(std::numeric_limits<uint16_t>::max())+1;
+    size_t totalVertices=0;
+    for(const auto& primitive:prims) {
+        if(primitive.verts.size()>vertexLimit-totalVertices)
+            throw std::invalid_argument("collision hull exceeds 65536 vertices; simplify the model or disable collision");
+        totalVertices+=primitive.verts.size();
+        for(const auto& vertex:primitive.verts)
+            if(!std::isfinite(vertex.x) || !std::isfinite(vertex.y) || !std::isfinite(vertex.z))
+                throw std::invalid_argument("non-finite collision position");
+        for(const auto& face:primitive.faces) for(uint32_t index:face)
+            if(index>=primitive.verts.size()) throw std::invalid_argument("collision face index out of range");
+    }
     // retail's hull byte for byte in structure (MESH_OBJECT_BARREL[PHYSICS] decoded with mesh-info --raw):
     // MTRL "Collision material" + an MTLE {1, 0} sub-chunk, the SUBM named after the mesh, no TRFM
     ChunkWriter w;
@@ -244,7 +292,7 @@ std::vector<uint8_t> composePhysicsUncompressed(const std::vector<Primitive>& pr
     w.u32(0); w.i32(-1); w.i32(-1); w.i32(-1);   // sub-mesh index, parent, first child, next sibling
     w.push("PRIM");
     w.i32(0);   // physics material index
-    // every primitive's triangles into one vertex/index set (indices are u16: cap at 65535 vertices)
+    // Every primitive's triangles share one vertex/index set; limits were checked above.
     std::vector<uint16_t> indices;
     std::vector<uint8_t> verts;
     uint32_t base = 0, count = 0;
@@ -252,7 +300,7 @@ std::vector<uint8_t> composePhysicsUncompressed(const std::vector<Primitive>& pr
         const auto norms = p.normals.empty() ? std::vector<Vec3>(p.verts.size(), Vec3{0, 0, 1}) : p.normals;
         // the engine's winding, like the render index buffer (retail hull triples read 2,1,0 / 5,4,3):
         // straight order made an inside-out hull that held the hero at the cube's centre in-game
-        for (const auto& f : p.faces) for (uint32_t i : {f[0], f[2], f[1]}) indices.push_back(uint16_t(std::min<uint32_t>(base + i, 65535)));
+        for (const auto& f : p.faces) for (uint32_t i : {f[0], f[2], f[1]}) indices.push_back(uint16_t(base + i));
         for (size_t i = 0; i < p.verts.size(); ++i) {
             putF32(verts, p.verts[i].x); putF32(verts, p.verts[i].y); putF32(verts, p.verts[i].z);
             const Vec3 n = i < norms.size() ? norms[i] : Vec3{0, 0, 1};
@@ -263,7 +311,7 @@ std::vector<uint8_t> composePhysicsUncompressed(const std::vector<Primitive>& pr
         base += uint32_t(p.verts.size()); count += uint32_t(p.verts.size());
     }
     // retail's chunk order inside PRIM: TRIS, SMTH (a smoothing group per triangle, all 0 in
-    // retail hulls), VERT, UNIV (per vertex: the id of the first vertex at the same position);
+    // retail hulls), VERT, UNIV (per vertex: a stable ID for each distinct position);
     // EgoCore writes TRIS + VERT only -- the two extra chunks are what retail carries
     if (!indices.empty()) {
         w.push("TRIS");
@@ -285,13 +333,13 @@ std::vector<uint8_t> composePhysicsUncompressed(const std::vector<Primitive>& pr
         std::vector<uint32_t> uniq;
         uniq.reserve(count);
         {
-            std::vector<std::array<float, 3>> seen;
+            // Preserve first-encounter numbering and exact coordinate equality
+            // (including signed zero), without rescanning all previous vertices.
+            std::map<std::array<float,3>,uint32_t> seen;
             for (const auto& p : prims)
                 for (const auto& v : p.verts) {
-                    uint32_t id = uint32_t(seen.size());
-                    for (size_t k = 0; k < seen.size(); ++k) if (seen[k][0] == v.x && seen[k][1] == v.y && seen[k][2] == v.z) { id = uint32_t(k); break; }
-                    if (id == seen.size()) seen.push_back({v.x, v.y, v.z});
-                    uniq.push_back(id);
+                    const auto found=seen.try_emplace(std::array<float,3>{v.x,v.y,v.z},uint32_t(seen.size()));
+                    uniq.push_back(found.first->second);
                 }
         }
         for (uint32_t u : uniq) w.u32(u);

@@ -32,14 +32,48 @@ int main(int argc, char** argv) {
                 check(refused && textWorld.serialize()==regionText, "invalid region text modified the world");
             }
         }
-        for (const auto* value : {"MINI MAP", "MINI;MAP", "MINI\tMAP"}) {
+        for (const auto* value : {"MINI MAP", "MINI;MAP", "MINI\tMAP", "15360",
+                                 "1MINIMAP", "MINI-MAP", "MINI.MAP"}) {
             bool refused=false;
             try { textWorld.setRegionText("Region", "MiniMapGraphic", value); } catch (const std::exception&) { refused=true; }
             check(refused && textWorld.serialize()==regionText, "invalid bare minimap token modified the world");
         }
+        textWorld.setRegionText("Region", "minimapgraphic", "_MINIMAP_15360");
+        check(textWorld.findRegion("Region")->minimapGraphic=="_MINIMAP_15360",
+              "valid underscore minimap identifier refused");
         textWorld.setRegionText("Region", "NewDisplayName", "Tester's Cove; North");
         textWorld.setRegionText("Region", "MiniMapGraphic", ""); // existing clear-field contract
+        const auto cleared=textWorld.serialize();
+        check(cleared=="NewRegion 1;\r\nRegionName \"Region\";\r\nNewDisplayName \"Tester's Cove; North\";\r\nRegionDef \"\";\r\nEndRegion;\r\n",
+              "clearing minimap changed unrelated region bytes");
+        check(cleared.find("minimapgraphic")==std::string::npos &&
+              cleared.find("MiniMapGraphic")==std::string::npos,
+              "clearing minimap emitted an empty native string directive");
+        textWorld.setRegionText("Region", "MiniMapGraphic", "");
+        check(textWorld.serialize()==cleared,"clearing absent minimap changed source bytes");
         const auto reread = forge::wld::File::parseText(textWorld.serialize());
+        for (const auto* key : {"MiniMapScale", "MiniMapOffsetX", "MiniMapOffsetY"}) {
+            for (bool present : {false, true}) {
+                const std::string source = present ? regionText.substr(0, regionText.find("EndRegion;")) +
+                    key + " 1.0;\r\nEndRegion;\r\n" : regionText;
+                for (const auto* value : {"", "nan", "inf", "-inf", "1e1000", "1x", "0x1", "\"1.0\""}) {
+                    auto world = forge::wld::File::parseText(source);
+                    bool refused = false;
+                    try { world.setRegionText("Region", key, value); } catch (const std::exception&) { refused = true; }
+                    check(refused && world.serialize()==source && world.findRegion("Region")->displayName=="Safe",
+                          "invalid minimap number changed an existing or absent directive");
+                }
+                for (const auto* value : {"0", "-0.5", "15360.0", "0.001"}) {
+                    auto world = forge::wld::File::parseText(source);
+                    world.setRegionText("Region", key, value);
+                    std::string expected = source;
+                    if (present) expected.replace(expected.find(std::string(key)+" 1.0;"), std::string(key).size()+5,
+                                                   std::string(key)+" "+value+";");
+                    else expected.insert(expected.find("NewDisplayName"), std::string(key)+" "+value+";\r\n");
+                    check(world.serialize()==expected, "valid minimap number changed unrelated bytes or spelling");
+                }
+            }
+        }
         check(reread.findRegion("Region")->displayName=="Tester's Cove; North" &&
               reread.findRegion("Region")->minimapGraphic.empty(), "valid region punctuation or clear changed meaning");
         namespace fs = std::filesystem;

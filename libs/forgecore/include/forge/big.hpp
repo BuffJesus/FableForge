@@ -6,7 +6,7 @@
 // (BigReader.cs) and validated against ControllerSupport.fmp + HalsSword.fmp.
 //
 //   header: char[4] magic ("BIGB" or "B\0\0\0"), u32 version, u32 bankDirOffset,
-//           u32 contentType
+//           u32 directorySize (BIGB) or contentType (B\0\0\0 FMP)
 //   bank directory @ bankDirOffset: u32 bankCount, then per bank:
 //           asciiz name, u32 id, u32 entryCount, u32 entryStart, u32 length,
 //           u32 blockSize
@@ -58,6 +58,8 @@ public:
     static File openFully(const std::filesystem::path& path);
 
     uint32_t version() const { return version_; }
+    // Legacy name for the fourth source header word: FMP content kind, but
+    // directory byte length for BIGB. BIGB serialization recomputes that length.
     uint32_t contentType() const { return contentType_; }
     const std::string& magic() const { return magic_; }
     const std::vector<Bank>& banks() const { return banks_; }
@@ -71,6 +73,8 @@ public:
     // Serialize to BIG bytes. Each entry's payload is taken from its `data`
     // field if non-empty, else sliced from this file (dataOffset/length), so a
     // freshly-read File round-trips. Banks/entries are written in order.
+    // Retail BIGB payloads honor bank alignment and the directory length is
+    // rebuilt. Metadata/payload values survive; container bytes may move.
     std::vector<uint8_t> serialize() const;
 
     // Build a File from scratch (for `fmp export`). Set version/contentType, add

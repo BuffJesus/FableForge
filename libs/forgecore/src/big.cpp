@@ -2,6 +2,7 @@
 
 #include <cstring>
 #include <fstream>
+#include <limits>
 #include <map>
 #include <stdexcept>
 
@@ -213,6 +214,7 @@ std::vector<uint8_t> File::serialize() const {
     // write and needlessly risks the retail loader.
     const std::string headerMagic =
         magic_.size() == 4 ? magic_ : std::string("B\0\0\0", 4);
+    const bool retail = headerMagic == "BIGB";
     o.insert(o.end(), headerMagic.begin(), headerMagic.end());
     put32(o, version_);
     const size_t bankDirOffPos = o.size();
@@ -231,6 +233,13 @@ std::vector<uint8_t> File::serialize() const {
     for (size_t bi = 0; bi < banks_.size(); ++bi) {
         for (const auto& e : banks_[bi].entries) {
             auto pl = payloadOf(e);
+            // The retail bank directory records each bank's payload alignment.
+            // Preserve it when moving/resizing entries, including empty blobs.
+            const uint64_t alignment = retail && banks_[bi].blockSize ? banks_[bi].blockSize : 1;
+            const uint64_t padding = (alignment - o.size() % alignment) % alignment;
+            if (uint64_t(o.size()) + padding + pl.size() > std::numeric_limits<uint32_t>::max())
+                throw std::runtime_error("big: serialized payload region exceeds 32-bit offsets");
+            o.insert(o.end(), size_t(padding), uint8_t(0));
             dataOffsets[bi].push_back((uint32_t)o.size());
             dataLengths[bi].push_back((uint32_t)pl.size());
             o.insert(o.end(), pl.begin(), pl.end());
@@ -289,6 +298,10 @@ std::vector<uint8_t> File::serialize() const {
     }
 
     patch32(o, bankDirOffPos, bankDirOffset);
+    // BIGB's fourth header word is the directory byte length. FMP's B\0\0\0
+    // flavor instead uses a content kind (e.g. 510), which must survive.
+    // OpenRetailBank 02FD0530 allocates/reads precisely this many directory bytes.
+    if (retail) patch32(o, 12, uint32_t(o.size() - bankDirOffset));
     return o;
 }
 

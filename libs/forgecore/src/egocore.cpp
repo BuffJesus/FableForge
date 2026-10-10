@@ -7,6 +7,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <fstream>
+#include <limits>
 #include <map>
 #include <optional>
 #include <set>
@@ -519,7 +520,10 @@ size_t applyResourceOverrides(const fs::path& modFolder, const fs::path& gameRoo
                 big::Entry e;
                 uint32_t maxId = 0;
                 for (const auto& x : bank->entries) maxId = std::max(maxId, x.id);
+                if (maxId == std::numeric_limits<uint32_t>::max())
+                    throw std::runtime_error("EgoCore resource: no free entry ID in " + bank->name);
                 if (!bank->entries.empty()) { const auto& model = bank->entries.back(); e.magic = model.magic; e.devFileType = model.devFileType; }
+                if (file.magic() == "BIGB") e.magic = 42;
                 e.id = maxId + 1;
                 e.type = graphics ? 1 : 0;
                 e.name = o.entry;

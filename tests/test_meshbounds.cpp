@@ -30,6 +30,124 @@ int main(int argc,char** argv) {
     try {
         forge::meshcompose::Primitive primitive;
         primitive.verts={{0,0,0},{4,0,0},{0,3,0}};primitive.faces={{0,1,2}};
+        for(uint32_t physics:{0u,0x7fffffffu,0x80000000u,0xfffffffeu}) {
+            const auto mesh=forge::meshcompose::composeStatic("MESH_PHYSICS_ID",{primitive},{{}},false,physics);
+            uint32_t saved=0;std::memcpy(&saved,mesh.info.data(),4);
+            check(saved==physics,"physics bank reference retains unsigned ID bits");
+        }
+        bool reservedPhysics=false;
+        try {(void)forge::meshcompose::composeStatic("MESH_PHYSICS_ID",{primitive},{{}},false,0xffffffffu);}
+        catch(const std::invalid_argument& e) {reservedPhysics=std::string(e.what()).find("reserved no-hull sentinel")!=std::string::npos;}
+        check(reservedPhysics,"native no-hull sentinel cannot name a collision entry");
+        for(uint32_t texture:{0x7fffffffu,0x80000000u,0xffffffffu}) {
+            forge::meshcompose::Material material;
+            material.diffuseId=texture;material.bumpId=texture-1;
+            material.reflectId=texture-2;material.illumId=texture-3;
+            const auto textured=forge::meshcompose::composeStatic("MESH_TEXTURE_IDS",{primitive},{material},false);
+            const auto decoded=mp::decodeLod0(textured.payload,1);
+            const auto& maps=decoded.materials.at(0);
+            check(uint64_t(maps.diffuseTexture)==texture && uint64_t(maps.bumpTexture)==texture-1 &&
+                  uint64_t(maps.reflectionTexture)==texture-2 && uint64_t(maps.alphaMapTexture)==texture-3,
+                  "all four material texture IDs retain unsigned values");
+            check(maps.textureFlags==15,"high texture IDs retain enabled map flags");
+            uint32_t count=0;std::memcpy(&count,textured.info.data()+56,4);
+            check(count==4,"high texture IDs remain in the descriptor dependency list");
+            if(count==4) for(size_t slot=0;slot<4;++slot) {
+                uint32_t id=0;std::memcpy(&id,textured.info.data()+60+slot*4,4);
+                check(id==texture-slot,"descriptor texture IDs preserve exact bits and order");
+            }
+        }
+        const std::string embeddedZero=std::string("MESH_NAME")+'\0'+"suffix";
+        for(int field=0;field<3;++field) {
+            bool rejectedName=false;
+            try {
+                if(field==2) (void)forge::meshcompose::composePhysicsUncompressed({primitive},embeddedZero);
+                else (void)forge::meshcompose::composeStatic(field==0 ? embeddedZero : "MESH_NAME",
+                    {primitive},{{field==1 ? embeddedZero : "material"}},false);
+            }catch(const std::invalid_argument&) {rejectedName=true;}
+            check(rejectedName,"embedded NUL in mesh/material/collision name refuses composition");
+        }
+        {
+            std::vector<forge::meshcompose::Primitive> many(65535,primitive);
+            const std::string name="MESH_BLOCK_LIMIT";
+            const auto edge=forge::meshcompose::composeStatic(name,many,{{"material"}},false);
+            // Static header: name+NUL, animated byte, bounds(40), helpers(10),
+            // four i32 counts, cloth byte, then total static blocks(u16).
+            const size_t blocks=name.size()+1+1+40+10+16+1;
+            check(edge.payload.at(blocks)==255 && edge.payload.at(blocks+1)==255,
+                  "static block count retains 65535 boundary");
+            many.push_back(primitive);bool rejectedBlocks=false;
+            try {(void)forge::meshcompose::composeStatic(name,many,{{"material"}},false);}
+            catch(const std::invalid_argument&) {rejectedBlocks=true;}
+            check(rejectedBlocks,"static block count overflow refuses instead of wrapping to zero");
+        }
+        for(float origin : {2e9f,-2e9f,2e38f}) {
+            auto distant=primitive;
+            const float extent=origin==2e38f ? 1e33f : 1024.f;
+            distant.verts={{origin,0,0},{origin+extent,0,0},{origin,extent,0}};
+            distant.normals={{0,0,1},{0,0,1},{0,0,1}};
+            const auto generated=forge::meshcompose::composeStatic("MESH_DISTANT_TEST",{distant},{{"material"}},false);
+            check(generated.bbMin.x==origin && generated.bbMax.x==origin+extent,"distant X bounds come from vertices");
+            check(std::isfinite(generated.sphereCentre.x) && std::isfinite(generated.sphereRadius) &&
+                  generated.sphereRadius<extent*2,"distant sphere stays finite and local to geometry");
+            distant.normals.clear();
+            const auto automatic=forge::meshcompose::composeStatic("MESH_DISTANT_NORMALS",{distant},{{"material"}},false);
+            for(const auto& vertex:mp::decodeLod0(automatic.payload,1).vertices)
+                check(std::abs(vertex.nx)<0.003f && std::abs(vertex.ny)<0.003f && vertex.nz>0.99f,
+                      "large finite triangles retain generated surface normals");
+        }
+        auto invalidPrimitive=primitive;invalidPrimitive.verts[0].x=std::numeric_limits<float>::quiet_NaN();
+        bool rejected=false;
+        try {(void)forge::meshcompose::composeStatic("MESH_INVALID_TEST",{invalidPrimitive},{{"material"}},false);}
+        catch(const std::invalid_argument&) {rejected=true;}
+        check(rejected,"non-finite geometry refuses composition");
+        const float maxCoordinate=std::numeric_limits<float>::max();
+        invalidPrimitive.verts={{-maxCoordinate,-maxCoordinate,-maxCoordinate},
+                                {maxCoordinate,maxCoordinate,maxCoordinate},
+                                {-maxCoordinate,maxCoordinate,maxCoordinate}};
+        rejected=false;
+        try {(void)forge::meshcompose::composeStatic("MESH_INVALID_TEST",{invalidPrimitive},{{"material"}},false);}
+        catch(const std::invalid_argument&) {rejected=true;}
+        check(rejected,"unrepresentable sphere refuses finite geometry");
+        forge::meshcompose::Primitive first,second;
+        first.verts.resize(32768);first.faces={{0,1,32767}};second=first;
+        const auto hull=forge::meshcompose::composePhysicsUncompressed({first,second},"LIMITS");
+        const char* trisTag="TRIS";
+        const auto tris=std::search(hull.begin(),hull.end(),trisTag,trisTag+4);
+        check(tris!=hull.end() && hull.end()-tris>=24,"boundary hull has a triangle table");
+        if(tris!=hull.end() && hull.end()-tris>=24)
+            check(tris[20]==255 && tris[21]==255,"boundary hull retains vertex index 65535");
+        second.verts.push_back({});second.faces={{0,1,32768}};rejected=false;
+        try {(void)forge::meshcompose::composePhysicsUncompressed({first,second},"LIMITS");}
+        catch(const std::invalid_argument&) {rejected=true;}
+        check(rejected,"collision vertex overflow refuses instead of clamping triangle indices");
+        auto invalidFace=primitive;invalidFace.faces={{0,1,3}};rejected=false;
+        try {(void)forge::meshcompose::composePhysicsUncompressed({invalidFace},"LIMITS");}
+        catch(const std::invalid_argument&) {rejected=true;}
+        check(rejected,"collision index outside primitive refuses");
+        auto repeated=primitive;
+        repeated.verts={{-0.f,0,0},{0.f,0,0},{1,2,3},{0,0,0},{4,5,6},{1,2,3}};
+        repeated.faces={{0,2,4}};
+        const auto repeatedHull=forge::meshcompose::composePhysicsUncompressed({repeated},"REPEATED");
+        const char* uniqueTag="UNIV";
+        const auto unique=std::search(repeatedHull.begin(),repeatedHull.end(),uniqueTag,uniqueTag+4);
+        check(unique!=repeatedHull.end() && repeatedHull.end()-unique>=36,"repeated hull has a unique-vertex table");
+        if(unique!=repeatedHull.end() && repeatedHull.end()-unique>=36) {
+            const uint32_t expected[]={0,0,1,0,2,1};
+            for(size_t i=0;i<6;++i) {
+                uint32_t value=0;std::memcpy(&value,&unique[12+i*4],4);
+                check(value==expected[i],"unique vertex IDs preserve first occurrence and signed-zero equality");
+            }
+        }
+        repeated.verts[0].x=std::numeric_limits<float>::quiet_NaN();rejected=false;
+        try {(void)forge::meshcompose::composePhysicsUncompressed({repeated},"INVALID");}
+        catch(const std::invalid_argument&) {rejected=true;}
+        check(rejected,"non-finite collision position refuses before ordered lookup");
+        check(forge::meshcompose::packNormal({1e30f,0,0})==1023,"large finite authored normal retains its direction");
+        rejected=false;
+        try {(void)forge::meshcompose::packNormal({std::numeric_limits<float>::quiet_NaN(),0,0});}
+        catch(const std::invalid_argument&) {rejected=true;}
+        check(rejected,"non-finite authored normal refuses packing");
         auto composed=forge::meshcompose::composeStatic("MESH_BOUNDS_TEST",{primitive},{{"material"}},false);
         const auto baseline=mp::decodeLod0(composed.payload,1);
         check(baseline.boundingSphere.has_value(),"composed payload retains sphere");

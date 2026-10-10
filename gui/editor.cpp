@@ -211,6 +211,7 @@ void App::syncInstances() {
 }
 
 void App::startThingsReload() {
+    if(meshReplaceFuture_.valid()) {thingsReloadPending_=true;return;}
     if (modFilesBusy()) { thingsReloadPending_ = true; return; }
     if (!documentLoaded() || !ctx_.ready()) return;
     if (foliageFuture_.valid()) { thingsReloadPending_ = true; return; }
@@ -596,6 +597,10 @@ void App::drawPropertyGrid(float cardInner) {
     using theme::S;
     if (selectedThing_ < 0) return;
     const size_t idx = size_t(selectedThing_);
+    const auto definition=doc_.summary(idx).definition;
+    ImGui::BeginDisabled(definition.empty() || definition=="NULL");
+    if(ImGui::SmallButton("Open definition")) browseDefinition(definition);
+    auto_.registerWidget("btn_object_definition");ImGui::EndDisabled();
     const auto rows = doc_.propertiesOf(idx);
     const auto knownProperties=doc_.knownComponentProperties(idx);
     if (rows.empty() && doc_.ctcBlocksOf(idx).empty()) return;
@@ -741,6 +746,8 @@ void App::drawPropertyGrid(float cardInner) {
             std::snprintf(buf, sizeof buf, "%s", r.value.c_str());
             ImGui::InputText("##v", buf, sizeof buf);
             if (ImGui::IsItemDeactivatedAfterEdit()) { next = buf; commit = true; }
+            if (propertyBlock.empty() && propertyKey=="scriptname" && ImGui::IsItemHovered())
+                ImGui::SetTooltip("Start with a letter or underscore; use ASCII letters, digits and underscores. Enter NULL for no name.");
         }
         // the vanilla dialog's range for numbers (its spin controls stop there)
         if (commit && vf && vf->hasRange && (r.kind == K::Int || r.kind == K::Float)) {
@@ -755,6 +762,8 @@ void App::drawPropertyGrid(float cardInner) {
         if (commit && next != r.value) {
             const bool updated=canReset?doc_.setComponentOverride(idx,r.ctc,r.key,next):doc_.setPropertyValue(idx,r.ctc,r.key,next);
             if (updated) pushLog((r.ctc.empty() ? "" : r.ctc + ".") + r.key + " = " + next, 0);
+            else if (propertyBlock.empty() && forge::tng::isIdentifierProperty(doc_.summary(idx).type,r.key))
+                pushLog("property: " + r.key + " must start with a letter or underscore and contain only ASCII letters, digits and underscores. Use NULL for no name.",1);
             else pushLog("property: " + next + " does not fit " + r.key + (r.kind == K::String ? " (a quoted \"text\")" : r.kind == K::Int ? " (a whole number)" : r.kind == K::Float ? " (a number)" : ""), 1);
         }
         if (canReset) {
@@ -766,6 +775,16 @@ void App::drawPropertyGrid(float cardInner) {
             if (ImGui::IsItemHovered()) ImGui::SetTooltip("Remove the saved value and let the game supply it. Undo restores the exact original text.");
         }
         ImGui::EndDisabled();
+        const bool textReference=(r.ctc=="CTCActionUseReadable" && propertyKey=="gametextdefname") ||
+            (r.ctc=="CTCInfoDisplay" && (propertyKey=="texttag" || propertyKey=="texttagback"));
+        if(textReference) {
+            std::string reference=r.value;
+            if(r.kind==K::String && reference.size()>=2) reference=reference.substr(1,reference.size()-2);
+            ImGui::BeginDisabled(reference.empty() || reference=="NULL");
+            if(ImGui::SmallButton("View text")) browseText(reference);
+            auto_.registerWidget(("property_text_"+r.ctc+"_"+r.key).c_str());
+            ImGui::EndDisabled();
+        }
         ImGui::PopID();
     }
     drawListProperties(cardInner);
@@ -858,11 +877,11 @@ void App::drawTracksCard(float pad, float inner, float cardInner) {
         if (theme::ghostButton("Unlink node", ImVec2(half, S(26)))) doc_.unlinkTrackNode(size_t(selectedThing_));
         auto_.registerWidget("btn_track_unlink");
         ImGui::SetNextItemWidth(cardInner - S(76));
-        ImGui::InputTextWithHint("##trackname", "Track name (letters, digits, _)", trackName_, sizeof trackName_);
+        ImGui::InputTextWithHint("##trackname", "Track name (start with a letter or _)", trackName_, sizeof trackName_);
         ImGui::SameLine(0, S(6));
         if (theme::ghostButton("Rename", ImVec2(S(70), S(24))) && trackName_[0]) {
             if (doc_.renameTrack(size_t(selectedThing_), trackName_)) pushLog(std::string("track renamed ") + trackName_, 0);
-            else pushLog("track: letters, digits and _ only", 1);
+            else pushLog("track: start with a letter or underscore; use ASCII letters, digits and underscores", 1);
         }
         auto_.registerWidget("btn_track_rename");
     }
@@ -1747,7 +1766,7 @@ void App::drawPackDestination(float cardInner, bool allowDirect) {
 
 // Import into the chosen pack (a recipe) or directly (the in-place import). model: the Models page.
 bool App::addToPackOrGame(bool model) {
-    if (model) meshImportSuccess_.clear();
+    if (model) { meshImportSuccess_.clear(); meshImportNotes_.clear(); }
     auto& lastError = model ? meshImportError_ : customThemeError_;
     lastError.clear();
     if (fileWriteBlocked("asset import")) { lastError = "Wait for the current file operation to finish, then import again."; return false; }
@@ -1799,6 +1818,13 @@ void App::drawModelImportCard(float pad, float inner, float cardInner) {
         ImGui::TextWrapped("%s", meshImportSuccess_.c_str());
         auto_.registerWidget("mesh_import_success");
         ImGui::PopStyleColor();
+    }
+    if (!meshImportNotes_.empty()) {
+        ImGui::BeginGroup();
+        theme::label("Import notes");
+        for (const auto& note : meshImportNotes_) ImGui::TextWrapped("%s", note.c_str());
+        ImGui::EndGroup();
+        auto_.registerWidget("mesh_import_notes");
     }
     if (theme::primaryButton(meshBusy ? "Importing..." : packDest_.empty() ? "Import into the game" : "Add to the pack", ImVec2(cardInner, S(30)), meshCan))
         addToPackOrGame(true);
@@ -1902,6 +1928,7 @@ bool App::createCustomTheme(const std::string& png, const std::string& name, con
 bool App::importMesh(const std::string& model, const std::string& name, const std::string& texturePng) {
     meshImportError_.clear();
     meshImportSuccess_.clear();
+    meshImportNotes_.clear();
     auto fail = [&](const std::string& message) {
         meshImportError_ = message; pushLog("import model: " + message, 1); return false;
     };
@@ -1918,7 +1945,7 @@ bool App::importMesh(const std::string& model, const std::string& name, const st
         job.submittedFields = submittedFields;
         meshimport::ImportResult out;
         job.ok = meshimport::importModel(root, req, out, job.error);
-        job.notes = out.notes; job.objectName = out.objectName;
+        job.notes = out.notes; job.modelNotes = out.modelNotes; job.objectName = out.objectName;
         return job;
     });
     return true;
@@ -1930,10 +1957,12 @@ void App::pollMeshImport() {
     meshImportError_ = job.ok ? std::string{} : job.error;
     if (!job.ok) { pushLog("import model failed: " + job.error, 2); return; }
     meshImportSuccess_ = "Imported " + job.objectName + ". Find it under Add an object.";
+    meshImportNotes_ = job.modelNotes;
     for (const auto& n : job.notes) pushLog("import model: " + n, 0);
     pushLog(job.objectName + " ready: find it under Add an object (with a collision hull from its own triangles; not yet seen in-game)", 3);
     // the def list, the thumbnails and the texture context must see the new entries
-    foliageexport::closeMeshBank(); thumbBankOpen_ = false; defThumbs_.clear(); defList_.clear(); themeGroupOf_.clear(); envDefs_.clear(); soundDefs_.clear(); familyNames_.clear(); issuesRev_ = ~0ull;
+    foliageexport::closeMeshBank(); defThumbs_.clear(); defList_.clear(); themeGroupOf_.clear(); envDefs_.clear(); soundDefs_.clear(); familyNames_.clear(); issuesRev_ = ~0ull;
+    refreshTextures(); // Material links must see a PNG appended by this import.
     // Keep the next draft if the user changed any field while this import ran.
     if (job.submittedFields == std::array<std::string, 3>{meshModelPath_, meshName_, meshTexturePng_}) {
         meshModelPath_[0] = 0; meshName_[0] = 0; meshTexturePng_[0] = 0;
@@ -2589,12 +2618,14 @@ bool App::saveDocument() {
 }
 
 const char* App::activeFileJob() const {
+    if (definitionsBusy()) return "definition read";
     if (recoveryFuture_.valid()) return "recovery snapshot";
     if (terrainDeployFuture_.valid()) return "terrain write";
     if (worldFuture_.valid()) return "world write";
     if (newLevelFuture_.valid()) return "level creation";
     if (compactFuture_.valid()) return "bank compaction";
     if (meshImportFuture_.valid()) return "model import";
+    if (meshReplaceFuture_.valid()) return "model replacement";
     if (modsFuture_.valid()) return "mod processing";
     if (!modsQueuedVerb_.empty()) return "mod preparation";
     if (modsRefreshPending_) return "mod refresh";
@@ -4094,7 +4125,7 @@ void App::pollRecovery() {
             if (ec) pushLog("recovery cleanup: "+ec.message(),1);
         } else if (result.ok) pushLog("autosaved "+result.map+" (objects and terrain)",0);
         else pushLog("autosave failed: "+result.error,2);
-        if (closePending_ && !hasUnsavedEdits() && !worldPendingCount() && !worldFuture_.valid() && dialogueStaged_.empty()) {
+        if (closePending_ && !hasUnsavedEdits() && !worldPendingCount() && !worldFuture_.valid() && dialogueStaged_.empty() && !textEditing_ && !definitionEditing_) {
             retireRecovery(); quit_=true;
         }
     }
@@ -4166,6 +4197,11 @@ void App::drawUnsavedPrompt() {
                                    doc_.dirty() && doc_.hasTerrain() && doc_.terrainDirty() ? "objects and terrain" : doc_.dirty() ? "objects" : "terrain");
             if (worldPendingCount())
                 ImGui::TextColored(theme::vec(theme::Muted), "%zu pending world change%s not written.", worldPendingCount(), worldPendingCount() == 1 ? "" : "s");
+            if(definitionEditing_)
+                ImGui::TextColored(theme::vec(theme::Muted),"%s has an open definition field draft. Review and save it from Assets > Definitions before closing.",definitionEditField_.c_str());
+            if (textEditing_)
+                ImGui::TextColored(theme::vec(theme::Muted),
+                    "%s has an open text draft. Review and save it from Assets > Text before closing.",textEditName_.c_str());
             if (!dialogueStaged_.empty())
                 ImGui::TextColored(theme::vec(theme::Muted),
                     "%zu lip sync line edit%s staged. Export them from Assets > Dialogue before closing.",
@@ -4180,12 +4216,18 @@ void App::drawUnsavedPrompt() {
         ImGui::Dummy(ImVec2(0, S(10)));
         const float w = (S(390) - 2 * S(6)) / 3.0f;
         const bool canSave = closePending_ ? (hasUnsavedEdits() || worldPendingCount() > 0) && !worldFuture_.valid() : hasUnsavedEdits();
-        const bool reviewDialogue=closePending_ && !canSave && !dialogueStaged_.empty() &&
+        const bool reviewDefinition=closePending_ && !canSave && definitionEditing_ && !worldFuture_.valid();
+        const bool reviewText=closePending_ && !canSave && !definitionEditing_ && textEditing_ && !worldFuture_.valid();
+        const bool reviewDialogue=closePending_ && !canSave && !definitionEditing_ && !textEditing_ && !dialogueStaged_.empty() &&
             !worldFuture_.valid();
-        if (theme::primaryButton(reviewDialogue ? "Review dialogue" :
+        if (theme::primaryButton(reviewDefinition ? "Review definition" : reviewText ? "Review text" : reviewDialogue ? "Review dialogue" :
                                  closePending_ ? "Save work" : "Save draft",
-                                 ImVec2(w, S(32)), canSave || reviewDialogue)) {
-            if(reviewDialogue) {
+                                 ImVec2(w, S(32)), canSave || reviewDefinition || reviewText || reviewDialogue)) {
+            if(reviewDefinition) {
+                closePending_=false;setTexturesMode(true);setAssetsTab(6);
+            } else if(reviewText) {
+                closePending_=false;setTexturesMode(true);setAssetsTab(5);
+            } else if(reviewDialogue) {
                 closePending_=false;
                 setTexturesMode(true);
                 setAssetsTab(4);
@@ -4198,7 +4240,7 @@ void App::drawUnsavedPrompt() {
                     closeSaveWaiting_ = worldFuture_.valid();
                 }
                 if (draftSaved && !hasUnsavedEdits() && worldPendingCount() == 0 &&
-                    !worldFuture_.valid() && dialogueStaged_.empty()) quit_ = true;
+                    !worldFuture_.valid() && dialogueStaged_.empty() && !textEditing_ && !definitionEditing_) quit_ = true;
             } else if (saveDraft() && !hasUnsavedEdits()) {
                 const std::string t = pendingSelect_; pendingSelect_.clear(); discardEdits_ = true; selectMap(t);
             }
@@ -5406,17 +5448,13 @@ ID3D11ShaderResourceView* App::defThumbnail(const std::string& def, bool& pendin
     uint32_t modelId = 0;
     const int code = ctx_.graphicModelId(def, modelId);
     if (code <= 0 || !modelId) { defThumbs_[def] = nullptr; return nullptr; }
-    if (!thumbBankOpen_) {
-        std::string err;
-        const auto graphics = graphicsBigPath();
-        thumbBankOpen_ = foliageexport::openMeshBank(graphics, err);
-        if (!thumbBankOpen_) { pushLog("thumbnails: " + err, 1); defThumbs_[def] = nullptr; return nullptr; }
-    }
     std::string merr;
-    const auto geo = foliageexport::cachedMesh(modelId, merr);
+    const auto bank=foliageexport::acquireMeshBank(graphicsBigPath(),merr);
+    if (!bank) { pushLog("thumbnails: " + merr, 1); defThumbs_[def] = nullptr; return nullptr; }
+    const auto geo = foliageexport::cachedMesh(bank, modelId, merr);
     if (!geo) { defThumbs_[def] = nullptr; return nullptr; }
     std::vector<std::string> warnings;
-    const foliageexport::Mesh m = foliageexport::makeMesh(modelId, foliageexport::meshName(modelId), def, *geo, true, ctx_, thumbImages_, thumbTextureToImage_, warnings);
+    const foliageexport::Mesh m = foliageexport::makeMesh(modelId, foliageexport::meshName(bank, modelId), def, *geo, true, ctx_, thumbImages_, thumbTextureToImage_, warnings);
     ID3D11ShaderResourceView* srv = renderer_.thumbnail(def, m, thumbImages_, 96);
     defThumbs_[def] = srv;
     return srv;
@@ -6126,11 +6164,13 @@ void App::runBudgetSurvey() {
     if (budgetScope_ != 1)
         for (const auto& d : localDetail_)
             if (inScope(d.x, d.y, -1)) items.push_back({d.name, bg::kLocalDetail, d.mesh});
-    auto mesh = [](uint32_t id) {
+    std::string bankError;
+    const auto bank=foliageexport::acquireMeshBank(graphicsBigPath(),bankError);
+    auto mesh = [bank](uint32_t id) {
         bg::MeshCost m;
-        m.name = foliageexport::meshName(id);
+        m.name = foliageexport::meshName(bank, id);
         std::string err;
-        const auto g = foliageexport::cachedMesh(id, err);
+        const auto g = foliageexport::cachedMesh(bank, id, err);
         if (!g) return m;
         m.ok = true;
         // what the renderer draws: the collision hull on texture-less materials is not
@@ -6147,7 +6187,7 @@ void App::runBudgetSurvey() {
             for (uint32_t v : {t.a, t.b, t.c}) if (v < used.size() && !used[v]) { used[v] = 1; ++m.vertices; }
         }
         for (const auto& mt : g->materials)
-            for (int32_t t : {mt.diffuseTexture, mt.bumpTexture, mt.reflectionTexture, mt.alphaMapTexture})
+            for (uint32_t t : {mt.diffuseTexture, mt.bumpTexture, mt.reflectionTexture, mt.alphaMapTexture})
                 if (t > 0) m.textures.push_back(uint32_t(t));
         return m;
     };

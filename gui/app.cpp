@@ -1,4 +1,5 @@
 #include "app.hpp"
+#include "definitionread.hpp"
 #include "forge/heightpen.hpp"
 #include "worlddemand.hpp"
 
@@ -82,7 +83,7 @@ std::string fmtBytes(uint64_t b) {
 }
 
 // A folder (types == nullptr) or a file of the given types, e.g. {L"Fable level", L"*.lev"}.
-std::string pickPath(HWND owner, const std::string& initial, const COMDLG_FILTERSPEC* types = nullptr, UINT typeCount = 0, bool save = false) {
+std::string pickPath(HWND owner, const std::string& initial, const COMDLG_FILTERSPEC* types = nullptr, UINT typeCount = 0, bool save = false, const wchar_t* extension = L"big") {
     std::string result;
     IFileDialog* dlg = nullptr;
     if (FAILED(CoCreateInstance(save ? CLSID_FileSaveDialog : CLSID_FileOpenDialog, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&dlg)))) return result;
@@ -90,7 +91,7 @@ std::string pickPath(HWND owner, const std::string& initial, const COMDLG_FILTER
     dlg->GetOptions(&opts);
     dlg->SetOptions(opts | (types ? 0 : FOS_PICKFOLDERS) | FOS_FORCEFILESYSTEM | FOS_PATHMUSTEXIST | (types && !save ? FOS_FILEMUSTEXIST : 0));
     if (types) dlg->SetFileTypes(typeCount, types);
-    if (save) dlg->SetDefaultExtension(L"big");
+    if (save) dlg->SetDefaultExtension(extension);
     if (!initial.empty()) {
         const int count = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, initial.data(), int(initial.size()), nullptr, 0);
         std::wstring w(size_t(std::max(count,0)),L'\0');
@@ -196,10 +197,12 @@ bool App::drawPathInput(const char* id,const char* hint,char* value,size_t capac
         static const COMDLG_FILTERSPEC png[]={{L"PNG image",L"*.png"},{L"All files",L"*.*"}};
         static const COMDLG_FILTERSPEC models[]={{L"3D models",L"*.glb;*.gltf;*.obj"},{L"All files",L"*.*"}};
         static const COMDLG_FILTERSPEC dialogue[]={{L"Dialogue archive",L"*.big"},{L"All files",L"*.*"}};
+        static const COMDLG_FILTERSPEC textExport[]={{L"Tab-separated text",L"*.tsv"},{L"All files",L"*.*"}};
         const auto* filter=kind==PathField::ModSource?mods:kind==PathField::Model?models:
-            kind==PathField::Image?images:kind==PathField::Png?png:dialogue;
+            kind==PathField::Image?images:kind==PathField::Png?png:kind==PathField::TextExport?textExport:dialogue;
         const std::string picked=pickPath(hwnd_,value,chooseFolder?nullptr:filter,
-                                         chooseFolder?0:2,kind==PathField::DialogueExport);
+                                         chooseFolder?0:2,kind==PathField::DialogueExport || kind==PathField::TextExport,
+                                         kind==PathField::TextExport?L"tsv":L"big");
         if(!picked.empty()) {
             if(picked.size()>=capacity) pushLog("The selected path is too long for this field.",2);
             else { std::memcpy(value,picked.c_str(),picked.size()+1);changed=true; }
@@ -623,7 +626,7 @@ bool App::restoreAllBackups() {
     if (previewFuture_.valid() || foliageFuture_.valid() || neighbourFuture_.valid() || ctxFuture_.valid() ||
         terrainDeployFuture_.valid() || worldFuture_.valid() || newLevelFuture_.valid() || compactFuture_.valid() ||
         meshImportFuture_.valid() || modsBusy() || exportFuture_.valid() || fitFuture_.valid() ||
-        worldDetailFuture_.valid() ||
+        worldDetailFuture_.valid() || textFuture_.valid() || definitionsBusy() ||
         std::any_of(worldTileWorkers_.begin(),worldTileWorkers_.end(),[](const auto& job){ return job.valid(); })) {
         restoreError_ = "A load or write is still running; try again when it finishes.";
         pushLog("restore: " + restoreError_, 1);
@@ -645,6 +648,9 @@ bool App::restoreAllBackups() {
         dialogueTextIndex_.reset();dialogueTextRoot_.clear();dialogueTextError_.clear();
         dialogueSearchCacheKey_.clear();dialogueSearchResults_.clear();dialogueSearchGroups_.clear();
         dialogueScratchLanguage_.clear();setDialogueEditing(false);
+        definitionLoaded_=false;definitionSelected_.reset();definitionDecoded_.reset();
+        textLoaded_=false; textRows_.clear(); textById_.clear(); textFilteredRows_.clear();
+        textSelected_.reset(); textError_.clear(); textSelectionError_.clear(); textFilterDirty_=true;
         refreshModOrder();
         scanInstall(installPath_);
         selectedName_.clear(); docLoadedFor_.clear();
@@ -792,7 +798,7 @@ void App::scanInstall(const std::string& picked) {
     const bool switching = !installPath_.empty() &&
         fs::path(installPath_).lexically_normal() != fs::path(root).lexically_normal();
     if (switching) {
-        if (hasUnsavedEdits() || worldPendingCount() || !dialogueStaged_.empty()) {
+        if (hasUnsavedEdits() || worldPendingCount() || !dialogueStaged_.empty() || textEditing_ || definitionEditing_) {
             pushLog("install: save or discard the current edits before changing folders", 1);
             return;
         }
@@ -887,7 +893,7 @@ void App::startContextLoad(const std::string& fromRoot) {
     dialoguePresetChecked_=false;
     modelRoot_ = fromRoot.empty() ? installPath_ : fromRoot;
     ctxPending_ = std::make_shared<te::Context>();
-    const fs::path root = fromRoot.empty() ? fs::path(installPath_) : fs::path(fromRoot);
+    const fs::path root = fromRoot.empty() ? fs::u8path(installPath_) : fs::u8path(fromRoot);
     auto ctx = ctxPending_;
     ctxFuture_ = std::async(std::launch::async, [ctx, root]() {
         std::string err;
@@ -1027,7 +1033,7 @@ bool App::openLooseLev(const std::string& path) {
 
 void App::requestClose() {
     if (recoveryFuture_.valid() || hasUnsavedEdits() || worldPendingCount() > 0 || worldFuture_.valid() ||
-        !dialogueStaged_.empty()) {
+        !dialogueStaged_.empty() || textEditing_ || definitionEditing_) {
         pendingSelect_.clear();
         closePending_ = true;
         closeSaveWaiting_ = worldFuture_.valid();
@@ -1074,6 +1080,7 @@ void App::setPreviewThings(bool on) {
 }
 
 void App::startFoliageLoad(bool foliageOnly) {
+    if(meshReplaceFuture_.valid()) {foliagePendingName_=selectedName_;return;}
     if (modFilesBusy()) { foliagePendingName_ = selectedName_; return; }
     if (selectedName_.empty() || !ctx_.ready()) return;
     if (foliageFuture_.valid()) { foliagePendingName_ = selectedName_; return; }
@@ -1472,6 +1479,9 @@ void App::pollWorkers() {
         else { ++batchDone_; ++batchFailed_; }
     }
     pollMeshImport();
+    pollMeshReplace();
+    pollTextBank();
+    pollDefinitions();
     pollModsTool();
     std::lock_guard<std::mutex> lock(logMutex_);
     for (auto& l : logPending_) {
@@ -1871,6 +1881,59 @@ std::vector<std::string> App::stateDump() const {
     v.push_back("effect_meshes=" + std::to_string(effectBrowserSelection_.meshes.size()));
     v.push_back("effect_lights=" + std::to_string(effectBrowserSelection_.lights.size()));
     v.push_back("models_count=" + std::to_string(modelRows_.size()));
+    v.push_back("texts_count=" + std::to_string(textRows_.size()));
+    v.push_back("texts_decode_errors=" + std::to_string(std::count_if(textRows_.begin(),textRows_.end(),[](const auto& row){return !row.error.empty();})));
+    v.push_back("texts_filtered=" + std::to_string(textFilteredRows_.size()));
+    v.push_back("texts_busy=" + std::to_string(textsBusy()));
+    v.push_back("text_language=" + textLanguage_);
+    v.push_back("text_selected=" + (textSelected_ ? textRows_[*textSelected_].name : "-"));
+    v.push_back("text_ready=" + std::to_string(textSelected_ && textRows_[*textSelected_].type<=2 && textRows_[*textSelected_].error.empty() && textLoaded_ && !textsBusy()));
+    v.push_back("text_type=" + std::to_string(textSelected_ ? int(textRows_[*textSelected_].type) : -1));
+    v.push_back("text_tags=" + std::to_string(textSelected_ ? textRows_[*textSelected_].value.tags.size() : 0));
+    v.push_back("text_content=" + (textSelected_ ? textRows_[*textSelected_].value.content : ""));
+    v.push_back("text_members=" + std::to_string(textSelected_ ? textRows_[*textSelected_].value.groupMembers.size() : 0));
+    v.push_back("text_narrators=" + std::to_string(textSelected_ ? textRows_[*textSelected_].narrators.size() : 0));
+    v.push_back("text_export_busy=" + std::to_string(textExportBusy()));
+    v.push_back("text_export_failed=" + std::to_string(!textExportError_.empty()));
+    v.push_back("text_export_succeeded=" + std::to_string(!textExportSuccess_.empty()));
+    v.push_back("text_failed=" + std::to_string(!textError_.empty() || !textSelectionError_.empty() || (textSelected_ && !textRows_[*textSelected_].error.empty())));
+    v.push_back("definitions_busy="+std::to_string(definitionsBusy()));
+    v.push_back("definitions_count="+std::to_string(definitionFile_.entries().size()));
+    v.push_back("definitions_grouped="+std::to_string(std::count_if(definitionGroupOf_.begin(),definitionGroupOf_.end(),[](const auto& group){return group.has_value();})));
+    v.push_back("definitions_filtered="+std::to_string(definitionFiltered_.size()));
+    v.push_back("definition_bank="+definitionBank_);
+    v.push_back("definition_selected="+(definitionSelected_?std::to_string(*definitionSelected_):"-"));
+    v.push_back("definition_fields="+std::to_string(definitionDecoded_?definitionDecoded_->fields.size():0));
+    const auto definitionGroup=definitionBank_=="game.bin" && definitionDecoded_?definitionread::groupTarget(definitionFile_,*definitionDecoded_):std::optional<size_t>{};
+    v.push_back("definition_group="+(definitionGroup?std::to_string(*definitionGroup):"-"));
+    std::optional<uint32_t> definitionModel;
+    if(definitionBank_=="game.bin" && definitionSelected_ && definitionDecoded_)
+        for(size_t i=0;i<definitionDecoded_->fields.size();++i)
+            if(const auto model=definitionread::objectModelId(definitionFile_.entries()[*definitionSelected_],*definitionDecoded_,i)) definitionModel=model;
+    v.push_back("definition_model="+(definitionModel?std::to_string(*definitionModel):"-"));
+    size_t definitionTextures=0;
+    if(definitionBank_=="game.bin" && definitionSelected_ && definitionDecoded_)
+        for(size_t i=0;i<definitionDecoded_->fields.size();++i)
+            if(definitionread::themeTextureId(definitionFile_.entries()[*definitionSelected_],*definitionDecoded_,i)) ++definitionTextures;
+    v.push_back("definition_texture_links="+std::to_string(definitionTextures));
+    size_t definitionNameRefs=0;
+    if(definitionDecoded_) for(size_t i=0;i<definitionDecoded_->fields.size();++i) {
+        if(definitionDecoded_->fields[i].type!="CDefString") continue;
+        std::string name="-";
+        if(const auto offset=definitionread::nameOffset(*definitionDecoded_,i)) {
+            const auto found=definitionNameIndices_.find(*offset);
+            if(found!=definitionNameIndices_.end()) {
+                name=definitionFile_.originalNames()[found->second].second;
+                if(name.empty()) name="(empty name)";++definitionNameRefs;
+            }
+        }
+        v.push_back("definition_name_ref_"+std::to_string(i)+"="+name);
+    }
+    v.push_back("definition_name_refs="+std::to_string(definitionNameRefs));
+    v.push_back("definition_editing="+std::to_string(definitionEditing_));
+    v.push_back("definition_edit_failed="+std::to_string(!definitionEditError_.empty()));
+    v.push_back("definition_ready="+std::to_string(bool(definitionDecoded_)));
+    v.push_back("definition_failed="+std::to_string(!definitionError_.empty() || !definitionSelectionError_.empty() || !definitionDecodeError_.empty()));
     v.push_back("models_filtered=" + std::to_string(modelFiltered_));
     v.push_back("model_selected=" + modelName_);
     v.push_back("model_ready=" + std::to_string(modelReady_));
@@ -1952,7 +2015,11 @@ std::vector<std::string> App::stateDump() const {
     v.push_back("mods_missing_models=" + std::to_string(modNewMissingMeshes_.size()));
     v.push_back("origin_mods=" + std::to_string(originMods_.size()));
     v.push_back("mesh_import_busy=" + std::string(meshImportFuture_.valid() ? "1" : "0"));
+    v.push_back("mesh_replace_busy=" + std::string(meshReplaceBusy() ? "1" : "0"));
+    v.push_back("mesh_replace_failed=" + std::string(meshReplaceError_.empty() ? "0" : "1"));
+    v.push_back("mesh_replace_succeeded=" + std::string(meshReplaceSuccess_.empty() ? "0" : "1"));
     v.push_back("mesh_import_failed=" + std::string(meshImportError_.empty() ? "0" : "1"));
+    v.push_back("mesh_import_note_count=" + std::to_string(meshImportNotes_.size()));
     v.push_back("mesh_import_name=" + std::string(meshName_));
     v.push_back("custom_theme_failed=" + std::string(customThemeError_.empty() ? "0" : "1"));
     v.push_back("origin_things=" + std::to_string(thingOrigin_.size()));
@@ -2138,7 +2205,7 @@ void App::frame(float dt) {
         if (closeSaveWaiting_) {
             closeSaveWaiting_ = false;
             if (r.ok && closePending_ && !hasUnsavedEdits() &&
-                worldPendingCount() == 0 && dialogueStaged_.empty()) quit_ = true;
+                worldPendingCount() == 0 && dialogueStaged_.empty() && !textEditing_ && !definitionEditing_) quit_ = true;
         }
     }
     if (newLevelFuture_.valid() && newLevelFuture_.wait_for(std::chrono::milliseconds(0)) == std::future_status::ready) {
@@ -2242,6 +2309,12 @@ void App::frame(float dt) {
     if (firstRun_ && !auto_.active()) { firstRun_ = false; setupOpen_ = true; tourPending_ = true; }
     drawToolWindows();
     if (!texturesMode_ || assetsTab_ != 1) modelImportOpen_ = false;
+    if (!texturesMode_ || assetsTab_ != 1) modelReplaceOpen_ = false;
+    if(modelReplaceOpen_ && beginToolWindow("##model_replace","Replace model geometry","Keep the mesh identity, materials and collision.",&modelReplaceOpen_,theme::S(460))) {
+        const float pad=ImGui::GetCursorPosX(),inner=ImGui::GetContentRegionAvail().x;
+        drawModelReplaceCard(pad,inner,inner-theme::S(24));
+        endToolWindow();
+    }
     if (modelImportOpen_ &&
         beginToolWindow("##model_import", "Import model", "Choose a model and its destination.",
                         &modelImportOpen_, theme::S(460))) {
@@ -2720,6 +2793,17 @@ void App::drawViewport(float width) {
     const ImVec2 size = ImGui::GetContentRegionAvail();
     ImDrawList* dl = ImGui::GetWindowDrawList();
 
+    if (texturesMode_ && assetsTab_ == 6) {
+        viewportHovered_ = viewportCaptured_ = false;
+        drawDefinitionViewport(origin, size);drawViewportEdges();ImGui::EndChild();return;
+    }
+    if (texturesMode_ && assetsTab_ == 5) {
+        viewportHovered_ = viewportCaptured_ = false;
+        drawTextViewport(origin, size);
+        drawViewportEdges();
+        ImGui::EndChild();
+        return;
+    }
     if (texturesMode_ && assetsTab_ == 3) {
         viewportHovered_ = viewportCaptured_ = false;
         drawEffectViewport(origin, size);
@@ -3227,6 +3311,7 @@ void App::drawActions(float width) {
         ImGui::SetCursorPosX(pad);
         ImGui::PushFont(fontSmall_);
         if (assetsTab_ == 3) theme::hint("Effects inspection is read-only.");
+        else if (assetsTab_ == 5) theme::hint(textEditing_?"Save asks for confirmation; Cancel discards the draft.":"Browse text or select a string to edit its content.");
         else if (assetsTab_ == 4) {
             ImGui::PopFont();
             if(theme::primaryButton(dialogueToolsOpen_?"Back to dialogue":"Edit lip sync", ImVec2(inner,S(32)),dialogueLoaded_))

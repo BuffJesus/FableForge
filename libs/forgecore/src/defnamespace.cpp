@@ -106,6 +106,76 @@ Plan allocate(Input baseline, std::span<const Input> sources) {
     }
     return plan;
 }
+std::span<const uint32_t> NameLookupAnalysis::candidatesFor(std::string_view name) const {
+    if (name.empty()) return {};
+    const auto found = plannedCandidates.find(bin::nameCrc(name));
+    return found == plannedCandidates.end() ? std::span<const uint32_t>{} : found->second;
+}
+
+NameLookupAnalysis analyzeNameLookups(const Plan& plan, std::span<const Input> sources) {
+    if (plan.sources.size() != sources.size())
+        throw std::runtime_error("definition lookup: source/map count mismatch");
+    auto validateNames = [](Input input) {
+        validate(input);
+        std::set<std::string_view> names;
+        for (const auto& [crc, name] : input.names) {
+            if (name.find('\0') != name.npos || bin::nameCrc(name) != crc)
+                throw std::runtime_error("definition lookup: invalid stored name CRC or string");
+            names.insert(name);
+        }
+        for (const auto& entry : input.entries) {
+            if (!names.contains(entry.definition) ||
+                (!entry.name.empty() && !names.contains(entry.name)))
+                throw std::runtime_error("definition lookup: entry identity absent from name pool");
+        }
+    };
+    validateNames({plan.entries, plan.names});
+    NameLookupAnalysis result;
+    std::set<uint32_t> plannedQueries;
+    for (size_t slot = 0; slot < plan.entries.size(); ++slot) {
+        const auto& name = plan.entries[slot].name;
+        const auto crc = bin::nameCrc(name);
+        result.plannedCandidates[crc].push_back(uint32_t(slot));
+        if (!name.empty()) plannedQueries.insert(crc);
+    }
+    for (const auto crc : plannedQueries)
+        if (result.plannedCandidates.at(crc).size() > 1) result.ambiguousNamedCrcs.push_back(crc);
+    for (size_t si = 0; si < sources.size(); ++si) {
+        const auto source = sources[si];
+        validateNames(source);
+        const auto& map = plan.sources[si].gameEntries;
+        for (const auto& [before, after] : map)
+            if (before >= source.entries.size() || after >= plan.entries.size())
+                throw std::runtime_error("definition lookup: map slot out of range");
+        std::map<uint32_t, std::vector<uint32_t>> original;
+        std::set<uint32_t> sourceQueries, assigned;
+        for (size_t slot = 0; slot < source.entries.size(); ++slot) {
+            const auto moved = map.find(uint32_t(slot));
+            const auto target = moved == map.end() ? uint32_t(slot) : moved->second;
+            if (target >= plan.entries.size() || !assigned.insert(target).second)
+                throw std::runtime_error("definition lookup: noninjective or out-of-range mapping");
+            const auto& entry = source.entries[slot];
+            const auto& planned = plan.entries[target];
+            if (entry.definition != planned.definition || entry.name != planned.name)
+                throw std::runtime_error("definition lookup: mapped identity mismatch");
+            const auto crc = bin::nameCrc(entry.name);
+            original[crc].push_back(target);
+            if (!entry.name.empty()) sourceQueries.insert(crc);
+        }
+        auto& analysis = result.sources.emplace_back();
+        analysis.existingQueryGroups = sourceQueries.size();
+        for (const auto crc : plannedQueries)
+            if (!sourceQueries.contains(crc)) ++analysis.addedQueryGroups;
+        for (const auto crc : sourceQueries) {
+            auto& before = original.at(crc);
+            std::sort(before.begin(), before.end());
+            const auto& after = result.plannedCandidates.at(crc);
+            if (before != after) analysis.changed.push_back({crc, before, after});
+        }
+    }
+    return result;
+}
+
 Prepared prepare(Input baseline, std::span<const Input> sources,
                  const defschema::Schema& schema) {
     Prepared result;

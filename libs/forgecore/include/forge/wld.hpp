@@ -90,6 +90,10 @@ public:
     // its string keys (RegionName, NewDisplayName, RegionDef, MiniMapGraphic --
     // inserted after RegionName when the block lacks it), or drop a map from
     // its ContainsMap / SeesMap lists.
+    // MiniMapGraphic must be a bare identifier; an empty value removes its
+    // optional directive while leaving the in-memory graphic name empty.
+    // MiniMapScale and MiniMapOffsetX/Y must be complete finite float values;
+    // invalid values refuse before any raw lines or region data change.
     void setRegionText(std::string_view regionName, std::string_view key, std::string_view value);
     void removeMapFromRegion(std::string_view regionName, std::string_view levelName, bool alsoSees);
 

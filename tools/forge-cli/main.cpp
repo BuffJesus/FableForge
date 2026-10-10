@@ -31,7 +31,13 @@
 #endif
 
 #include "modpack.hpp"
+#include "worldreview.hpp"
+#include "namespacereview.hpp"
 #include "pendingbanks.hpp"
+#include "textwrite.hpp"
+#include "definitionwrite.hpp"
+#include "definitionclone.hpp"
+#include "textdisplay.hpp"
 #include "temporarydirectory.hpp"
 #include "forge/bin.hpp"
 #include "forge/themepalette.hpp"
@@ -106,6 +112,8 @@ int usage() {
         "forge-tools (the legacy FableForge CLI) -- quests, mods, saves, defs, scripts, UI, STB tooling; folded into forge over time\n"
         "\n"
         "usage:\n"
+        "  forge-tools world review-storage <file> [--json]\n"
+        "  forge-tools defs review-namespace <baseline-root> <source-root>... [--json]\n"
         "  forge wad list <file.wad>\n"
         "  forge wad extract <file.wad> <outdir> [filter]\n"
         "  forge wad metadata <file.wad> <filter>\n"
@@ -250,6 +258,7 @@ int usage() {
         "       [--schema <schema.json>] [--out <out-root>|--in-place]\n"
         "  forge ui clone-object-model <game-root> <donorObject> <newObject> <meshId>\n"
         "       [--schema <schema.json>] --out <out-root>\n"
+        "  forge defs clone <bin> <donor-name-or-index> <new-name> --out <bin> [--names <names.bin>] [--json]\n"
         "  forge defs set-field <bin> [--names <names.bin>] <entryName> <field> <value>\n"
         "  forge title add <game-root> <OBJECT_HERO_TITLE_NEW> --donor <OBJECT_HERO_TITLE_X>\n"
         "       --gui <textId> --desc <textId> --greet <groupId> --comment <groupId> --self <groupId>\n"
@@ -264,7 +273,7 @@ int usage() {
         "       [--id N] [--donor TEXT_*] [--speaker NAME] [--speech-bank FILE] [--json]\n"
         "  forge text import <text.big> <manifest.json> --out <text.big>|--in-place\n"
         "       [--donor TEXT_*] [--json]\n"
-        "  forge big list <file.big> [bank-filter] [--json]\n"
+        "  forge big list <file.big> [name-filter] [--json]\n"
         "  forge big extract <file.big> <out-dir> [bank-filter]\n"
         "  forge save read <FableSave-file> [--json]\n"
         "  forge mesh-info <graphics.big> <MESH_NAME|id|--last|--max-id> [--json]   (one MBANK_ALLMESHES entry decoded: counts, bounds, the Info blob)\n"
@@ -4308,6 +4317,13 @@ int defsDecode(const std::string& gameRoot, const std::string& schemaPath,
 
     if (jsonOutput) {
         json fields = json::array();
+        const auto rawHex = [](const std::vector<uint8_t>& bytes) {
+            std::string hex;
+            hex.reserve(bytes.size()*2);
+            constexpr char digits[] = "0123456789abcdef";
+            for (uint8_t byte : bytes) { hex += digits[byte>>4]; hex += digits[byte&15]; }
+            return hex;
+        };
         for (const auto& f : decoded.fields) {
             char tag[16];
             std::snprintf(tag, sizeof(tag), "%08x", f.tag);
@@ -4315,12 +4331,14 @@ int defsDecode(const std::string& gameRoot, const std::string& schemaPath,
                               {"type", f.type},
                               {"tag", tag},
                               {"tag_ok", f.tagOk},
+                              {"raw_hex", rawHex(f.value)},
                               {"value", forge::defdecode::formatValue(f)}});
         }
         std::puts(json{{"index", index},
                        {"definition", entry->definition},
                        {"name", entry->name},
                        {"prefix_len", decoded.prefixLen},
+                       {"prefix_hex", rawHex(decoded.prefix)},
                        {"leftover", decoded.leftover},
                        {"all_tags_ok", decoded.allTagsOk},
                        {"fields", fields}}
@@ -4404,7 +4422,8 @@ int textureImport(const std::string& srcBig, const std::string& outBig,
     req.entryName = entry;
     req.add = add;
     if (!bank.empty()) req.subBank = bank;
-    if (!format.empty()) req.format = format;
+    // Omitted format preserves a replacement slot; only additions default to DXT1.
+    if (!format.empty() || !add) req.format = format;
     req.dims = dims;
     req.toolsDir = toolsDir;
     req.python = python;
@@ -4413,6 +4432,8 @@ int textureImport(const std::string& srcBig, const std::string& outBig,
     std::printf("$ %s\n", result.command.c_str());
     if (!result.output.empty()) std::printf("%s", result.output.c_str());
     if (result.exitCode != 0) {
+        for (const auto& error : result.validation.errors)
+            std::fprintf(stderr, "texture import: %s\n", error.c_str());
         std::fprintf(stderr, "texture import: writer exited %d\n", result.exitCode);
         return 1;
     }
@@ -7582,6 +7603,31 @@ int questCard(const std::string& gameRoot, const std::string& schemaPath,
 // parses <value> into the field's typed bytes, rewrites only that value, and
 // writes the modified bin (+ names.bin) to --out or a "<bin>.set-field.bin"
 // sibling. Untouched entries stay byte-identical (semantic re-serialize).
+int defsClone(const std::string& binPath,const std::string& namesPath,const std::string& donor,
+              const std::string& newName,const std::string& outPath,bool asJson) {
+    namespace fs=std::filesystem;
+    const fs::path input=fs::u8path(binPath),names=namesPath.empty()?input.parent_path()/"names.bin":fs::u8path(namesPath);
+    auto file=forge::bin::File::open(names,input);std::optional<size_t> exact;
+    if(!donor.empty()) for(size_t i=0;i<file.entries().size();++i) if(file.entries()[i].name==donor) {
+        if(exact) throw std::runtime_error("defs clone: donor name is ambiguous; use its record index");exact=i;
+    }
+    size_t index=0;
+    if(exact) index=*exact;
+    else {
+        const auto parsed=std::from_chars(donor.data(),donor.data()+donor.size(),index);
+        if(parsed.ec!=std::errc{} || parsed.ptr!=donor.data()+donor.size())
+            throw std::runtime_error("defs clone: choose an exact donor name or complete unsigned index");
+    }
+    const auto added=forge::defedit::cloneEntry(file,index,newName);const auto output=fs::u8path(outPath);
+    albion::definitionwrite::publishClone(file,names,input,output,true);
+    const auto& entry=file.entries()[added];
+    if(asJson) std::puts(json{{"bin",output.string()},{"names",(output.parent_path()/"names.bin").string()},
+        {"donor_index",index},{"entry_index",added},{"definition",entry.definition},{"entry_name",entry.name},
+        {"index_in_definition",entry.indexInDefinition},{"payload_size",entry.data.size()}}.dump(2).c_str());
+    else std::printf("Cloned record %zu to %zu: %s\n",index,added,entry.name.c_str());
+    return 0;
+}
+
 int defsSetField(const std::string& binPath, const std::string& namesPath,
                  const std::string& schemaPath, const std::string& entry,
                  const std::string& field, const std::string& value,
@@ -7596,21 +7642,21 @@ int defsSetField(const std::string& binPath, const std::string& namesPath,
 
     forge::defedit::SetFieldResult r;
     try {
-        // Prefer an exact name match; fall back to a numeric index for
-        // unnamed sub-defs (e.g. "12345").
-        if (file.find(entry) != nullptr) {
-            r = forge::defedit::setField(file, schema, entry, field, value);
-        } else {
-            size_t idx = 0;
-            try {
-                idx = std::stoul(entry);
-            } catch (const std::exception&) {
-                std::fprintf(stderr, "defs set-field: no entry named %s\n",
-                             entry.c_str());
-                return 1;
-            }
-            r = forge::defedit::setField(file, schema, idx, field, value);
+        // Exact names take priority; ambiguous names must never select a first row.
+        std::optional<size_t> exact;
+        if (!entry.empty()) for (size_t i=0;i<file.entries().size();++i) {
+            if(file.entries()[i].name!=entry) continue;
+            if(exact) throw std::runtime_error("entry name is ambiguous; use its numeric record index");
+            exact=i;
         }
+        size_t index=0;
+        if(exact) index=*exact;
+        else {
+            const auto parsed=std::from_chars(entry.data(),entry.data()+entry.size(),index);
+            if(parsed.ec!=std::errc{} || parsed.ptr!=entry.data()+entry.size())
+                throw std::runtime_error("entry must be an exact name or complete unsigned record index");
+        }
+        r=forge::defedit::setField(file,schema,index,field,value);
     } catch (const std::exception& e) {
         std::fprintf(stderr, "defs set-field: %s\n", e.what());
         return 1;
@@ -7625,9 +7671,11 @@ int defsSetField(const std::string& binPath, const std::string& namesPath,
         binOut = binIn.parent_path() /
                  (binIn.stem().string() + ".set-field" + binIn.extension().string());
     }
-    if (binOut.has_parent_path()) fs::create_directories(binOut.parent_path());
     const fs::path namesOut = binOut.parent_path() / "names.bin";
-    file.save(namesOut, binOut);
+    auto outputName=binOut.filename().string();
+    std::transform(outputName.begin(),outputName.end(),outputName.begin(),[](unsigned char c){return char(std::tolower(c));});
+    const bool trackRecovery=outputName=="game.bin" || outputName=="frontend.bin" || outputName=="script.bin";
+    albion::definitionwrite::publish(file,namesIn,binOut,trackRecovery);
 
     if (jsonOutput) {
         std::puts(json{{"bin", binOut.string()},
@@ -8094,38 +8142,57 @@ int fmpExtract(const std::string& fmpPath, const std::string& outDir,
 int textShow(const std::string& path, const std::string& which, bool jsonOutput) {
     const auto big = forge::big::File::open(path);
     const forge::big::Entry* found = nullptr;
-    // by-name across banks, else by numeric id
+    // Exact names take precedence over complete decimal IDs. Never choose a
+    // different bank silently when the requested identity is ambiguous.
     for (const auto& b : big.banks())
         for (const auto& e : b.entries)
-            if (e.name == which) { found = &e; break; }
+            if (e.name == which) {
+                if(found) throw std::runtime_error("text show: entry name is ambiguous: " + which);
+                found = &e;
+            }
     if (found == nullptr) {
-        try {
-            uint32_t id = (uint32_t)std::stoul(which);
+        uint32_t id=0;
+        const auto parsed=std::from_chars(which.data(),which.data()+which.size(),id);
+        if(parsed.ec==std::errc{} && parsed.ptr==which.data()+which.size()) {
             for (const auto& b : big.banks())
                 for (const auto& e : b.entries)
-                    if (e.id == id) { found = &e; break; }
-        } catch (const std::exception&) {}
+                    if (e.id == id) {
+                        if(found) throw std::runtime_error("text show: entry ID is ambiguous: " + which);
+                        found = &e;
+                    }
+        }
     }
     if (found == nullptr) {
         std::fprintf(stderr, "text show: no entry '%s'\n", which.c_str());
         return 1;
     }
     const auto e = forge::textbig::decode(big.entryData(*found), (int)found->type);
+    std::vector<std::string> narrators;
+    if(found->type==2) {
+        if(found->length!=0) throw std::runtime_error("text show: narrator list has an unexpected payload");
+        narrators=forge::textbig::decodeNarrators(found->subHeader);
+    }
 
     if (jsonOutput) {
         json tags = json::array();
         for (const auto& t : e.tags)
-            tags.push_back({{"position", t.position}, {"name", t.name}});
+            tags.push_back({{"position", t.position}, {"name", albion::textdisplay::metadataUtf8(t.name)}});
         json members = json::array();
         for (auto m : e.groupMembers) members.push_back(m);
-        std::puts(json{{"name", found->name}, {"id", found->id}, {"type", e.type},
-                       {"content", e.content}, {"speech_bank", e.speechBank},
-                       {"speaker", e.speaker}, {"identifier", e.identifier},
-                       {"tags", tags}, {"group_members", members}}
-                      .dump(2).c_str());
+        json row{{"name", found->name}, {"id", found->id}, {"type", e.type},
+                       {"content", e.content}, {"speech_bank", albion::textdisplay::metadataUtf8(e.speechBank)},
+                       {"speaker", albion::textdisplay::metadataUtf8(e.speaker)}, {"identifier", albion::textdisplay::metadataUtf8(e.identifier)},
+                       {"tags", tags}, {"group_members", members}, {"metadata_byte_encoding", "latin1"}};
+        if(found->type==2) row["narrators"]=narrators;
+        std::puts(row.dump(2).c_str());
         return 0;
     }
     std::printf("%s (id %u, type %d)\n", found->name.c_str(), found->id, e.type);
+    if(e.type==2) {
+        std::printf("  %zu narrator(s):\n",narrators.size());
+        for(size_t i=0;i<narrators.size();++i) std::printf("  %zu: %s\n",i,narrators[i].c_str());
+        return 0;
+    }
     if (e.type == 1) {
         std::printf("  group of %zu:", e.groupMembers.size());
         for (auto m : e.groupMembers) std::printf(" %u", m);
@@ -8133,10 +8200,10 @@ int textShow(const std::string& path, const std::string& which, bool jsonOutput)
         return 0;
     }
     std::printf("  content: %s\n", e.content.c_str());
-    if (!e.speechBank.empty()) std::printf("  speech-bank: %s\n", e.speechBank.c_str());
-    if (!e.speaker.empty()) std::printf("  speaker: %s\n", e.speaker.c_str());
+    if (!e.speechBank.empty()) std::printf("  speech-bank: %s\n", albion::textdisplay::metadataUtf8(e.speechBank).c_str());
+    if (!e.speaker.empty()) std::printf("  speaker: %s\n", albion::textdisplay::metadataUtf8(e.speaker).c_str());
     for (const auto& t : e.tags)
-        std::printf("  tag @%d: %s\n", t.position, t.name.c_str());
+        std::printf("  tag @%d: %s\n", t.position, albion::textdisplay::metadataUtf8(t.name).c_str());
     return 0;
 }
 
@@ -8168,38 +8235,36 @@ int textList(const std::string& path, const std::string& filter, bool jsonOutput
     return 0;
 }
 
+using albion::textwrite::publishTextBank;
+
 int textSet(const std::string& path, const std::string& name,
             const std::string& content, const std::string& outPath,
             bool inPlace, std::optional<uint32_t> requestedId,
             const std::string& donor, const std::string& speaker,
             const std::string& speechBank, bool jsonOutput) {
     namespace fs = std::filesystem;
-    auto file = forge::big::File::open(path);
+    auto file = forge::big::File::open(fs::u8path(path));
     forge::textbig::Entry value;
     value.type = 0;
     value.content = content;
     value.identifier = name;
     value.speaker = speaker;
     value.speechBank = speechBank;
+    const auto expectedPayload=forge::textbig::encode(value);
     const auto result =
         forge::textbig::upsertString(file, name, std::move(value), requestedId, donor);
+    const auto expectedSpeakerHeader=albion::textwrite::synchronizeSpeakerHeader(file,result);
 
-    const fs::path destination = inPlace ? fs::path(path) : fs::path(outPath);
-    if (!destination.parent_path().empty())
-        fs::create_directories(destination.parent_path());
-    writeAllBytes(destination.string(), file.serialize());
-
-    // Reopen the emitted archive before reporting success. This catches
-    // structural BIG writer regressions at the mutation boundary.
-    const auto verified = forge::big::File::open(destination);
-    const forge::big::Entry* found = nullptr;
-    for (const auto& bank : verified.banks())
-        for (const auto& candidate : bank.entries)
-            if (candidate.name == name) found = &candidate;
-    if (found == nullptr || found->id != result.id ||
-        forge::textbig::decode(verified.entryData(*found), (int)found->type).content !=
-            content)
-        throw std::runtime_error("text set: output failed reopen verification");
+    const fs::path destination = fs::u8path(inPlace ? path : outPath);
+    publishTextBank(file,destination,inPlace,[&](const auto& verified) {
+        const forge::big::Entry* found = nullptr;
+        for (const auto& bank : verified.banks())
+            for (const auto& candidate : bank.entries)
+                if (candidate.name == name) found = &candidate;
+        if (found == nullptr || found->id != result.id ||
+            found->subHeader!=expectedSpeakerHeader || verified.entryData(*found)!=expectedPayload)
+            throw std::runtime_error("text set: output failed reopen verification");
+    });
 
     if (jsonOutput) {
         std::puts(json{{"name", result.name},
@@ -8221,7 +8286,7 @@ int textImport(const std::string& path, const std::string& manifestPath,
                const std::string& outPath, bool inPlace,
                const std::string& donorOverride, bool jsonOutput) {
     namespace fs = std::filesystem;
-    std::ifstream manifestStream(manifestPath);
+    std::ifstream manifestStream(fs::u8path(manifestPath));
     if (!manifestStream)
         throw std::runtime_error("text import: cannot open " + manifestPath);
     json manifest;
@@ -8229,14 +8294,14 @@ int textImport(const std::string& path, const std::string& manifestPath,
     if (!manifest.contains("entries") || !manifest["entries"].is_array())
         throw std::runtime_error("text import: manifest requires an entries array");
 
-    auto file = forge::big::File::open(path);
+    auto file = forge::big::File::open(fs::u8path(path));
     const std::string defaultSpeaker = manifest.value("speaker", "");
     const std::string defaultSpeechBank = manifest.value("speech_bank", "");
     const std::string defaultDonor =
         donorOverride.empty() ? manifest.value("donor", "") : donorOverride;
     std::set<std::string> seen;
     std::vector<forge::textbig::UpsertResult> results;
-    std::map<std::string, std::string> expectedContent;
+    std::map<std::string,std::vector<uint8_t>> expectedSpeakerHeaders,expectedPayloads;
     for (const auto& row : manifest["entries"]) {
         if (!row.is_object() || !row.contains("name") || !row.contains("content"))
             throw std::runtime_error(
@@ -8251,34 +8316,36 @@ int textImport(const std::string& path, const std::string& manifestPath,
         value.speaker = row.value("speaker", defaultSpeaker);
         value.speechBank = row.value("speech_bank", defaultSpeechBank);
         std::optional<uint32_t> id;
-        if (row.contains("id")) id = row.at("id").get<uint32_t>();
+        if (row.contains("id")) {
+            const auto& requested = row.at("id");
+            if (!requested.is_number_integer() ||
+                (!requested.is_number_unsigned() && requested.get<int64_t>() < 1) ||
+                requested.get<uint64_t>() == 0 || requested.get<uint64_t>() > UINT32_MAX)
+                throw std::runtime_error("text import: ID must be an integer from 1 to 4294967295");
+            id = requested.get<uint32_t>();
+        }
         const std::string donor = row.value("donor", defaultDonor);
+        expectedPayloads[name]=forge::textbig::encode(value);
         results.push_back(forge::textbig::upsertString(
             file, name, std::move(value), id, donor));
-        expectedContent[name] = row.at("content").get<std::string>();
+        expectedSpeakerHeaders[name]=albion::textwrite::synchronizeSpeakerHeader(file,results.back());
     }
     if (results.empty())
         throw std::runtime_error("text import: manifest has no entries");
 
-    const fs::path destination = inPlace ? fs::path(path) : fs::path(outPath);
-    if (!destination.parent_path().empty())
-        fs::create_directories(destination.parent_path());
-    writeAllBytes(destination.string(), file.serialize());
-
-    const auto verified = forge::big::File::open(destination);
-    std::map<std::string, const forge::big::Entry*> emitted;
-    for (const auto& bank : verified.banks())
-        for (const auto& entry : bank.entries)
-            emitted[entry.name] = &entry;
-    for (const auto& result : results) {
-        const auto it = emitted.find(result.name);
-        if (it == emitted.end() || it->second->id != result.id ||
-            forge::textbig::decode(verified.entryData(*it->second),
-                                   (int)it->second->type).content !=
-                expectedContent.at(result.name))
-            throw std::runtime_error(
-                "text import: output failed reopen verification for " + result.name);
-    }
+    const fs::path destination = fs::u8path(inPlace ? path : outPath);
+    publishTextBank(file,destination,inPlace,[&](const auto& verified) {
+        std::map<std::string, const forge::big::Entry*> emitted;
+        for (const auto& bank : verified.banks())
+            for (const auto& entry : bank.entries) emitted[entry.name] = &entry;
+        for (const auto& result : results) {
+            const auto it = emitted.find(result.name);
+            if (it == emitted.end() || it->second->id != result.id ||
+                it->second->subHeader!=expectedSpeakerHeaders.at(result.name) ||
+                verified.entryData(*it->second)!=expectedPayloads.at(result.name))
+                throw std::runtime_error("text import: output failed reopen verification for " + result.name);
+        }
+    });
 
     if (jsonOutput) {
         json rows = json::array();
@@ -8380,7 +8447,7 @@ size_t patchFmpMainTextures(forge::big::File& textures,
                 throw std::runtime_error("FMP maintextures: id " + std::to_string(source.id) +
                     " already belongs to " + byId->name + "; cannot add " + source.name);
             forge::big::Entry added = source;
-            added.magic = bank->entries.empty() ? 42 : bank->entries.back().magic;
+            added.magic = textures.magic() == "BIGB" || bank->entries.empty() ? 42 : bank->entries.back().magic;
             added.data = package.entryData(source);
             added.length = uint32_t(added.data.size());
             bank->entries.push_back(std::move(added));
@@ -8417,7 +8484,7 @@ size_t patchFmpGraphics(forge::big::File& graphics,
                 throw std::runtime_error("FMP graphics: id " + std::to_string(source.id) +
                     " already belongs to " + byId->name + "; cannot add " + source.name);
             forge::big::Entry added = source;
-            added.magic = bank->entries.empty() ? 42 : bank->entries.back().magic;
+            added.magic = graphics.magic() == "BIGB" || bank->entries.empty() ? 42 : bank->entries.back().magic;
             added.data = package.entryData(source);
             added.length = uint32_t(added.data.size());
             bank->entries.push_back(std::move(added));
@@ -9191,6 +9258,8 @@ ModBuildFiles readModBuildFiles(const std::filesystem::path& target) {
 
 void publishInstallTree(const std::filesystem::path& source, const std::filesystem::path& target,
                         const std::vector<std::filesystem::path>& removals = {}) {
+    if(albion::backups::gameRunningIn(target))
+        throw std::runtime_error("Fable.exe is running from the mod output installation; quit the game before publishing this build");
     const auto previous = readModBuildFiles(target);
     ModBuildFiles current;
     visitInstallFiles(source, [&](const auto& path, const auto& relative) {
@@ -9227,6 +9296,8 @@ void publishInstallTree(const std::filesystem::path& source, const std::filesyst
         receipt["files"][file.relative.generic_string()] = {{"bytes", file.content.bytes}, {"sha256", file.content.sha256}};
     const auto serialized = receipt.dump(2) + "\n";
     writeAllBytes(pending.prepare("forge_mods_build.json").string(), std::vector<uint8_t>(serialized.begin(), serialized.end()));
+    if(albion::backups::gameRunningIn(target))
+        throw std::runtime_error("Fable.exe started from the mod output installation; quit the game before publishing this build");
     std::string error;
     if (!pending.install(false, error))
         throw std::runtime_error("cannot publish mod build: " + error);
@@ -11232,6 +11303,8 @@ int modsMergePrepared(const std::string& baseRoot, const std::string& outDir,
                       const std::vector<std::string>& labels,
                       const std::string& picksPath, bool allowCompleteData, bool doStage = false) {
     requireModBuildOutput(baseRoot, outDir, sources);
+    if(albion::backups::gameRunningIn(outDir))
+        throw std::runtime_error("Fable.exe is running from the mod output installation; quit the game before building into it");
     if (doStage) requireCleanModStage(baseRoot);
     const albion::detail::TemporaryDirectory workspace("mods-output-");
     json report;
@@ -12317,6 +12390,24 @@ int sceneAuditAll(const std::filesystem::path& root,
 int main(int argc, char** argv) {
     try {
         const auto args = albion::process::arguments(argc, argv);
+        if (args.size() >= 2 && args[0] == "defs" && args[1] == "review-namespace") {
+            const bool asJson = args.back() == "--json";
+            const size_t end = args.size() - (asJson ? 1 : 0);
+            if (end < 4 || std::any_of(args.begin() + 2, args.begin() + end,
+                                      [](const auto& value) { return value.starts_with("--"); })) {
+                std::fputs("usage: forge-tools defs review-namespace <baseline-root> <source-root>... [--json]\n", stderr);
+                return 2;
+            }
+            return reviewDefinitionNamespace(args[2], {args.begin() + 3, args.begin() + end}, asJson);
+        }
+        if (args.size() >= 2 && args[0] == "world" && args[1] == "review-storage") {
+            if (args.size() < 3 || args.size() > 4 ||
+                (args.size() == 4 && args[3] != "--json") || args[2] == "--json") {
+                std::fputs("usage: forge-tools world review-storage <file> [--json]\n", stderr);
+                return 2;
+            }
+            return reviewWorldStorage(args[2], args.size() == 4);
+        }
         if (args.size() >= 3 && args[0] == "save" && args[1] == "read") {
             const bool asJson = !args.empty() && args.back() == "--json";
             return saveRead(args[2], asJson);
@@ -12347,7 +12438,14 @@ int main(int argc, char** argv) {
                 };
                 if (a == "--out") outPath = next();
                 else if (a == "--in-place") inPlace = true;
-                else if (a == "--id") requestedId = (uint32_t)std::stoul(next());
+                else if (a == "--id") {
+                    const auto token = next();
+                    uint32_t value = 0;
+                    const auto parsed = std::from_chars(token.data(), token.data()+token.size(), value);
+                    if (parsed.ec != std::errc{} || parsed.ptr != token.data()+token.size() || value == 0)
+                        throw std::invalid_argument("text set: --id must be a complete decimal integer from 1 to 4294967295");
+                    requestedId = value;
+                }
                 else if (a == "--donor") donor = next();
                 else if (a == "--speaker") speaker = next();
                 else if (a == "--speech-bank") speechBank = next();
@@ -12496,7 +12594,7 @@ int main(int argc, char** argv) {
             auto i32 = [&](size_t o) { int32_t v = 0; if (o + 4 <= sh.size()) std::memcpy(&v, sh.data() + o, 4); return v; };
             auto f32 = [&](size_t o) { float v = 0; if (o + 4 <= sh.size()) std::memcpy(&v, sh.data() + o, 4); return v; };
             if (sh.size() >= 56) {
-                info["physics_index"] = i32(0);
+                info["physics_index"] = uint32_t(i32(0));
                 info["sphere"] = {f32(4), f32(8), f32(12), f32(16)};
                 info["info_bbox_min"] = {f32(20), f32(24), f32(28)};
                 info["info_bbox_max"] = {f32(32), f32(36), f32(40)};
@@ -12511,7 +12609,7 @@ int main(int argc, char** argv) {
                 const size_t room = sh.size() > o + 8 ? (sh.size() - o - 8) / 4 : 0;
                 const size_t n = std::min(size_t(std::max(0, i32(o + 4))), room);
                 json tex = json::array();
-                for (size_t t = 0; t < n; ++t) tex.push_back(i32(o + 8 + t * 4));
+                for (size_t t = 0; t < n; ++t) tex.push_back(uint32_t(i32(o + 8 + t * 4)));
                 info["texture_ids"] = tex;
             }
             json j = {{"name", e->name}, {"id", e->id}, {"type", e->type}, {"payload_bytes", e->length}, {"info_bytes", sh.size()},
@@ -12523,7 +12621,7 @@ int main(int argc, char** argv) {
             std::printf("%s: id %u type %u, %zu vertices, %zu triangles, %zu material(s), %u primitive(s), %u bone(s), payload %u bytes, info %zu bytes\n",
                         e->name.c_str(), e->id, e->type, g.vertices.size(), g.triangles.size(), g.materials.size(), g.primitiveCount, g.boneCount, e->length, sh.size());
             std::printf("  bounds x %.4f..%.4f  y %.4f..%.4f  z %.4f..%.4f\n", mn[0], mx[0], mn[1], mx[1], mn[2], mx[2]);
-            if (info.contains("texture_ids")) std::printf("  info: physics %d, lods %d, textures %s\n", info["physics_index"].get<int>(), info["lod_count"].get<int>(), info["texture_ids"].dump().c_str());
+            if (info.contains("texture_ids")) std::printf("  info: physics %u, lods %d, textures %s\n", info["physics_index"].get<uint32_t>(), info["lod_count"].get<int>(), info["texture_ids"].dump().c_str());
             return 0;
         }
         if (args.size() >= 3 && args[0] == "fmp" && args[1] == "list") {
@@ -13167,7 +13265,9 @@ int main(int argc, char** argv) {
             for (size_t i = 6; i < args.size(); ++i) {
                 const std::string& a = args[i];
                 auto next = [&]() -> std::string {
-                    return i + 1 < args.size() ? args[++i] : std::string();
+                    if (i + 1 >= args.size() || args[i+1].empty() || args[i+1].starts_with("--"))
+                        throw std::runtime_error("texture import: " + a + " needs a value");
+                    return args[++i];
                 };
                 if (a == "--add") add = true;
                 else if (a == "--bank") bank = next();
@@ -14208,6 +14308,20 @@ int main(int argc, char** argv) {
             }
             return uiSetCardModel(gameRoot, schemaPath, entryName, (uint32_t)meshId,
                                   outRoot, inPlace);
+        }
+        if(args.size()>=2 && args[0]=="defs" && args[1]=="clone") {
+            std::string names,out;bool asJson=false;std::vector<std::string> positional;
+            for(size_t i=2;i<args.size();++i) {
+                const auto& argument=args[i];
+                if(argument=="--names" || argument=="--out") {
+                    if(i+1>=args.size() || args[i+1].rfind("--",0)==0) throw std::runtime_error("defs clone: option requires a path");
+                    if(argument=="--names") names=args[++i];else out=args[++i];
+                } else if(argument=="--json") asJson=true;
+                else if(argument.rfind("--",0)==0) throw std::runtime_error("defs clone: unknown option "+argument);
+                else positional.push_back(argument);
+            }
+            if(positional.size()!=3 || out.empty()) throw std::runtime_error("defs clone: usage: defs clone <bin> <donor-name-or-index> <new-name> --out <bin> [--names <names.bin>] [--json]");
+            return defsClone(positional[0],names,positional[1],positional[2],out,asJson);
         }
         // forge defs set-field <bin> [--names <names.bin>] <entryName> <field>
         //   <value> [--schema <schema.json>] [--out <out.bin>] [--json]

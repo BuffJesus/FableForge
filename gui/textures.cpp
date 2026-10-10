@@ -8,6 +8,7 @@
 
 #include "theme.hpp"
 #include "texturebrowse.hpp"
+#include "meshimport.hpp"
 #include "forge/big.hpp"
 
 namespace albion::gui {
@@ -96,13 +97,12 @@ std::filesystem::path App::graphicsBigPath() const {
 bool App::selectTexture(const std::string& nameOrLabel) {
     if (modFilesBusy()) { fileWriteBlocked("texture preview"); return false; }
     if (!texturesLoaded_) refreshTextures();
-    for (const auto& r : texRows_)
-        if (r.name == nameOrLabel || r.label == nameOrLabel || (nameOrLabel.size() < 10 && std::to_string(r.id) == nameOrLabel)) {
-            if (texSelected_ != r.name) { texExportError_.clear(); texReplaceError_.clear(); }
-            texSelected_ = r.name; return true;
-        }
-    pushLog("textures: no texture named " + nameOrLabel, 1);
-    return false;
+    std::string error;
+    const auto* row=texbrowse::findTextureRow(texRows_,nameOrLabel,error);
+    if (!row) { pushLog("textures: " + error, 1); return false; }
+    if (texSelected_ != row->name) { texExportError_.clear(); texReplaceError_.clear(); }
+    texSelected_ = row->name;
+    return true;
 }
 
 const texbrowse::TextureRow* App::selectedTexture() const {
@@ -193,12 +193,12 @@ void App::drawTexturesPanel(float pad, float inner, float cardInner) {
     // Assets: textures.big, your own models, your own ground themes -- everything that writes the
     // game's shared banks, apart from the map editor (a modder's review: keep imports out of it)
     ImGui::SetCursorPosX(pad);
-    static const char* assetNames[] = {"Textures", "Models", "Ground themes", "Effects", "Dialogue"};
-    const float segmentWidth = (inner - S(4)) / 5;
+    static const char* assetNames[] = {"Textures", "Models", "Ground themes", "Effects", "Dialogue", "Text", "Definitions"};
+    const float segmentWidth = (inner - S(4)) / 7;
     if (segmentWidth < ImGui::CalcTextSize("Ground themes").x + S(8)) {
         ImGui::SetNextItemWidth(inner);
-        if (ImGui::BeginCombo("##assettab_menu", assetNames[std::clamp(assetsTab_, 0, 4)])) {
-            for (int i = 0; i < 5; ++i) {
+        if (ImGui::BeginCombo("##assettab_menu", assetNames[std::clamp(assetsTab_, 0, 6)])) {
+            for (int i = 0; i < 7; ++i) {
                 if (ImGui::Selectable(assetNames[i], assetsTab_ == i)) assetsTab_ = i;
                 auto_.registerWidget(("asset_page_" + std::to_string(i)).c_str());
             }
@@ -206,7 +206,7 @@ void App::drawTexturesPanel(float pad, float inner, float cardInner) {
         }
         auto_.registerWidget("combo_assets_tab");
     } else {
-        theme::segmented("##assettab", assetsTab_, {"Textures", "Models", "Ground themes", "Effects", "Dialogue"}, inner);
+        theme::segmented("##assettab", assetsTab_, {"Textures", "Models", "Ground themes", "Effects", "Dialogue", "Text", "Definitions"}, inner);
         auto_.registerWidget("seg_assets_tab");
     }
     ImGui::Dummy(ImVec2(0, theme::S(8)));
@@ -214,6 +214,8 @@ void App::drawTexturesPanel(float pad, float inner, float cardInner) {
     if (assetsTab_ == 2) { drawGroundThemeCard(pad, inner, cardInner); return; }
     if (assetsTab_ == 3) { drawEffectBrowser(pad, inner, cardInner); return; }
     if (assetsTab_ == 4) { drawDialogueBrowser(pad, inner, cardInner); return; }
+    if (assetsTab_ == 5) { drawTextBrowser(pad, inner, cardInner); return; }
+    if (assetsTab_ == 6) { drawDefinitionBrowser(pad, inner, cardInner); return; }
     if (!texturesLoaded_) refreshTextures();
 
     // ---- the selected object's textures
@@ -410,7 +412,7 @@ void App::drawTexturesPanel(float pad, float inner, float cardInner) {
 
 
 void App::refreshModels() {
-    if (modFilesBusy()) return;
+    if (modFilesBusy() || meshReplaceFuture_.valid()) return;
     modelsLoaded_ = true;
     modelRows_.clear(); modelUsers_.clear(); modelUsersLoaded_ = false;
     modelGeometry_ = {}; modelReady_ = false; modelId_ = 0;
@@ -421,9 +423,11 @@ void App::refreshModels() {
         const auto file = forge::big::File::open(path);
         const auto* bank = file.findBank("MBANK_ALLMESHES");
         if (!bank) throw std::runtime_error("MBANK_ALLMESHES is missing from graphics.big");
+        std::map<uint32_t,size_t> idCounts;
+        for (const auto& entry : bank->entries) ++idCounts[entry.id];
         for (const auto& entry : bank->entries)
             if (entry.type == 1 || entry.type == 2 || entry.type == 4 || entry.type == 5)
-                modelRows_.push_back({entry.id, entry.type, entry.length, entry.name});
+                modelRows_.push_back({entry.id, entry.type, entry.length, entry.name, idCounts[entry.id]!=1});
         std::sort(modelRows_.begin(), modelRows_.end(), [](const auto& a, const auto& b) { return a.name < b.name; });
     } catch (const std::exception& e) { modelError_ = e.what(); }
 }
@@ -431,10 +435,27 @@ void App::refreshModels() {
 bool App::selectModel(const std::string& nameOrId) {
     if (modFilesBusy()) { fileWriteBlocked("model preview"); return false; }
     if (!modelsLoaded_) refreshModels();
-    const auto it = std::find_if(modelRows_.begin(), modelRows_.end(), [&](const auto& row) {
-        return row.name == nameOrId || std::to_string(row.id) == nameOrId;
-    });
+    auto it = modelRows_.end();
+    const bool exact=std::any_of(modelRows_.begin(),modelRows_.end(),[&](const auto& row) { return row.name==nameOrId; });
+    for(auto row=modelRows_.begin();row!=modelRows_.end();++row) {
+        if(exact ? row->name!=nameOrId : std::to_string(row->id)!=nameOrId) continue;
+        if(it!=modelRows_.end()) { pushLog("models: ambiguous mesh name or ID " + nameOrId,1); return false; }
+        it=row;
+    }
     if (it == modelRows_.end()) { pushLog("models: no mesh named " + nameOrId, 1); return false; }
+    return selectModelById(it->id);
+}
+
+bool App::selectModelById(uint32_t id) {
+    if(meshReplaceFuture_.valid()) {fileWriteBlocked("model preview");return false;}
+    if (modFilesBusy()) { fileWriteBlocked("model preview"); return false; }
+    if (!modelsLoaded_) refreshModels();
+    const auto it = std::find_if(modelRows_.begin(), modelRows_.end(),
+                                 [id](const auto& row) { return row.id == id; });
+    if (it == modelRows_.end()) { pushLog("models: no mesh ID " + std::to_string(id), 1); return false; }
+    if(it->ambiguousId) {
+        pushLog("models: ambiguous mesh ID " + std::to_string(it->id),1); return false;
+    }
     if (!ctx_.ready() || ctxFuture_.valid()) { pushLog("models: wait for assets to finish loading", 1); return false; }
     modelReady_ = false; modelGeometry_ = {}; renderer_.clearModelPreview();
     modelId_ = it->id; modelName_ = it->name; modelError_.clear();
@@ -451,6 +472,69 @@ bool App::selectModel(const std::string& nameOrId) {
     } catch (const std::exception& e) { modelError_ = e.what(); }
     if (!modelError_.empty()) pushLog("models: " + modelError_, 1);
     return modelReady_;
+}
+
+bool App::replaceMesh(const std::string& model) {
+    meshReplaceError_.clear();meshReplaceSuccess_.clear();
+    auto fail=[&](const std::string& message){meshReplaceError_=message;pushLog("replace model: "+message,1);return false;};
+    if(fileWriteBlocked("replace model")) return fail("wait for the current file operation to finish");
+    if(ctxFuture_.valid()) return fail("model assets are still loading");
+    if(foliageFuture_.valid()) return fail("wait for the current level geometry to finish loading");
+    if(model.empty() || modelReplaceTarget_.empty()) return fail("choose a model file and target mesh");
+    meshimport::ReplaceRequest request;request.model=std::filesystem::u8path(model);request.target=std::to_string(modelReplaceTargetId_);request.expectedName=modelReplaceTarget_;
+    const auto base=installPath_,destination=saveRoot();
+    pushLog("replace model "+modelReplaceTarget_+": preserving material records and collision",0);
+    meshReplaceFuture_=std::async(std::launch::async,[base,destination,request,model]() {
+        MeshReplaceJob job;job.submittedPath=model;
+        meshimport::ReplaceResult result;
+        job.ok=meshimport::replaceModel(base,destination,request,result,job.error);
+        job.id=result.meshId;job.name=result.meshName;job.notes=std::move(result.notes);
+        return job;
+    });
+    return true;
+}
+
+void App::pollMeshReplace() {
+    if(meshReplaceFuture_.valid() && meshReplaceFuture_.wait_for(std::chrono::seconds(0))==std::future_status::ready) {
+        const auto job=meshReplaceFuture_.get();
+        if(!job.ok) {meshReplaceError_=job.error;pushLog("replace model failed: "+job.error,2);return;}
+        meshReplaceError_.clear();meshReplaceSuccess_="Replaced "+job.name+". Original materials and collision retained.";
+        for(const auto& note:job.notes) pushLog("replace model: "+note,0);
+        if(job.submittedPath==meshReplacePath_) meshReplacePath_[0]=0;
+        foliageexport::closeMeshBank();defThumbs_.clear();issuesRev_=~0ull;
+        // Only graphics changed. Keep the existing definitions/texture context,
+        // particularly when a staged output contains just the new graphics bank.
+        modelRoot_=saveRoot();refreshModels();modelReplaceReselect_=job.id;
+        effectRenderer_.clearMeshes();effectMeshesReady_=false;
+        renderer_.clearHeadPreview();dialogueHeadReady_=false;
+        foliageLoadedFor_.clear();foliagePendingName_.clear();thingsReloadPending_=false;startFoliageLoad();
+    }
+    if(modelReplaceReselect_ && !ctxFuture_.valid()) {
+        const auto id=*modelReplaceReselect_;modelReplaceReselect_.reset();selectModelById(id);
+    }
+}
+
+void App::drawModelReplaceCard(float pad,float inner,float cardInner) {
+    ImGui::SetCursorPosX(pad);theme::beginCard("##replacemodel",inner);
+    ImGui::TextWrapped("%s (id %u)",modelReplaceTarget_.c_str(),modelReplaceTargetId_);
+    theme::hint("All objects using this mesh will show the replacement shape. Keep material slots in their original order.");
+    theme::hint("The original collision shape stays in place and may no longer match the visible model.");
+    ImGui::TextWrapped("Destination: %s",saveRoot().c_str());
+    drawPathInput("meshreplace","A .glb, .gltf or .obj",meshReplacePath_,sizeof meshReplacePath_,cardInner,PathField::Model,"input_mesh_replace_model");
+    const bool busy=meshReplaceBusy();
+    if(theme::primaryButton(busy?"Replacing...":"Replace geometry",ImVec2(cardInner,S(30)),
+                            meshReplacePath_[0] && !busy && !ctxFuture_.valid() && !foliageFuture_.valid() && activeFileJob()==nullptr)) replaceMesh(meshReplacePath_);
+    auto_.registerWidget("btn_mesh_replace");
+    if(!meshReplaceError_.empty()) {
+        ImGui::PushStyleColor(ImGuiCol_Text,theme::vec(theme::Error));ImGui::TextWrapped("%s",meshReplaceError_.c_str());
+        auto_.registerWidget("mesh_replace_error");ImGui::PopStyleColor();
+    }
+    if(!meshReplaceSuccess_.empty()) {
+        ImGui::PushStyleColor(ImGuiCol_Text,theme::vec(theme::Success));ImGui::TextWrapped("%s",meshReplaceSuccess_.c_str());
+        auto_.registerWidget("mesh_replace_success");ImGui::PopStyleColor();
+    }
+    theme::hint("Supports static models with one LOD and no helpers, bones, cloth or radius override. Unsupported models keep the bank untouched.");
+    theme::endCard();
 }
 
 void App::drawModelBrowser(float pad, float inner, float cardInner) {
@@ -490,7 +574,8 @@ void App::drawModelBrowser(float pad, float inner, float cardInner) {
     while (clipper.Step()) for (int k = clipper.DisplayStart; k < clipper.DisplayEnd; ++k) {
         const auto& row = modelRows_[rows[size_t(k)]];
         ImGui::PushID(int(row.id));
-        if (ImGui::Selectable(row.name.c_str(), row.id == modelId_ && !modelName_.empty())) selectModel(std::to_string(row.id));
+        if (ImGui::Selectable(row.name.c_str(), row.id == modelId_ && !modelName_.empty())) selectModelById(row.id);
+        auto_.registerWidget(("model_row_" + std::to_string(row.id)).c_str());
         if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s\nid %u | type %u | %u bytes", row.name.c_str(), row.id, row.type, row.bytes);
         ImGui::PopID();
     }
@@ -506,6 +591,15 @@ void App::drawModelBrowser(float pad, float inner, float cardInner) {
     ImGui::Text("id %u | LOD 0", modelId_);
     ImGui::Text("%zu vertices | %zu triangles", modelGeometry_.vertices.size(), modelGeometry_.triangles.size());
     ImGui::Text("%u primitives | %u bones", modelGeometry_.primitiveCount, modelGeometry_.boneCount);
+    const auto selected=std::find_if(modelRows_.begin(),modelRows_.end(),[&](const auto& row){return row.id==modelId_;});
+    const bool replaceable=selected!=modelRows_.end() && selected->type==1 && !selected->ambiguousId && !meshReplaceBusy();
+    ImGui::BeginDisabled(!replaceable);
+    if(theme::ghostButton("Replace geometry...",ImVec2(cardInner,S(28)))) {
+        modelReplaceTargetId_=modelId_;modelReplaceTarget_=modelName_;modelReplaceOpen_=true;
+        meshReplaceError_.clear();meshReplaceSuccess_.clear();
+    }
+    auto_.registerWidget("btn_model_replace");
+    ImGui::EndDisabled();
     if (modelGeometry_.boneCount) theme::hint("Static pose; animation playback is not available yet.");
     ImGui::Checkbox("Wireframe", &modelWire_); auto_.registerWidget("check_model_wire");
     const float resetWidth = ImGui::CalcTextSize("Reset view").x + S(24);
@@ -519,15 +613,17 @@ void App::drawModelBrowser(float pad, float inner, float cardInner) {
             const auto& mat = modelGeometry_.materials[i];
             ImGui::PushID(int(i));
             ImGui::Text("Material %d", mat.id);
-            auto link = [&](const char* label, int32_t id) {
-                if (id <= 0) return;
-                const auto row = std::find_if(texRows_.begin(), texRows_.end(), [&](const auto& t) { return t.id == uint32_t(id) && t.bank == "GBANK_MAIN_PC"; });
+            auto link = [&](const char* label, uint32_t id) {
+                if (id == 0) return;
+                std::string error;
+                const auto* row = texbrowse::findTextureRowById(texRows_, "GBANK_MAIN_PC", uint32_t(id), error);
                 const std::string caption = std::string(label) + " " + std::to_string(id);
-                ImGui::BeginDisabled(row == texRows_.end());
-                if (ImGui::SmallButton(caption.c_str()) && row != texRows_.end()) { selectTexture(row->name); assetsTab_ = 0; }
+                ImGui::BeginDisabled(row == nullptr);
+                if (ImGui::SmallButton(caption.c_str()) && row != nullptr) { selectTexture(row->name); assetsTab_ = 0; }
                 auto_.registerWidget(("model_texture_" + std::to_string(i) + "_" + label).c_str());
                 ImGui::EndDisabled();
-                if (row != texRows_.end() && ImGui::IsItemHovered()) ImGui::SetTooltip("%s", row->label.c_str());
+                if (row != nullptr && ImGui::IsItemHovered()) ImGui::SetTooltip("%s", row->label.c_str());
+                if (!row) ImGui::TextDisabled("%s", error.c_str());
             };
             link("Diffuse", mat.diffuseTexture); link("Bump", mat.bumpTexture);
             link("Reflection", mat.reflectionTexture); link("Alpha", mat.alphaMapTexture);

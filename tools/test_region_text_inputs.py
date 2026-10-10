@@ -42,7 +42,8 @@ def main():
     for option in ('--display', '--def'):
         for value in ('Bad"Name', 'Bad\nName', 'Bad\rName'):
             invalid.append(['region-props', 'Greatwood', option, value])
-    for value in ('MINI MAP', 'MINI;MAP', 'MINI"MAP', 'MINI\nMAP', 'MINI\rMAP', 'MINI\tMAP'):
+    for value in ('MINI MAP', 'MINI;MAP', 'MINI"MAP', 'MINI\nMAP', 'MINI\rMAP', 'MINI\tMAP',
+                  '15360', '1MINIMAP', 'MINI-MAP', 'MINI.MAP'):
         invalid.append(['region-props', 'Greatwood', '--minimap', value])
     for index, command in enumerate(invalid):
         result = run('invalid_' + str(index), command)

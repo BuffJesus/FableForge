@@ -1,6 +1,9 @@
 #include "forge/terraintex.hpp"
 #include "forge/lzo.hpp"
+#include "forge/texturewrite.hpp"
 #include <algorithm>
+#include <array>
+#include <cstdlib>
 #include <iostream>
 #include <stdexcept>
 namespace {
@@ -20,7 +23,94 @@ std::vector<uint8_t> header(uint32_t format) {
 }
 int main() {
     try {
+        CHECK(forge::texturewrite::fullMipCount(1024,512,forge::texturewrite::kFormatDXT1)==8);
+        CHECK(forge::texturewrite::fullMipCount(4,64,forge::texturewrite::kFormatDXT3)==1);
+        CHECK(forge::texturewrite::fullMipCount(64,8,forge::texturewrite::kFormatDXT1)==2);
+        CHECK(forge::texturewrite::fullMipCount(32,32,forge::texturewrite::kFormatDXT1)==4);
+        CHECK(forge::texturewrite::fullMipCount(1,4,forge::texturewrite::kFormatARGB)==1);
+        CHECK(forge::texturewrite::fullMipCount(16,8,forge::texturewrite::kFormatARGB)==4);
+        for (const auto& test : std::array<std::array<int,4>,4>{{
+            {{2,4,int(forge::texturewrite::kFormatDXT1),1}},
+            {{4,2,int(forge::texturewrite::kFormatDXT3),1}},
+            {{8,4,int(forge::texturewrite::kFormatDXT1),2}},
+            {{4,4,int(forge::texturewrite::kFormatARGB),4}}
+        }}) {
+            forge::texturewrite::Image image{test[0],test[1],std::vector<uint8_t>(size_t(test[0]*test[1])*4,255)};
+            bool refused=false;
+            try { (void)forge::texturewrite::buildEntry(image,uint32_t(test[2]),0,0,false,test[3]); }
+            catch(const std::invalid_argument&) { refused=true; }
+            CHECK(refused);
+        }
+        // A one-pixel-wide mip still needs to average along its long axis.
+        // Alternating rows/columns must survive as their average, not disappear.
+        for (bool vertical : {false,true}) {
+            forge::texturewrite::Image image;
+            image.width=vertical?1:4; image.height=vertical?4:1;
+            image.rgba={0,20,40,60, 200,220,240,180,
+                        0,20,40,60, 200,220,240,180};
+            const auto original=image.rgba;
+            const auto half=forge::texturewrite::downsample(image);
+            CHECK(half.width==(vertical?1:2) && half.height==(vertical?2:1));
+            CHECK(half.rgba==std::vector<uint8_t>({100,120,140,120,100,120,140,120}));
+            const auto last=forge::texturewrite::downsample(half);
+            CHECK(last.width==1 && last.height==1);
+            CHECK(last.rgba==std::vector<uint8_t>({100,120,140,120}));
+            CHECK(forge::texturewrite::downsample(last).rgba==last.rgba);
+            const auto built=forge::texturewrite::buildEntry(image,forge::texturewrite::kFormatARGB,0,0,false);
+            CHECK(built.mips==1 && built.payload.size()==16);
+            const auto averaged=forge::texturewrite::buildEntry(half,forge::texturewrite::kFormatARGB,0,0,false);
+            CHECK(averaged.mips==1 && averaged.payload==
+                  std::vector<uint8_t>({140,120,100,120,140,120,100,120}));
+            CHECK(forge::terraintex::validateTextureEntry(averaged.info,averaged.payload).ok);
+            CHECK(forge::terraintex::validateTextureEntry(built.info,built.payload).ok);
+            CHECK(image.rgba==original);
+        }
         using namespace forge::terraintex;
+        // Decode BC1 alpha independently from its endpoint ordering and indices.
+        auto alphaAt=[](const std::vector<uint8_t>& bytes,size_t block,int pixel) {
+            const size_t offset=block*8;
+            const int c0=int(bytes.at(offset))|(int(bytes.at(offset+1))<<8);
+            const int c1=int(bytes.at(offset+2))|(int(bytes.at(offset+3))<<8);
+            uint32_t indices=0;
+            for(int i=0;i<4;++i) indices|=uint32_t(bytes.at(offset+4+size_t(i)))<<(8*i);
+            return c0<=c1 && ((indices>>(2*pixel))&3)==3 ? 0 : 255;
+        };
+        for (int kind=0;kind<3;++kind) {
+            forge::texturewrite::Image image{4,4,std::vector<uint8_t>(64,255)};
+            for(int i=0;i<16;++i) {
+                image.rgba[size_t(i)*4+3]=kind==0?255:kind==1?0:std::array<uint8_t,4>{0,127,128,255}[size_t(i)%4];
+            }
+            const auto before=image.rgba;
+            const auto encoded=forge::texturewrite::encodeDxt1(image,true);
+            CHECK(encoded.size()==8 && image.rgba==before);
+            for(int i=0;i<16;++i) CHECK(alphaAt(encoded,0,i)==(image.rgba[size_t(i)*4+3]<128?0:255));
+            if(kind==0) CHECK(encoded==forge::texturewrite::encodeDxt1(image));
+        }
+        forge::texturewrite::Image cutout{8,8,std::vector<uint8_t>(256,255)};
+        for(int y=0;y<8;++y) for(int x=0;x<4;++x) cutout.rgba[size_t(y*8+x)*4+3]=0;
+        const auto cutoutEntry=forge::texturewrite::buildEntry(cutout,forge::texturewrite::kFormatDXT1,0,0,false,0,true);
+        CHECK(cutoutEntry.info[16]==2 && cutoutEntry.mips==2 && cutoutEntry.payload.size()==40);
+        CHECK(validateTextureEntry(cutoutEntry.info,cutoutEntry.payload).ok);
+        for(int i=0;i<16;++i) {
+            CHECK(alphaAt(cutoutEntry.payload,0,i)==0 && alphaAt(cutoutEntry.payload,1,i)==255);
+            CHECK(alphaAt(cutoutEntry.payload,4,i)==(i%4<2?0:255));
+        }
+        bool invalidCutout=false;
+        try { (void)forge::texturewrite::buildEntry(cutout,forge::texturewrite::kFormatARGB,0,0,false,0,true); }
+        catch(const std::invalid_argument&) { invalidCutout=true; }
+        CHECK(invalidCutout);
+        // BC2 expands a four-bit alpha to multiples of 17. Every input must
+        // choose its nearest representable opacity (at most eight away).
+        for (int first=0;first<256;first+=16) {
+            forge::texturewrite::Image image{4,4,std::vector<uint8_t>(64,255)};
+            for (int i=0;i<16;++i) image.rgba[size_t(i)*4+3]=uint8_t(first+i);
+            const auto encoded=forge::texturewrite::encodeDxt3(image);
+            CHECK(encoded.size()==16);
+            for (int i=0;i<16;++i) {
+                const int decoded=((encoded[size_t(i)/2]>>((i%2)*4))&15)*17;
+                CHECK(std::abs(decoded-(first+i))<=8);
+            }
+        }
         auto info=header(kFormatDXT5);
         std::vector<uint8_t> pixels(85);
         for(size_t i=0;i<pixels.size();++i) pixels[i]=uint8_t(i*19);

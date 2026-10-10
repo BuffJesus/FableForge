@@ -209,6 +209,85 @@ def main():
         '--count', '8', '--install', args.root.resolve(), '--out', work / 'exports'])
     run('gui', [sys.executable, repo / 'tools/ui_smoke.py', '--exe', package / 'FableForge.exe',
         '--install', args.root.resolve(), '--cwd', cwd])
+    run('text_browser', [sys.executable, repo / 'tools/test_text_browser_ui.py',
+        '--gui', package / 'FableForge.exe', '--cwd', cwd, '--work-root', work])
+    run('text_backup_restore', [sys.executable, repo / 'tools/test_text_backup_restore.py',
+        '--gui', package / 'FableForge.exe', '--forge', package / 'forge.exe',
+        '--cwd', cwd, '--work-root', work])
+    run('text_content_edit', [sys.executable, repo / 'tools/test_text_content_edit_ui.py',
+        '--gui', package / 'FableForge.exe', '--tool', package / 'forge-tools.exe',
+        '--cwd', cwd, '--work-root', work])
+    run('text_donor_add', [sys.executable, repo / 'tools/test_text_donor_add_ui.py',
+        '--gui', package / 'FableForge.exe',
+        '--cwd', cwd, '--work-root', work])
+    run('text_speaker_picker', [sys.executable, repo / 'tools/test_text_speaker_picker_ui.py',
+        '--gui', package / 'FableForge.exe', '--forge', package / 'forge.exe', '--cwd', cwd, '--work-root', work])
+    run('text_metadata', [sys.executable, repo / 'tools/test_text_metadata_ui.py',
+        '--gui', package / 'FableForge.exe', '--cwd', cwd, '--work-root', work])
+    run('text_tags', [sys.executable, repo / 'tools/test_text_tags_ui.py',
+        '--gui', package / 'FableForge.exe', '--cwd', cwd, '--work-root', work])
+    run('text_byte_export', [sys.executable, repo / 'tools/test_text_byte_export.py',
+        '--gui', package / 'FableForge.exe', '--tool', package / 'forge-tools.exe',
+        '--cwd', cwd, '--work-root', work])
+    run('definition_vectors', [sys.executable, repo / 'tools/test_definition_vector_edit_ui.py',
+        '--gui', package / 'FableForge.exe', '--cwd', cwd, '--work-root', work])
+    run('definition_clone', [sys.executable, repo / 'tools/test_definition_clone.py',
+        '--tool', package / 'forge-tools.exe', '--forge', package / 'forge.exe', '--work-root', work])
+    run('definition_name_picker', [sys.executable, repo / 'tools/test_definition_name_picker_ui.py',
+        '--gui', package / 'FableForge.exe', '--cwd', cwd, '--work-root', work])
+    run('definition_name_labels', [sys.executable, repo / 'tools/test_definition_name_labels_ui.py',
+        '--gui', package / 'FableForge.exe', '--cwd', cwd, '--work-root', work])
+    run('definition_texture', [sys.executable, repo / 'tools/test_definition_texture_ui.py',
+        '--gui', package / 'FableForge.exe', '--cwd', cwd, '--work-root', work])
+    run('definition_model', [sys.executable, repo / 'tools/test_definition_model_ui.py',
+        '--gui', package / 'FableForge.exe', '--forge', package / 'forge.exe', '--cwd', cwd, '--work-root', work])
+    run('definition_tree', [sys.executable, repo / 'tools/test_definition_tree_ui.py',
+        '--gui', package / 'FableForge.exe', '--cwd', cwd, '--work-root', work])
+    run('definition_groups', [sys.executable, repo / 'tools/test_definition_groups_ui.py',
+        '--gui', package / 'FableForge.exe', '--cwd', cwd, '--work-root', work])
+    run('definition_edit', [sys.executable, repo / 'tools/test_definition_edit_ui.py',
+        '--gui', package / 'FableForge.exe', '--forge', package / 'forge.exe', '--cwd', cwd, '--work-root', work])
+    run('definition_wide', [sys.executable, repo / 'tools/test_definition_wide_edit_ui.py',
+        '--gui', package / 'FableForge.exe', '--cwd', cwd, '--work-root', work])
+    run('definition_integer_bounds', [sys.executable, repo / 'tools/test_definition_integer_bounds.py',
+        '--tool', package / 'forge-tools.exe', '--work-root', work])
+    run('definition_wide_layout', [sys.executable, repo / 'tools/test_definition_wide_layout.py',
+        '--tool', package / 'forge-tools.exe', '--work-root', work])
+    run('definition_strings', [sys.executable, repo / 'tools/test_definition_string_edit_ui.py',
+        '--gui', package / 'FableForge.exe', '--cwd', cwd, '--work-root', work])
+    run('definition_string_layout', [sys.executable, repo / 'tools/test_definition_string_layout.py',
+        '--tool', package / 'forge-tools.exe', '--work-root', work])
+    run('definition_colour_edit', [sys.executable, repo / 'tools/test_definition_colour_edit_ui.py',
+        '--gui', package / 'FableForge.exe', '--cwd', cwd, '--work-root', work])
+    run('definition_colour', [sys.executable, repo / 'tools/test_definition_colour.py',
+        '--tool', package / 'forge-tools.exe', '--work-root', work])
+    run('definition_layout', [sys.executable, repo / 'tools/test_definition_layout.py',
+        '--tool', package / 'forge-tools.exe', '--work-root', work])
+    run('definition_publication', [sys.executable, repo / 'tools/test_definition_publication.py',
+        '--tool', package / 'forge-tools.exe', '--forge', package / 'forge.exe', '--work-root', work])
+    run('definition_selector', [sys.executable, repo / 'tools/test_definition_selector.py',
+        '--tool', package / 'forge-tools.exe', '--work-root', work])
+    run('definition_browser', [sys.executable, repo / 'tools/test_definition_browser_ui.py',
+        '--gui', package / 'FableForge.exe', '--cwd', cwd, '--work-root', work])
+    run('text_close_prompt', [sys.executable, repo / 'tools/test_text_close_prompt_ui.py',
+        '--gui', package / 'FableForge.exe', '--cwd', cwd, '--work-root', work])
+    run('text_pack_destination', [sys.executable, repo / 'tools/test_text_pack_destination_ui.py',
+        '--gui', package / 'FableForge.exe', '--tool', package / 'forge-tools.exe',
+        '--forge', package / 'forge.exe', '--cwd', cwd, '--work-root', work])
+    run('text_only_restore', [sys.executable, repo / 'tools/test_text_restore_alias_guard.py',
+        '--forge', package / 'forge.exe', '--cwd', cwd, '--work-root', work, '--text-only'])
+    run('text_folder_destination', [sys.executable, repo / 'tools/test_text_folder_destination_ui.py',
+        '--gui', package / 'FableForge.exe', '--forge', package / 'forge.exe',
+        '--cwd', cwd, '--work-root', work])
+    run('text_show_identity', [sys.executable, repo / 'tools/test_text_show_identity.py',
+        '--tool', package / 'forge-tools.exe', '--cwd', cwd])
+    run('text_speaker_header', [sys.executable, repo / 'tools/test_text_speaker_header.py',
+        '--tool', package / 'forge-tools.exe', '--cwd', cwd, '--work-root', work])
+    if os.name=='nt':
+        run('text_restore_alias_guard', [sys.executable, repo / 'tools/test_text_restore_alias_guard.py',
+            '--forge', package / 'forge.exe', '--cwd', cwd, '--work-root', work])
+        run('text_write_publication', [sys.executable, repo / 'tools/test_text_write_publication.py',
+            '--tool', package / 'forge-tools.exe'])
     run('dialogue_workspace', [sys.executable, repo / 'tools/test_dialogue_workspace.py',
         '--gui', package / 'FableForge.exe', '--install', args.root.resolve(), '--cwd', cwd])
     run('mod_paths', [sys.executable, repo / 'tools/test_mod_gui_paths.py', '--gui', package / 'FableForge.exe',

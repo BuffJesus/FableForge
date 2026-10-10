@@ -33,6 +33,11 @@
 #include "forge/lipsync.hpp"
 #include "forge/lipsync_preset.hpp"
 #include "forge/dialoguetext.hpp"
+#include "forge/textbig.hpp"
+#include "forge/bin.hpp"
+#include "forge/defdecode.hpp"
+#include "forge/defschema.hpp"
+#include "textmetadata.hpp"
 #include "forge/headpose.hpp"
 #include "forge/modorder.hpp"
 #include "forge/modchoices.hpp"
@@ -290,10 +295,12 @@ public:
     char meshTexturePng_[512] = {};
     std::string meshImportError_;
     std::string meshImportSuccess_;
+    std::vector<std::string> meshImportNotes_;
     struct MeshImportJob {
         bool ok = false;
         std::string error;
         std::vector<std::string> notes;
+        std::vector<std::string> modelNotes;
         std::string objectName;
         std::array<std::string, 3> submittedFields;
     };
@@ -302,7 +309,22 @@ public:
     bool importMesh(const std::string& model, const std::string& name, const std::string& texturePng);
     bool meshImportBusy() const { return meshImportFuture_.valid(); }
     void pollMeshImport();
+    bool replaceMesh(const std::string& model);
+    bool meshReplaceBusy() const {return meshReplaceFuture_.valid() || modelReplaceReselect_.has_value();}
+    void pollMeshReplace();
 private:
+    struct MeshReplaceJob {
+        bool ok=false;uint32_t id=0;
+        std::string error,name,submittedPath;
+        std::vector<std::string> notes;
+    };
+    std::future<MeshReplaceJob> meshReplaceFuture_;
+    bool modelReplaceOpen_=false;
+    uint32_t modelReplaceTargetId_=0;
+    std::string modelReplaceTarget_,meshReplaceError_,meshReplaceSuccess_;
+    char meshReplacePath_[512]={};
+    std::optional<uint32_t> modelReplaceReselect_;
+    void drawModelReplaceCard(float pad,float inner,float cardInner);
     void duplicateSelected();
     void deleteSelected();
     void applyOwnedDelete(bool includeOwned);
@@ -559,9 +581,116 @@ private:
     bool addToPackOrGame(bool model);
     void drawGroundThemeCard(float pad, float inner, float cardInner);
 public:
-    void setAssetsTab(int t) { assetsTab_ = std::clamp(t, 0, 4); }
-    bool standaloneAssetPreview() const { return texturesMode_ && (assetsTab_ == 1 || assetsTab_ == 3 || assetsTab_ == 4); }
+    void setAssetsTab(int t) { assetsTab_ = std::clamp(t, 0, 6); }
+    bool standaloneAssetPreview() const { return texturesMode_ && (assetsTab_ == 1 || assetsTab_ == 3 || assetsTab_ == 4 || assetsTab_ == 5 || assetsTab_ == 6); }
+    void refreshDefinitions();
+    void pollDefinitions();
+    bool selectDefinition(const std::string& nameOrIndex);
+    bool setDefinitionBank(const std::string& bank);
+    void browseDefinition(const std::string& name);
+    bool beginDefinitionEdit(size_t field);
+    bool setDefinitionEditValue(const std::string& value);
+    bool saveDefinitionEdit();
+    bool definitionsBusy() const {return definitionFuture_.valid();}
 private:
+    struct DefinitionJob {
+        std::filesystem::path names,bank;
+        forge::bin::File file;
+        forge::defschema::Schema schema;
+        std::vector<std::vector<size_t>> members;
+        std::string error;
+    };
+    std::future<DefinitionJob> definitionFuture_;
+    forge::bin::File definitionFile_;
+    forge::defschema::Schema definitionSchema_;
+    std::optional<forge::defdecode::Decoded> definitionDecoded_;
+    std::vector<size_t> definitionFiltered_;
+    std::vector<std::vector<size_t>> definitionMembers_;
+    std::vector<std::optional<size_t>> definitionGroupOf_;
+    std::map<uint32_t,size_t> definitionNameIndices_;
+    std::map<std::string,std::map<std::optional<size_t>,std::vector<size_t>>> definitionTree_;
+    bool definitionReveal_=false;
+    std::vector<std::string> definitionTypes_;
+    std::optional<size_t> definitionSelected_;
+    std::optional<std::string> definitionBrowseRequest_;
+    std::optional<size_t> definitionBrowseIndex_;
+    std::filesystem::path definitionLoadedNames_,definitionLoadedBank_;
+    std::string definitionBank_="game.bin",definitionType_,definitionError_,definitionSelectionError_,definitionDecodeError_;
+    char definitionSearch_[256]={};
+    bool definitionLoaded_=false,definitionFilterDirty_=true;
+    bool definitionEditing_=false,definitionEditConfirm_=false;
+    size_t definitionEditIndex_=0;
+    forge::bin::Entry definitionEditExpected_;
+    std::vector<std::pair<uint32_t,std::string>> definitionEditExpectedNames_;
+    std::filesystem::path definitionEditNames_,definitionEditBank_,definitionEditDestination_;
+    std::string definitionEditField_,definitionEditType_,definitionEditError_,definitionEditSuccess_;
+    char definitionEditValue_[128]={};
+    char definitionNameSearch_[128]={};
+    std::pair<std::filesystem::path,std::filesystem::path> definitionPaths() const;
+    bool selectDefinitionIndex(size_t index,bool reveal=true);
+    void drawDefinitionBrowser(float pad,float inner,float cardInner);
+    void drawDefinitionViewport(const ImVec2& origin,const ImVec2& size);
+public:
+    void refreshTextBank();
+    void pollTextBank();
+    bool selectText(const std::string& nameOrId);
+    bool beginTextEdit();
+    bool beginTextAdd();
+    bool setTextAddName(const std::string& name);
+    bool saveTextEdit();
+    bool setTextEditContent(const std::string& content);
+    void browseText(const std::string& nameOrId);
+    bool exportTextTsv(const std::string& path);
+    void pollTextExport();
+    bool textExportBusy() const { return textExportFuture_.valid(); }
+    bool setTextLanguage(const std::string& language);
+    bool setTextEditSpeaker(const std::string& speaker);
+    bool setTextEditSpeechBank(const std::string& bank);
+    bool setTextEditIdentifier(const std::string& identifier);
+    bool setTextEditTag(size_t index,int32_t position,const std::string& name);
+    bool addTextEditTag();
+    bool removeTextEditTag(size_t index);
+    bool textsBusy() const { return textFuture_.valid(); }
+private:
+    struct TextRow {
+        std::string bank,name,error;
+        uint32_t id=0,type=0;
+        forge::textbig::Entry value;
+        std::vector<std::string> narrators;
+        std::vector<uint8_t> speakerHeader;
+    };
+    struct TextJob { std::filesystem::path path;std::string error;std::vector<TextRow> rows; };
+    std::future<TextJob> textFuture_;
+    std::vector<TextRow> textRows_;
+    std::vector<size_t> textFilteredRows_;
+    std::map<std::pair<std::string,uint32_t>,std::vector<size_t>> textById_;
+    std::optional<size_t> textSelected_;
+    std::optional<std::string> textBrowseRequest_;
+    std::filesystem::path textLoadedPath_;
+    std::string textLanguage_="English",textError_,textSelectionError_;
+    char textSearch_[256]={};
+    bool textLoaded_=false,textFilterDirty_=true;
+    struct TextExportJob { std::string path,error;size_t rows=0; };
+    std::future<TextExportJob> textExportFuture_;
+    char textExportPath_[1024]={};
+    std::string textExportError_,textExportSuccess_;
+    std::vector<char> textEditContent_;
+    std::string textEditName_,textEditBank_,textEditError_,textEditSuccess_;
+    uint32_t textEditId_=0;
+    forge::textbig::Entry textEditExpected_;
+    std::filesystem::path textEditSource_,textEditDestination_;
+    bool textEditing_=false,textEditConfirm_=false;
+    bool textEditAdding_=false;
+    textwrite::MetadataChanges textEditChanges_;
+    char textEditSpeechBank_[4096]={},textEditIdentifier_[4096]={};
+    int textEditTagSelected_=-1;
+    std::vector<std::string> textEditSpeakerNames_;
+    std::vector<uint8_t> textEditSpeakerHeader_;
+    char textAddName_[256]={};
+    std::filesystem::path textBigPath() const;
+    std::vector<std::string> textLanguages() const;
+    void drawTextBrowser(float pad,float inner,float cardInner);
+    void drawTextViewport(const ImVec2& origin,const ImVec2& size);
     struct PendingColour { std::string id; float rgba[4] = {}; bool live = false; } pendingColour_;   // a light colour being edited
     void applySectionVisibility();
     void drawLinkLines(const ImVec2& origin, const ImVec2& size);
@@ -625,7 +754,6 @@ private:
     std::map<std::string, ID3D11ShaderResourceView*> defThumbs_;
     std::vector<terrainexport::Image> thumbImages_;
     std::map<uint32_t, int> thumbTextureToImage_;
-    bool thumbBankOpen_ = false;
     int thumbBudget_ = 0;
 public:
     void dismissRule(const std::string& key) { rulesDismissed_.insert(key); if (ruleKey_ == key) ruleKey_.clear(); }
@@ -877,7 +1005,7 @@ private:
     bool newLevelBusy() const { return newLevelFuture_.valid(); }
     bool confirmTerrainDeploy_ = false;
     bool confirmWriteBoth_ = false;
-    bool confirmPending() const { return confirmDeploy_ || confirmTerrainDeploy_ || confirmWriteBoth_ || confirmWorldApply_ || confirmRestore_ || !snapshotDeletePending_.empty(); }
+    bool confirmPending() const { return confirmDeploy_ || confirmTerrainDeploy_ || confirmWriteBoth_ || confirmWorldApply_ || confirmRestore_ || textEditConfirm_ || !snapshotDeletePending_.empty(); }
     bool writeObjectsAfterTerrain_ = false;   // set by startWriteBoth until the terrain job finishes
     std::string writeBothMap_, writeBothPack_;
     void finishWriteBoth(bool terrainOk);
@@ -902,9 +1030,10 @@ public:
     void drawTexturesPanel(float pad, float inner, float cardInner);
     void refreshModels();
     bool selectModel(const std::string& nameOrId);
+    bool selectModelById(uint32_t id);
     void drawModelBrowser(float pad, float inner, float cardInner);
     void drawModelViewport(const ImVec2& origin, const ImVec2& size);
-    struct ModelRow { uint32_t id, type, bytes; std::string name; };
+    struct ModelRow { uint32_t id, type, bytes; std::string name; bool ambiguousId = false; };
     std::vector<ModelRow> modelRows_;
     std::map<uint32_t, std::vector<std::string>> modelUsers_;
     bool modelsLoaded_ = false, modelUsersLoaded_ = false, modelReady_ = false, modelImportOpen_ = false;
@@ -948,7 +1077,7 @@ public:
     void drawEffectViewport(const ImVec2& origin, const ImVec2& size);
     // Dialogue and lip sync preview/editor (gui/dialoguebrowser.cpp).
     void drawDialogueBrowser(float pad, float inner, float cardInner);
-    enum class PathField { ModSource, Image, Png, Model, DialogueExport };
+    enum class PathField { ModSource, Image, Png, Model, DialogueExport, TextExport };
     bool drawPathInput(const char* id, const char* hint, char* value, size_t capacity,
                        float width, PathField kind, const char* widget);
     void drawDialogueViewport(const ImVec2& origin, const ImVec2& size);

@@ -54,7 +54,20 @@ int main() {
         check(!doc.setComponentOverride(0,"CTCStockItem","Price","-1")&&!doc.setComponentOverride(0,"CTCStockItem","Price","1000001"),"integer range enforced");
         check(!doc.setComponentOverride(0,"CTCDRegionExit","Radius","NaN")&&!doc.setComponentOverride(0,"CTCDRegionExit","Radius","inf")&&!doc.setComponentOverride(0,"CTCDRegionExit","Radius","1e300"),"float rejects nonfinite and overflow");
         check(!doc.setComponentOverride(0,"CTCDRegionExit","Radius","0")&&!doc.setComponentOverride(0,"CTCDRegionExit","Radius","22.01"),"float metadata range enforced");
+        check(!doc.setComponentOverride(0,"CTCDRegionExit","MessageRadius","1e-100"),"float underflow refused before insertion");
+        check(!doc.setComponentOverride(0,"CTCDRegionExit","MessageRadius","30.0000001"),"authored double range remains enforced despite float rounding");
         check(doc.text()==initial&&doc.revision()==revision,"rejected edits leave text and history unchanged");
+        for(const std::string value:{"0","1e-40"}) {
+            check(doc.setComponentOverride(0,"CTCDRegionExit","MessageRadius",value),"zero and representable subnormal remain valid");
+            auto expected=initial;
+            expected.insert(expected.find("EndCTCDRegionExit;"),"MessageRadius "+value+";\r\n");
+            check(doc.text()==expected,"finite tiny override preserves exact field delta");
+            check(doc.undo()&&doc.text()==initial,"finite tiny override undo exact");
+            const auto refusedRevision=doc.revision();
+            check(!doc.setComponentOverride(0,"CTCDRegionExit","MessageRadius","1e-100"),"underflow refused after undo");
+            check(doc.canRedo()&&doc.revision()==refusedRevision&&doc.text()==initial,"underflow refusal preserves redo and revision");
+        }
+
         check(doc.setComponentOverride(0,"CTCDRegionExit","Radius","0.01"),"float lower range endpoint accepted");
         check(doc.undo()&&doc.text()==initial,"float insert undo exact");
         check(doc.setComponentOverride(0,"CTCStockItem","Price","1000000"),"integer upper endpoint accepted");

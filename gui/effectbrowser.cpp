@@ -127,10 +127,19 @@ void App::refreshEffectBrowser() {
 bool App::selectEffect(const std::string& nameOrId) {
     if (modFilesBusy()) { fileWriteBlocked("select effect"); return false; }
     if (!effectBrowserLoaded_) refreshEffectBrowser();
-    const auto found=std::find_if(effectBrowserRows_.begin(),effectBrowserRows_.end(),[&](const auto& row) {
-        return std::to_string(row.id)==nameOrId ||
-            (row.name.size()==nameOrId.size() && containsInsensitive(row.name,nameOrId));
+    auto found=std::find_if(effectBrowserRows_.begin(),effectBrowserRows_.end(),[&](const auto& row) {
+        return row.name==nameOrId;
     });
+    if(found==effectBrowserRows_.end()) {
+        for(auto row=effectBrowserRows_.begin();row!=effectBrowserRows_.end();++row) {
+            if(std::to_string(row->id)!=nameOrId &&
+               !(row->name.size()==nameOrId.size() && containsInsensitive(row->name,nameOrId))) continue;
+            if(found!=effectBrowserRows_.end()) {
+                pushLog("effects: ambiguous name or ID "+nameOrId,1); return false;
+            }
+            found=row;
+        }
+    }
     if (found==effectBrowserRows_.end()) { pushLog("effects: no effect named "+nameOrId,1); return false; }
     if (effectBrowserReady_ && effectBrowserSelection_.id==found->id && effectBrowserSelection_.name==found->name) return true;
     try {
@@ -206,12 +215,9 @@ void App::drawEffectViewport(const ImVec2& origin,const ImVec2& size) {
         std::set<int32_t> loaded;
         for (const auto& sprite : effect.sprites) {
             if (sprite.sprite<0 || !loaded.insert(sprite.sprite).second) continue;
-            const auto texture=std::find_if(texRows_.begin(),texRows_.end(),[&](const auto& row) {
-                return row.id==uint32_t(sprite.sprite) && row.bank=="GBANK_MAIN_PC";
-            });
             texbrowse::SpriteTexture decoded; std::string error;
-            if (texture==texRows_.end()) error="Texture is missing from GBANK_MAIN_PC";
-            else if (texbrowse::decodeSpriteTexture(texturesBigPath(),texture->name,decoded,error)) {
+            const auto* texture=texbrowse::findTextureRowById(texRows_,"GBANK_MAIN_PC",uint32_t(sprite.sprite),error);
+            if (texture && texbrowse::decodeSpriteTexture(texturesBigPath(),texture->name,decoded,error)) {
                 if (!effectRenderer_.setTexture(sprite.sprite,decoded.image,decoded.frames)) error=effectRenderer_.error();
             }
             if (!error.empty()) effectTextureWarnings_.push_back("Texture "+std::to_string(sprite.sprite)+": "+error);
@@ -220,7 +226,8 @@ void App::drawEffectViewport(const ImVec2& origin,const ImVec2& size) {
     }
     if (effectRendererReady_ && !effectMeshesReady_) {
         effectMeshesReady_=true;
-        std::set<int32_t> loadedMeshes,loadedTextures;
+        std::set<int32_t> loadedMeshes;
+        std::set<uint32_t> loadedTextures;
         for (const auto& sprite:effect.sprites) if (sprite.sprite>=0) loadedTextures.insert(sprite.sprite);
         auto graphics=std::filesystem::path(installPath_)/"data/graphics/graphics.big";
         if (!std::filesystem::exists(graphics)) graphics=std::filesystem::path(installPath_)/"data/graphics/pc/graphics.big";
@@ -237,14 +244,11 @@ void App::drawEffectViewport(const ImVec2& origin,const ImVec2& size) {
                     effectTextureWarnings_.push_back("Mesh "+std::to_string(mesh.mesh)+": authored bounds unavailable; size and centring are estimated from geometry.");
                 if (geometry.boneCount>0) effectTextureWarnings_.push_back("Mesh "+std::to_string(mesh.mesh)+": skeletal animation is not previewed.");
                 for (const auto& material:geometry.materials) {
-                    const int32_t id=material.diffuseTexture;
-                    if (id<=0 || !loadedTextures.insert(id).second) continue;
-                    const auto texture=std::find_if(texRows_.begin(),texRows_.end(),[&](const auto& row) {
-                        return row.id==uint32_t(id) && row.bank=="GBANK_MAIN_PC";
-                    });
+                    const uint32_t id=material.diffuseTexture;
+                    if (id==0 || !loadedTextures.insert(id).second) continue;
                     terrainexport::Image decoded; std::string error;
-                    if (texture==texRows_.end()) error="Texture is missing from GBANK_MAIN_PC";
-                    else if (texbrowse::decodeTexture(texturesBigPath(),texture->name,decoded,error)) {
+                    const auto* texture=texbrowse::findTextureRowById(texRows_,"GBANK_MAIN_PC",uint32_t(id),error);
+                    if (texture && texbrowse::decodeTexture(texturesBigPath(),texture->name,decoded,error)) {
                         if (!effectRenderer_.setTexture(id,decoded)) error=effectRenderer_.error();
                     }
                     if (!error.empty()) effectTextureWarnings_.push_back("Mesh texture "+std::to_string(id)+": "+error);
@@ -422,13 +426,13 @@ void App::drawEffectViewport(const ImVec2& origin,const ImVec2& size) {
         const auto& sprite=effect.sprites[i]; ImGui::PushID(int(i));
         const std::string heading="Sprite: "+sprite.system+"##sprite";
         if (ImGui::CollapsingHeader(heading.c_str(),ImGuiTreeNodeFlags_DefaultOpen)) {
-            const auto texture=std::find_if(texRows_.begin(),texRows_.end(),[&](const auto& row) {
-                return sprite.sprite>=0 && row.id==uint32_t(sprite.sprite) && row.bank=="GBANK_MAIN_PC";
-            });
+            std::string textureError;
+            const auto* texture=sprite.sprite<0 ? nullptr :
+                texbrowse::findTextureRowById(texRows_,"GBANK_MAIN_PC",uint32_t(sprite.sprite),textureError);
             auto& thumb=effectBrowserThumbnails_[i];
             if (!thumb.attempted) {
                 thumb.attempted=true;
-                if (texture!=texRows_.end()) {
+                if (texture!=nullptr) {
                     terrainexport::Image decoded;
                     if (texbrowse::decodeTexture(texturesBigPath(),texture->name,decoded,thumb.error))
                         thumb.image=renderer_.uiTexture("effect_sprite_"+std::to_string(i),thumbnail(decoded));
@@ -437,10 +441,10 @@ void App::drawEffectViewport(const ImVec2& origin,const ImVec2& size) {
             if (thumb.image) { ImGui::Image((ImTextureID)(intptr_t)thumb.image,ImVec2(S(64),S(64))); ImGui::SameLine(); }
             ImGui::BeginGroup();
             ImGui::Text("Texture id %d",sprite.sprite);
-            ImGui::BeginDisabled(texture==texRows_.end());
-            if (ImGui::SmallButton("Open texture") && texture!=texRows_.end() && selectTexture(texture->name)) assetsTab_=0;
+            ImGui::BeginDisabled(texture==nullptr);
+            if (ImGui::SmallButton("Open texture") && texture!=nullptr && selectTexture(texture->name)) assetsTab_=0;
             auto_.registerWidget(("effect_texture_"+std::to_string(i)).c_str()); ImGui::EndDisabled();
-            if (texture==texRows_.end()) ImGui::TextUnformatted(sprite.sprite<0?"No sprite texture":"Texture is missing from GBANK_MAIN_PC");
+            if (texture==nullptr) ImGui::TextUnformatted(sprite.sprite<0?"No sprite texture":textureError.c_str());
             ImGui::EndGroup();
             if (!thumb.error.empty()) ImGui::TextWrapped("Thumbnail: %s",thumb.error.c_str());
             colourDetails(sprite.colour);
@@ -459,7 +463,7 @@ void App::drawEffectViewport(const ImVec2& origin,const ImVec2& size) {
         if (ImGui::CollapsingHeader(heading.c_str(),ImGuiTreeNodeFlags_DefaultOpen)) {
             ImGui::Text("Model id %d",mesh.mesh);
             ImGui::BeginDisabled(mesh.mesh<0 || !ctx_.ready() || ctxFuture_.valid());
-            if (ImGui::SmallButton("Open model") && selectModel(std::to_string(mesh.mesh))) assetsTab_=1;
+            if (ImGui::SmallButton("Open model") && selectModelById(uint32_t(mesh.mesh))) assetsTab_=1;
             auto_.registerWidget(("effect_model_"+std::to_string(i)).c_str()); ImGui::EndDisabled();
             colourDetails(mesh.colour);
             ImGui::Text("Size  %.4g, %.4g, %.4g",mesh.size[0],mesh.size[1],mesh.size[2]);

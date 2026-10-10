@@ -9,6 +9,7 @@
 #include <fstream>
 #include <map>
 #include <set>
+#include <stdexcept>
 #include <tuple>
 #include <atomic>
 #include <mutex>
@@ -40,38 +41,56 @@ void warn(const Options& o, Scene& s, const std::string& msg) {
     if (o.log) o.log("warning: " + msg);
 }
 
+} // namespace
+
 // LOD0 geometry cache across maps (graphics.big is 100+ MB; decoding is cheap
 // but the BIG index is not, so keep the file open per process).
-struct MeshCache {
+struct MeshBank {
     std::mutex mutex;
     fs::path path;
+    fs::file_time_type modified{};
+    uintmax_t bytes = 0;
     std::unique_ptr<forge::big::File> big;
     std::map<uint32_t, const forge::big::Entry*> byId;
     std::map<uint32_t, std::shared_ptr<const forge::meshpreview::Geometry>> decoded;
     std::map<uint32_t, std::vector<forge::meshpreview::Geometry>> lowerLods;
     std::map<uint32_t, std::string> names;
 
+    void clearLocked() {
+        big.reset(); path.clear(); byId.clear(); decoded.clear(); lowerLods.clear(); names.clear();
+        modified = {}; bytes = 0;
+    }
+
     bool open(const fs::path& graphics, std::string& err) {
         std::lock_guard<std::mutex> lock(mutex);
-        if (big && path == graphics) return true;
+        err.clear();
         try {
+            const auto stamp = fs::last_write_time(graphics);
+            const auto size = fs::file_size(graphics);
+            if (big && path == graphics && modified == stamp && bytes == size) return true;
+            // An index backed by lazy reads cannot safely survive replacement
+            // of its source. Existing shared geometry remains independently owned.
+            clearLocked();
             auto f = std::make_unique<forge::big::File>(forge::big::File::open(graphics));
             const auto* bank = f->findBank("MBANK_ALLMESHES");
             if (!bank) { err = "no MBANK_ALLMESHES bank in " + graphics.string(); return false; }
-            byId.clear(); decoded.clear(); lowerLods.clear(); names.clear();
-            for (const auto& e : bank->entries) { byId[e.id] = &e; names[e.id] = e.name; }
+            if (fs::last_write_time(graphics) != stamp || fs::file_size(graphics) != size) {
+                err = "graphics bank changed while opening " + graphics.string(); return false;
+            }
+            for (const auto& e : bank->entries) {
+                if (!byId.emplace(e.id,&e).second)
+                    throw std::runtime_error("duplicate mesh entry ID " + std::to_string(e.id));
+                names[e.id] = e.name;
+            }
             big = std::move(f);
             path = graphics;
+            modified = stamp; bytes = size;
             return true;
         } catch (const std::exception& e) {
+            clearLocked();
             err = e.what();
             return false;
         }
-    }
-
-    void close() {
-        std::lock_guard<std::mutex> lock(mutex);
-        big.reset(); path.clear(); byId.clear(); decoded.clear(); lowerLods.clear(); names.clear();
     }
 
     std::shared_ptr<const forge::meshpreview::Geometry> get(uint32_t id, std::string& err) {
@@ -92,23 +111,54 @@ struct MeshCache {
     }
 };
 
-MeshCache& meshCache() { static MeshCache c; return c; }
-
+namespace {
+std::mutex g_meshBankMutex;
+MeshBankHandle g_meshBank;
+MeshBankHandle currentMeshBank() {
+    std::lock_guard<std::mutex> lock(g_meshBankMutex);
+    return g_meshBank;
+}
 } // namespace
 
-bool openMeshBank(const fs::path& graphicsBig, std::string& err) { return meshCache().open(graphicsBig, err); }
-void closeMeshBank() { meshCache().close(); }
-std::shared_ptr<const forge::meshpreview::Geometry> cachedMesh(uint32_t id, std::string& err) { return meshCache().get(id, err); }
-std::string meshName(uint32_t id) {
-    std::lock_guard<std::mutex> lock(meshCache().mutex);
-    auto it = meshCache().names.find(id);
-    return it == meshCache().names.end() ? std::string() : it->second;
+MeshBankHandle acquireMeshBank(const fs::path& graphicsBig, std::string& err) {
+    std::lock_guard<std::mutex> lock(g_meshBankMutex);
+    err.clear();
+    try {
+        const auto path=fs::absolute(graphicsBig).lexically_normal();
+        const auto modified=fs::last_write_time(path);
+        const auto bytes=fs::file_size(path);
+        if (g_meshBank && g_meshBank->path==path &&
+            g_meshBank->modified==modified && g_meshBank->bytes==bytes) return g_meshBank;
+        auto bank=std::make_shared<MeshBank>();
+        if (bank->open(path,err)) { g_meshBank=bank; return bank; }
+    } catch (const std::exception& e) { err=e.what(); }
+    g_meshBank.reset();
+    return {};
 }
-uint32_t meshIdByName(const std::string& name) {
-    std::lock_guard<std::mutex> lock(meshCache().mutex);
-    for (const auto& [id, n] : meshCache().names) if (lower(n) == lower(name)) return id;
+bool openMeshBank(const fs::path& graphicsBig, std::string& err) { return bool(acquireMeshBank(graphicsBig,err)); }
+void closeMeshBank() {
+    std::lock_guard<std::mutex> lock(g_meshBankMutex);
+    g_meshBank.reset();
+}
+std::shared_ptr<const forge::meshpreview::Geometry> cachedMesh(const MeshBankHandle& bank, uint32_t id, std::string& err) {
+    if (!bank) { err="no mesh bank open"; return {}; }
+    return bank->get(id,err);
+}
+std::shared_ptr<const forge::meshpreview::Geometry> cachedMesh(uint32_t id, std::string& err) { return cachedMesh(currentMeshBank(),id,err); }
+std::string meshName(const MeshBankHandle& bank, uint32_t id) {
+    if (!bank) return {};
+    std::lock_guard<std::mutex> lock(bank->mutex);
+    const auto it=bank->names.find(id);
+    return it==bank->names.end() ? std::string() : it->second;
+}
+std::string meshName(uint32_t id) { return meshName(currentMeshBank(),id); }
+uint32_t meshIdByName(const MeshBankHandle& bank, const std::string& name) {
+    if (!bank) return 0;
+    std::lock_guard<std::mutex> lock(bank->mutex);
+    for (const auto& [id,n] : bank->names) if (lower(n)==lower(name)) return id;
     return 0;
 }
+uint32_t meshIdByName(const std::string& name) { return meshIdByName(currentMeshBank(),name); }
 
 namespace {
 std::atomic<int> g_textureLimit{0};
@@ -140,7 +190,8 @@ void loadWorldLods(Scene& scene, const te::Context& context) {
     std::map<uint32_t, int> images;
     for (const auto& mesh : scene.meshes) for (const auto& part : mesh.parts)
         if (part.diffuseTexture) images[part.diffuseTexture] = part.image;
-    auto& cache = meshCache();
+    if (!scene.meshBank) return;
+    auto& cache = *scene.meshBank;
     std::lock_guard<std::mutex> lock(cache.mutex);
     for (auto& mesh : scene.meshes) {
         auto entry = cache.byId.find(mesh.meshId);
@@ -531,7 +582,8 @@ Scene load(const std::string& mapName, const Options& options, const te::Context
     if (!fs::exists(graphics)) graphics = options.gameRoot / "data" / "graphics" / "pc" / "graphics.big";
     if (!options.graphicsBig.empty()) graphics = options.graphicsBig;
     std::string err;
-    if (!meshCache().open(graphics, err)) { warn(options, scene, "graphics.big: " + err); return scene; }
+    scene.meshBank=acquireMeshBank(graphics,err);
+    if (!scene.meshBank) { warn(options, scene, "graphics.big: " + err); return scene; }
 
     std::map<int, int> typeToMesh;      // palette type# -> Scene::meshes index
     std::map<uint32_t, int> meshIdToIndex;
@@ -546,10 +598,10 @@ Scene load(const std::string& mapName, const Options& options, const te::Context
             if (known != meshIdToIndex.end()) meshIndex = known->second;
             else {
                 std::string merr;
-                const auto geo = meshCache().get(type.meshIdx, merr);
+                const auto geo = cachedMesh(scene.meshBank, type.meshIdx, merr);
                 if (!geo) { warn(options, scene, merr); meshIdToIndex[type.meshIdx] = -1; typeToMesh[inst.type] = -1; continue; }
                 std::vector<std::string> mw;
-                const std::string bankName = meshName(type.meshIdx);
+                const std::string bankName = meshName(scene.meshBank, type.meshIdx);
                 Mesh m = makeMesh(type.meshIdx, bankName.empty() ? type.meshName : bankName, type.label,
                                   *geo, options.textures, context, scene.images, textureToImage, mw);
                 for (const auto& w : mw) warn(options, scene, w);

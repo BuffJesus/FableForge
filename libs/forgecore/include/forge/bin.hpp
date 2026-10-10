@@ -4,6 +4,7 @@
 // SilverChest.Formats.Bin (local reference source) and validated against the
 // retail install:
 //   names.bin: 20-byte header (u32 magic @4, PC = 0xA8E36C34; s32 count @8),
+//     u32 stream length @12 counts from +16, including its four-byte prefix;
 //     then count x { u32 nameCrc, ASCIIZ name }. References into names.bin are
 //     offsets of the name string relative to the end of the header.
 //   game.bin:  9-byte header (byte 1 == 0xAA means Xbox), u32 entryCount @9,
@@ -23,6 +24,10 @@
 #include <vector>
 
 namespace forge::bin {
+
+// Native byte-wise name CRC: reflected CRC-32, seed zero, no final inversion.
+// This computes a key; distinct strings can collide and require ambiguity checks.
+uint32_t nameCrc(std::string_view name);
 
 struct Entry {
     std::string definition;      // definition type, e.g. OBJECT, CChestDef
@@ -57,15 +62,23 @@ public:
     // the input; the guarantee is a semantic round-trip (same definitions,
     // names, indexInDefinition, and payload bytes after reload). names.bin is
     // rewritten with recomputed offsets; unchanged name sets produce
-    // byte-identical names.bin output.
+    // byte-identical names.bin output when its input size header is canonical.
+    // Historical undersized headers are normalized to the native stream length.
     void setEntryData(size_t index, std::vector<uint8_t> data);
     size_t addEntry(std::string definition, std::string name,
                     std::vector<uint8_t> data);
+    // Append an exact donor payload under a unique, nonempty printable-ASCII
+    // name (up to 127 bytes). Existing canonical per-type ordinals are required;
+    // all prior slots, names and payloads stay unchanged. This mutates memory
+    // only; publishing the appended name pool and bank is the caller's job.
+    size_t cloneEntry(size_t donorIndex, std::string newName);
     // Reserve a whole bank's numeric namespace without changing existing
     // payloads. Shared record identities and name-pool prefixes must agree.
     // Appended records retain their original slots and names retain offsets.
     // Rejects incompatible layouts before mutating this File.
     void extendStableLayout(const File& source);
+    // Requires headers from File::open(); a default-constructed planning bank
+    // cannot be serialized until its storage format has been established.
     void save(const std::filesystem::path& namesPath,
               const std::filesystem::path& binPath) const;
 

@@ -1,0 +1,491 @@
+#include "app.hpp"
+#include "theme.hpp"
+#include "windowsprocess.hpp"
+#include "definitionfield.hpp"
+#include "definitionread.hpp"
+#include "texturebrowse.hpp"
+#include "modpack.hpp"
+#include "../vendor/embedded_schema.hpp"
+#include <algorithm>
+#include <charconv>
+#include <chrono>
+#include <cctype>
+#include <cstdio>
+#include <cmath>
+#include <numeric>
+#include <stdexcept>
+namespace albion::gui {
+namespace fs=std::filesystem;
+namespace {
+int definitionASCIIChar(ImGuiInputTextCallbackData* data) {return data->EventChar<32 || data->EventChar>126;}
+std::string definitionLower(std::string value) {
+    for(auto& c:value) c=char(std::tolower(static_cast<unsigned char>(c)));return value;
+}
+}
+std::pair<fs::path,fs::path> App::definitionPaths() const {
+    for(const auto& root:{packDest_,saveRoot(),installPath_}) {
+        if(root.empty()) continue;
+        const auto folder=fs::u8path(root)/"data"/"CompiledDefs";
+        std::error_code error;
+        if(fs::exists(folder/definitionBank_,error)) return {folder/"names.bin",folder/definitionBank_};
+    }
+    const auto folder=fs::u8path(installPath_)/"data"/"CompiledDefs";
+    return {folder/"names.bin",folder/definitionBank_};
+}
+bool App::setDefinitionBank(const std::string& bank) {
+    if(bank!="game.bin" && bank!="frontend.bin" && bank!="script.bin") {
+        definitionSelectionError_="Choose game.bin, frontend.bin or script.bin.";return false;
+    }
+    if(definitionBank_==bank) return true;
+    if(definitionEditing_) {definitionSelectionError_="Save or cancel the definition draft before changing banks.";return false;}
+    definitionBrowseRequest_.reset();definitionBrowseIndex_.reset();
+    definitionBank_=bank;definitionLoaded_=false;definitionSelected_.reset();definitionDecoded_.reset();
+    definitionType_.clear();definitionSelectionError_.clear();return true;
+}
+void App::refreshDefinitions() {
+    if(definitionsBusy() || activeFileJob() || modFilesBusy() || !installValid_) return;
+    const auto [names,bank]=definitionPaths();
+    definitionLoadedNames_=names;definitionLoadedBank_=bank;definitionLoaded_=true;
+    definitionFile_={};definitionSelected_.reset();definitionDecoded_.reset();definitionFiltered_.clear();definitionTypes_.clear();definitionMembers_.clear();definitionGroupOf_.clear();definitionNameIndices_.clear();definitionTree_.clear();definitionReveal_=false;
+    definitionError_.clear();definitionDecodeError_.clear();definitionSelectionError_.clear();definitionFilterDirty_=true;
+    definitionFuture_=std::async(std::launch::async,[names,bank] {
+        DefinitionJob job;job.names=names;job.bank=bank;
+        try {job.file=forge::bin::File::open(names,bank);auto schemaPath=fs::current_path()/"docs"/"re_reference"/"def_schema.json";
+#ifdef _WIN32
+            const auto bundled=process::executableDirectory()/"docs"/"re_reference"/"def_schema.json";
+            if(fs::is_regular_file(bundled)) schemaPath=bundled;
+#endif
+            job.schema=fs::is_regular_file(schemaPath)?forge::defschema::Schema::load(schemaPath):forge::defschema::Schema::loadText(kEmbeddedDefSchema,"embedded");
+            if(bank.filename()=="game.bin") {
+                job.members.resize(job.file.entries().size());
+                for(size_t i=0;i<job.file.entries().size();++i) {
+                    try {
+                        const auto decoded=forge::defdecode::decode(job.file.entries()[i],job.schema);
+                        if(const auto group=definitionread::groupTarget(job.file,decoded)) job.members[*group].push_back(i);
+                    } catch(const std::exception&) {} // Unsupported records have no confirmed group.
+                }
+            }
+        }
+        catch(const std::exception& error) {job.error=error.what();}
+        return job;
+    });
+}
+void App::pollDefinitions() {
+    if(!definitionsBusy() || definitionFuture_.wait_for(std::chrono::seconds(0))!=std::future_status::ready) return;
+    auto job=definitionFuture_.get();
+    const auto [names,bank]=definitionPaths();
+    if(job.names!=names || job.bank!=bank) {definitionLoaded_=false;return;}
+    definitionFile_=std::move(job.file);definitionSchema_=std::move(job.schema);definitionMembers_=std::move(job.members);definitionError_=std::move(job.error);
+    uint64_t nameOffset=4;const auto& originalNames=definitionFile_.originalNames();
+    for(size_t i=0;i<originalNames.size();++i) {
+        if(nameOffset<=0x7fffffffu) definitionNameIndices_.emplace(uint32_t(nameOffset),i);
+        nameOffset+=originalNames[i].second.size()+5;
+    }
+    definitionGroupOf_.assign(definitionFile_.entries().size(),std::nullopt);
+    for(size_t group=0;group<definitionMembers_.size();++group)
+        for(const auto index:definitionMembers_[group]) definitionGroupOf_[index]=group;
+    std::set<std::string> types;for(const auto& entry:definitionFile_.entries()) types.insert(entry.definition);
+    definitionTypes_={types.begin(),types.end()};definitionFilterDirty_=true;
+    if(!definitionError_.empty()) pushLog("definitions: "+definitionError_,1);
+}
+bool App::selectDefinitionIndex(size_t index,bool reveal) {
+    definitionSelectionError_.clear();
+    if(definitionEditing_) {definitionSelectionError_="Save or cancel the definition draft before selecting another record.";return false;}
+    const auto [names,bank]=definitionPaths();
+    if(!definitionLoaded_ || definitionsBusy() || names!=definitionLoadedNames_ || bank!=definitionLoadedBank_ || index>=definitionFile_.entries().size()) {
+        definitionSelectionError_="Choose an entry from the current loaded bank.";return false;
+    }
+    definitionSelected_=index;definitionReveal_=reveal;definitionDecoded_.reset();definitionDecodeError_.clear();
+    try {definitionDecoded_=forge::defdecode::decode(definitionFile_.entries()[index],definitionSchema_);}
+    catch(const std::exception& error) {definitionDecodeError_=error.what();}
+    return true;
+}
+bool App::selectDefinition(const std::string& nameOrIndex) {
+    if(definitionsBusy() || !definitionLoaded_) {definitionSelectionError_="Wait for the definition bank to load.";return false;}
+    std::optional<size_t> exact;
+    if(!nameOrIndex.empty()) for(size_t i=0;i<definitionFile_.entries().size();++i) {
+        if(definitionFile_.entries()[i].name!=nameOrIndex) continue;
+        if(exact) {definitionSelectionError_="Definition name is ambiguous; choose its indexed row.";return false;}
+        exact=i;
+    }
+    if(exact) return selectDefinitionIndex(*exact);
+    size_t index=0;const auto parsed=std::from_chars(nameOrIndex.data(),nameOrIndex.data()+nameOrIndex.size(),index);
+    if(parsed.ec==std::errc{} && parsed.ptr==nameOrIndex.data()+nameOrIndex.size()) return selectDefinitionIndex(index);
+    definitionSelectionError_="Definition not found in this bank.";return false;
+}
+void App::browseDefinition(const std::string& name) {
+    if(definitionEditing_) {definitionEditError_="Save or cancel the definition draft before opening another record.";return;}
+    definitionBrowseIndex_.reset();
+    selectionInspectorOpen_=false;setModsMode(false);setTexturesMode(true);setAssetsTab(6);
+    setDefinitionBank("game.bin");definitionSearch_[0]=0;definitionType_.clear();definitionFilterDirty_=true;definitionBrowseRequest_=name;
+}
+bool App::setDefinitionEditValue(const std::string& value) {
+    if(!definitionEditing_ || value.size()>=sizeof definitionEditValue_ ||
+       std::any_of(value.begin(),value.end(),[](unsigned char c){return c==0 || c>=128;})) return false;
+    std::snprintf(definitionEditValue_,sizeof definitionEditValue_,"%s",value.c_str());definitionEditConfirm_=false;return true;
+}
+bool App::beginDefinitionEdit(size_t field) {
+    definitionEditError_.clear();definitionEditSuccess_.clear();
+    try {
+        if(definitionEditing_) throw std::runtime_error("Save or cancel the current definition draft first.");
+        if(definitionsBusy() || modFilesBusy() || !definitionSelected_ || !definitionDecoded_ ||
+           definitionPaths()!=std::pair{definitionLoadedNames_,definitionLoadedBank_} || field>=definitionDecoded_->fields.size())
+            throw std::runtime_error("Choose a field from the current loaded definition.");
+        const auto& selected=definitionDecoded_->fields[field];
+        if(!definitionwrite::fieldEditable(selected)) throw std::runtime_error("This field has no supported field edit layout.");
+        if(!packDest_.empty()) {if(!modpack::isPack(fs::u8path(packDest_))) throw std::runtime_error("Choose a valid FableForge pack.");(void)modpack::load(fs::u8path(packDest_));}
+        definitionEditIndex_=*definitionSelected_;definitionEditExpected_=definitionFile_.entries()[definitionEditIndex_];
+        definitionEditExpectedNames_=definitionFile_.originalNames();definitionEditNames_=definitionLoadedNames_;definitionEditBank_=definitionLoadedBank_;
+        definitionEditDestination_=fs::u8path(packDest_.empty()?saveRoot():packDest_)/"data"/"CompiledDefs"/definitionBank_;
+        definitionEditField_=selected.name;definitionEditType_=selected.type;definitionEditing_=true;
+        definitionNameSearch_[0]=0;setDefinitionEditValue(definitionwrite::fieldValue(selected));return true;
+    } catch(const std::exception& error) {definitionEditError_=error.what();return false;}
+}
+bool App::saveDefinitionEdit() {
+    definitionEditError_.clear();definitionEditSuccess_.clear();
+    try {
+        if(!definitionEditing_) throw std::runtime_error("Choose a field to edit first.");
+        if(definitionsBusy() || modReadersBusy() || gameWriteBlocked("save definition")) throw std::runtime_error("Wait for loads and writes, and close the destination game.");
+        const auto destination=fs::u8path(packDest_.empty()?saveRoot():packDest_)/"data"/"CompiledDefs"/definitionBank_;
+        if(definitionPaths()!=std::pair{definitionEditNames_,definitionEditBank_} || destination!=definitionEditDestination_)
+            throw std::runtime_error("Definition source or destination changed; start the edit again.");
+        if(definitionEditBank_!=destination && fs::exists(destination)) throw std::runtime_error("The destination bank appeared; refresh before editing.");
+        if(!packDest_.empty()) {if(!modpack::isPack(fs::u8path(packDest_))) throw std::runtime_error("Choose a valid FableForge pack.");(void)modpack::load(fs::u8path(packDest_));}
+        const bool changed=definitionwrite::replaceField(definitionEditNames_,definitionEditBank_,destination,definitionEditIndex_,
+            definitionEditExpected_,definitionEditExpectedNames_,definitionSchema_,definitionEditField_,definitionEditValue_);
+        definitionEditSuccess_=changed?"Saved "+definitionEditField_+".":"The field is unchanged.";
+        definitionEditing_=false;definitionEditConfirm_=false;definitionLoaded_=false;definitionBrowseRequest_.reset();definitionBrowseIndex_=definitionEditIndex_;
+        if(changed && definitionBank_=="game.bin") {
+            const auto targetRoot=destination.parent_path().parent_path().parent_path();
+            if(packDest_.empty() || (!ctx_.gameRoot().empty() && paths::resolvedPath(targetRoot)==paths::resolvedPath(ctx_.gameRoot()))) {
+                defThumbs_.clear();defList_.clear();themeGroupOf_.clear();envDefs_.clear();soundDefs_.clear();familyNames_.clear();issuesRev_=~0ull;
+                ctxError_.clear();reloadWhenContextReady_=true;
+                startContextLoad(packDest_.empty()?saveRoot():packDest_);
+            }
+        }
+        rescanBackups();pushLog(definitionEditSuccess_,3);return true;
+    } catch(const std::exception& error) {definitionEditError_=error.what();pushLog("save definition: "+definitionEditError_,1);return false;}
+}
+void App::drawDefinitionBrowser(float pad,float inner,float cardInner) {
+    using theme::S;
+    const auto [names,bank]=definitionPaths();
+    if(names!=definitionLoadedNames_ || bank!=definitionLoadedBank_) definitionLoaded_=false;
+    if(!definitionLoaded_ && !definitionsBusy()) refreshDefinitions();
+    if(definitionLoaded_ && !definitionsBusy() && definitionBrowseRequest_) {
+        selectDefinition(*definitionBrowseRequest_);definitionBrowseRequest_.reset();
+    }
+    if(definitionLoaded_ && !definitionsBusy() && definitionBrowseIndex_) {
+        selectDefinitionIndex(*definitionBrowseIndex_);definitionBrowseIndex_.reset();
+    }
+    ImGui::SetCursorPosX(pad);theme::beginCard("##definitionbrowser",inner,true);theme::label("Definitions");
+    drawPackDestination(cardInner,true);
+    if(definitionEditing_) {
+        ImGui::TextWrapped("Edit %s (%s)",definitionEditField_.c_str(),definitionEditType_.c_str());
+        ImGui::TextWrapped("Destination: %s",definitionEditDestination_.string().c_str());
+        if(definitionEditType_=="CDefString") {
+            std::string preview=definitionEditValue_;
+            uint32_t selected=0;const std::string_view value=definitionEditValue_;
+            const auto parsed=std::from_chars(value.data(),value.data()+value.size(),selected);
+            if(value=="-1") preview="No name";
+            else if(parsed.ec==std::errc{} && parsed.ptr==value.data()+value.size()) {
+                const auto found=definitionNameIndices_.find(selected);
+                if(found!=definitionNameIndices_.end()) {
+                    const auto& name=definitionFile_.originalNames()[found->second].second;
+                    preview=name.empty()?"(empty name)":name;
+                }
+            }
+            ImGui::SetNextItemWidth(cardInner);
+            const bool open=ImGui::BeginCombo("##definitionname",preview.c_str());
+            auto_.registerWidget("combo_definition_edit_name");
+            if(open) {
+                ImGui::InputText("Search names",definitionNameSearch_,sizeof definitionNameSearch_);auto_.registerWidget("input_definition_name_search");
+                if(ImGui::Selectable("No name",value=="-1")) setDefinitionEditValue("-1");
+                auto_.registerWidget("definition_name_option_none");
+                std::vector<std::pair<uint32_t,size_t>> options;const auto search=definitionLower(definitionNameSearch_);
+                for(const auto& option:definitionNameIndices_) {
+                    const auto& name=definitionFile_.originalNames()[option.second].second;
+                    if(search.empty() || definitionLower(name).find(search)!=std::string::npos || std::to_string(option.first).find(search)!=std::string::npos) options.push_back(option);
+                }
+                ImGuiListClipper clipper;clipper.Begin(int(options.size()));
+                while(clipper.Step()) {
+                    for(int i=clipper.DisplayStart;i<clipper.DisplayEnd;++i) {
+                        const auto offset=options[size_t(i)].first;const auto& name=definitionFile_.originalNames()[options[size_t(i)].second].second;
+                        const auto label=std::to_string(offset)+": "+(name.empty()?"(empty name)":name);
+                        ImGui::PushID(i);
+                        if(ImGui::Selectable(label.c_str(),value==std::to_string(offset))) setDefinitionEditValue(std::to_string(offset));
+                        auto_.registerWidget(("definition_name_option_"+std::to_string(offset)).c_str());ImGui::PopID();
+                    }
+                }
+                ImGui::EndCombo();
+            }
+        } else if(definitionEditType_=="bool") {
+            const std::string_view value=definitionEditValue_;bool checked=value=="true" || value=="1";
+            if(ImGui::Checkbox("Value",&checked)) setDefinitionEditValue(checked?"true":"false");
+        } else if(definitionEditType_=="CRGBColour") {
+            int values[4]{};std::string_view remaining=definitionEditValue_;bool valid=true;
+            for(size_t i=0;i<4;++i) {
+                const auto comma=remaining.find(',');const auto part=remaining.substr(0,comma);
+                const auto parsed=std::from_chars(part.data(),part.data()+part.size(),values[i]);
+                if(parsed.ec!=std::errc{} || parsed.ptr!=part.data()+part.size() || values[i]<0 || values[i]>255 || ((i<3)!=(comma!=std::string_view::npos))) {valid=false;break;}
+                remaining=comma==std::string_view::npos?std::string_view{}:remaining.substr(comma+1);
+            }
+            if(valid) {
+                float rgba[4];for(size_t i=0;i<4;++i) rgba[i]=float(values[i])/255.0f;
+                bool changed=ImGui::ColorEdit4("##colour",rgba,ImGuiColorEditFlags_NoInputs|ImGuiColorEditFlags_Uint8|ImGuiColorEditFlags_AlphaBar|ImGuiColorEditFlags_AlphaPreviewHalf);
+                auto_.registerWidget("input_definition_colour_picker");
+                if(ImGui::IsPopupOpen(nullptr,ImGuiPopupFlags_AnyPopupId|ImGuiPopupFlags_AnyPopupLevel)) auto_.registerWidget("definition_colour_popup");
+                if(changed) for(size_t i=0;i<4;++i) values[i]=std::clamp(int(std::lround(rgba[i]*255.0f)),0,255);
+                ImGui::TextDisabled("R / G / B / A (0-255)");ImGui::BeginGroup();
+                const float width=(cardInner-3*ImGui::GetStyle().ItemSpacing.x)/4;
+                for(size_t i=0;i<4;++i) {
+                    if(i) ImGui::SameLine();ImGui::SetNextItemWidth(width);ImGui::PushID(int(i));
+                    if(ImGui::InputInt("##channel",&values[i],0,0)) {values[i]=std::clamp(values[i],0,255);changed=true;}
+                    auto_.registerWidget(("input_definition_colour_"+std::to_string(i)).c_str());ImGui::PopID();
+                }
+                ImGui::EndGroup();if(changed) setDefinitionEditValue(definitionwrite::colourValue(values));
+            } else {ImGui::SetNextItemWidth(cardInner);ImGui::InputText("##definitionvalue",definitionEditValue_,sizeof definitionEditValue_);}
+        } else if(definitionEditType_=="C2DVector" || definitionEditType_=="C3DVector") {
+            const size_t count=definitionEditType_=="C2DVector"?2:3;float values[3]{};
+            std::string_view remaining=definitionEditValue_;bool valid=true;
+            for(size_t i=0;i<count;++i) {
+                const auto comma=remaining.find(',');const auto part=remaining.substr(0,comma);
+                const auto parsed=std::from_chars(part.data(),part.data()+part.size(),values[i]);
+                if(parsed.ec!=std::errc{} || parsed.ptr!=part.data()+part.size() || ((i+1<count)!=(comma!=std::string_view::npos))) {valid=false;break;}
+                remaining=comma==std::string_view::npos?std::string_view{}:remaining.substr(comma+1);
+            }
+            ImGui::TextDisabled("%s",count==2?"X / Y":"X / Y / Z");
+            ImGui::SetNextItemWidth(cardInner);
+            if(valid) {
+                bool changed=false;ImGui::BeginGroup();
+                const float width=(cardInner-ImGui::GetStyle().ItemSpacing.x*float(count-1))/float(count);
+                for(size_t i=0;i<count;++i) {
+                    if(i) ImGui::SameLine();ImGui::SetNextItemWidth(width);ImGui::PushID(int(i));
+                    changed=ImGui::InputFloat("##coordinate",&values[i],0,0,"%.9g") || changed;
+                    auto_.registerWidget(("input_definition_vector_"+std::to_string(i)).c_str());ImGui::PopID();
+                }
+                ImGui::EndGroup();
+                if(changed) setDefinitionEditValue(definitionwrite::vectorValue(values,count));
+            } else ImGui::InputText("##definitionvalue",definitionEditValue_,sizeof definitionEditValue_);
+        } else {
+            const bool text=definitionEditType_=="CCharString" || definitionEditType_=="CWideString";
+            if(text) ImGui::TextDisabled("Text (up to 127 ASCII characters)");
+            ImGui::SetNextItemWidth(cardInner);ImGui::InputText("##definitionvalue",definitionEditValue_,sizeof definitionEditValue_,
+                text?ImGuiInputTextFlags_CallbackCharFilter:0,text?definitionASCIIChar:nullptr);
+        }
+        auto_.registerWidget("input_definition_edit_value");
+        if(!definitionEditConfirm_) {
+            if(theme::ghostButton("Save field",ImVec2(cardInner,0))) definitionEditConfirm_=true;
+            auto_.registerWidget("btn_definition_save");
+            if(theme::ghostButton("Cancel edit",ImVec2(cardInner,0))) {definitionEditing_=false;definitionEditConfirm_=false;}
+            auto_.registerWidget("btn_definition_edit_cancel");
+        } else {
+            const int answer=confirmRow("Write this field to the destination bank?","Save",cardInner,S(28),"btn_definition_save_confirm");
+            if(answer>0) saveDefinitionEdit();if(answer) definitionEditConfirm_=false;
+        }
+    }
+    if(!definitionEditError_.empty()) {ImGui::TextWrapped("%s",definitionEditError_.c_str());auto_.registerWidget("definition_edit_error");}
+    if(!definitionEditSuccess_.empty()) ImGui::TextWrapped("%s",definitionEditSuccess_.c_str());
+    ImGui::BeginDisabled(definitionEditing_);
+    ImGui::SetNextItemWidth(cardInner);
+    const bool bankOpen=ImGui::BeginCombo("##definitionbank",definitionBank_.c_str());auto_.registerWidget("combo_definition_bank");
+    if(bankOpen) {
+        for(const auto* choice:{"game.bin","frontend.bin","script.bin"}) {
+            if(ImGui::Selectable(choice,definitionBank_==choice)) setDefinitionBank(choice);
+            auto_.registerWidget(("definition_bank_"+std::string(choice)).c_str());
+        }
+        ImGui::EndCombo();
+    }
+    ImGui::SetNextItemWidth(cardInner);
+    if(ImGui::InputTextWithHint("##definitionsearch","Search name, type, index or group",definitionSearch_,sizeof definitionSearch_)) definitionFilterDirty_=true;
+    auto_.registerWidget("input_definition_search");
+    ImGui::SetNextItemWidth(cardInner);
+    const bool typeOpen=ImGui::BeginCombo("##definitiontype",definitionType_.empty()?"All types":definitionType_.c_str());auto_.registerWidget("combo_definition_type");
+    if(typeOpen) {
+        if(ImGui::Selectable("All types",definitionType_.empty())) {definitionType_.clear();definitionFilterDirty_=true;}
+        auto_.registerWidget("definition_type_all");
+        for(size_t i=0;i<definitionTypes_.size();++i) {
+            const auto& type=definitionTypes_[i];
+            if(ImGui::Selectable(type.c_str(),type==definitionType_)) {definitionType_=type;definitionFilterDirty_=true;}
+            auto_.registerWidget(("definition_type_"+std::to_string(i)).c_str());
+        }
+        ImGui::EndCombo();
+    }
+    if(definitionFilterDirty_) {
+        definitionFiltered_.clear();definitionTree_.clear();const auto needle=definitionLower(definitionSearch_);
+        const auto& entries=definitionFile_.entries();
+        for(size_t i=0;i<entries.size();++i) {
+            const auto& entry=entries[i];
+            if(!definitionType_.empty() && entry.definition!=definitionType_) continue;
+            std::string groupLabel;
+            if(i<definitionGroupOf_.size() && definitionGroupOf_[i]) {
+                const auto group=*definitionGroupOf_[i];groupLabel=entries[group].name+" "+std::to_string(group);
+            }
+            if(!needle.empty() && definitionLower(entry.name+" "+entry.definition+" "+std::to_string(i)+" "+groupLabel).find(needle)==std::string::npos) continue;
+            definitionFiltered_.push_back(i);
+        }
+        std::stable_sort(definitionFiltered_.begin(),definitionFiltered_.end(),[&](size_t a,size_t b) {
+            return std::tie(entries[a].definition,entries[a].name,a)<std::tie(entries[b].definition,entries[b].name,b);
+        });
+        for(const auto index:definitionFiltered_)
+            definitionTree_[entries[index].definition][definitionGroupOf_[index]].push_back(index);
+        definitionFilterDirty_=false;
+    }
+    ImGui::TextDisabled("%zu of %zu entries",definitionFiltered_.size(),definitionFile_.entries().size());
+    if(definitionsBusy()) theme::hint("Loading definitions...");
+    if(!definitionError_.empty()) {ImGui::TextWrapped("%s",definitionError_.c_str());auto_.registerWidget("definition_bank_error");}
+    if(!definitionSelectionError_.empty()) ImGui::TextWrapped("%s",definitionSelectionError_.c_str());
+    ImGui::BeginChild("##definitionlist",ImVec2(cardInner,S(300)));
+    const auto& entries=definitionFile_.entries();
+    auto drawRows=[&](const std::vector<size_t>& indices,bool showGroup) {
+        ImGuiListClipper clipper;clipper.Begin(int(indices.size()));
+        if(definitionReveal_ && definitionSelected_) {
+            const auto found=std::find(indices.begin(),indices.end(),*definitionSelected_);
+            if(found!=indices.end()) clipper.IncludeItemByIndex(int(found-indices.begin()));
+        }
+        while(clipper.Step()) for(int visible=clipper.DisplayStart;visible<clipper.DisplayEnd;++visible) {
+            const auto index=indices[size_t(visible)];const auto& entry=entries[index];
+            auto label=std::to_string(index)+": "+(entry.name.empty()?"(unnamed)":entry.name);
+            if(showGroup && definitionGroupOf_[index]) {
+                const auto group=*definitionGroupOf_[index];
+                label+=" | "+std::to_string(group)+": "+(entries[group].name.empty()?"(unnamed group)":entries[group].name);
+            }
+            ImGui::PushID(int(index));if(ImGui::Selectable(label.c_str(),definitionSelected_==index)) selectDefinitionIndex(index,false);
+            auto_.registerWidget(("definition_row_"+std::to_string(index)).c_str());
+            if(definitionReveal_ && definitionSelected_==index) {
+                const bool visible=ImGui::IsItemVisible();ImGui::SetScrollHereY(.5f);
+                if(visible) definitionReveal_=false;
+            }
+            ImGui::PopID();
+        }
+    };
+    if(definitionSearch_[0]) drawRows(definitionFiltered_,true);
+    else for(const auto& [type,groups]:definitionTree_) {
+        const size_t typeIndex=size_t(std::lower_bound(definitionTypes_.begin(),definitionTypes_.end(),type)-definitionTypes_.begin());
+        size_t count=0;for(const auto& [group,indices]:groups) count+=indices.size();
+        const bool selectedType=definitionSelected_ && entries[*definitionSelected_].definition==type;
+        const bool oneType=definitionTree_.size()==1;ImGui::PushID(type.c_str());
+        if(!oneType && definitionReveal_ && selectedType) ImGui::SetNextItemOpen(true);
+        const auto typeLabel=(type.empty()?"(unnamed type)":type)+" ("+std::to_string(count)+")##type";
+        const auto flags=ImGuiTreeNodeFlags_SpanAvailWidth | (definitionFiltered_.size()<=64?ImGuiTreeNodeFlags_DefaultOpen:0);
+        const bool typeOpen=oneType || ImGui::TreeNodeEx(typeLabel.c_str(),flags);
+        if(!oneType) auto_.registerWidget(("definition_type_node_"+std::to_string(typeIndex)).c_str());
+        if(typeOpen) {
+            const bool onlyUngrouped=groups.size()==1 && !groups.begin()->first;
+            std::vector<std::optional<size_t>> groupOrder;groupOrder.reserve(groups.size());
+            for(const auto& [group,indices]:groups) groupOrder.push_back(group);
+            std::sort(groupOrder.begin(),groupOrder.end(),[&](const auto& a,const auto& b) {
+                if(!a || !b) return !a && bool(b);
+                return std::tie(entries[*a].name,*a)<std::tie(entries[*b].name,*b);
+            });
+            for(const auto& group:groupOrder) {
+                const auto& indices=groups.at(group);
+                if(onlyUngrouped) {drawRows(indices,false);continue;}
+                const auto groupId=group?std::to_string(*group):"none";
+                ImGui::PushID(groupId.c_str());
+                if(definitionReveal_ && selectedType && definitionGroupOf_[*definitionSelected_]==group) ImGui::SetNextItemOpen(true);
+                const auto name=group?std::to_string(*group)+": "+(entries[*group].name.empty()?"(unnamed group)":entries[*group].name):"No confirmed group";
+                const auto label=std::string(name)+" ("+std::to_string(indices.size())+")##group";
+                const bool open=ImGui::TreeNodeEx(label.c_str(),flags);
+                auto_.registerWidget(("definition_group_node_"+std::to_string(typeIndex)+"_"+groupId).c_str());
+                if(open) {drawRows(indices,false);ImGui::TreePop();}
+                ImGui::PopID();
+            }
+            if(!oneType) ImGui::TreePop();
+        }
+        ImGui::PopID();
+    }
+    ImGui::EndChild();
+    ImGui::BeginDisabled(definitionsBusy() || modFilesBusy());
+    if(theme::ghostButton("Refresh definitions",ImVec2(cardInner,0))) refreshDefinitions();
+    auto_.registerWidget("btn_definition_refresh");ImGui::EndDisabled();
+    ImGui::TextWrapped("Bank: %s",definitionLoadedBank_.string().c_str());
+    ImGui::TextWrapped("Names: %s",definitionLoadedNames_.string().c_str());
+    theme::hint("Entry indices are native record identities; unnamed records are included.");ImGui::EndDisabled();theme::endCard();
+}
+void App::drawDefinitionViewport(const ImVec2&,const ImVec2&) {
+    using theme::S;ImGui::SetCursorPos(ImVec2(S(20),S(20)));
+    if(!definitionSelected_) {theme::hint("Choose a definition to inspect its fields and raw bytes.");return;}
+    const auto& entry=definitionFile_.entries()[*definitionSelected_];
+    ImGui::TextWrapped("%s",entry.name.empty()?"(unnamed definition)":entry.name.c_str());
+    ImGui::TextWrapped("%s | entry %zu | class index %d | %zu bytes",entry.definition.c_str(),*definitionSelected_,entry.indexInDefinition,entry.data.size());
+    if(definitionBank_=="game.bin" && definitionDecoded_) if(const auto group=definitionread::groupTarget(definitionFile_,*definitionDecoded_)) {
+        const auto& target=definitionFile_.entries()[*group];
+        const auto label="Open group: "+(target.name.empty()?"(unnamed)":target.name)+" (entry "+std::to_string(*group)+")";
+        ImGui::BeginDisabled(definitionEditing_);
+        if(ImGui::SmallButton(label.c_str())) definitionBrowseIndex_=*group;
+        auto_.registerWidget("btn_definition_group");ImGui::EndDisabled();
+    }
+    if(!definitionDecodeError_.empty()) {ImGui::TextWrapped("%s",definitionDecodeError_.c_str());auto_.registerWidget("definition_decode_error");}
+    ImGui::BeginChild("##definitiondetail",ImGui::GetContentRegionAvail());
+    if(*definitionSelected_<definitionMembers_.size() && !definitionMembers_[*definitionSelected_].empty()) {
+        const auto& members=definitionMembers_[*definitionSelected_];
+        if(ImGui::CollapsingHeader(("Group members ("+std::to_string(members.size())+")").c_str(),ImGuiTreeNodeFlags_DefaultOpen)) {
+            ImGui::BeginDisabled(definitionEditing_);
+            ImGui::BeginChild("##definitionmembers",ImVec2(0,S(150)));
+            ImGuiListClipper memberClipper;memberClipper.Begin(int(members.size()));
+            while(memberClipper.Step()) for(int row=memberClipper.DisplayStart;row<memberClipper.DisplayEnd;++row) {
+                const auto index=members[size_t(row)];const auto& member=definitionFile_.entries()[index];
+                const auto label=std::to_string(index)+": "+(member.name.empty()?"(unnamed)":member.name)+" | "+member.definition;
+                if(ImGui::Selectable(label.c_str())) definitionBrowseIndex_=index;
+                auto_.registerWidget(("definition_member_"+std::to_string(index)).c_str());
+            }
+            ImGui::EndChild();ImGui::EndDisabled();
+        }
+    }
+    if(definitionDecoded_) {
+        ImGui::Text("%zu fields; %zu prefix bytes",definitionDecoded_->fields.size(),definitionDecoded_->prefixLen);
+        if(ImGui::BeginTable("##definitionfields",3,ImGuiTableFlags_Borders|ImGuiTableFlags_RowBg|ImGuiTableFlags_Resizable)) {
+            ImGui::TableSetupColumn("Field");ImGui::TableSetupColumn("Type");ImGui::TableSetupColumn("Value");ImGui::TableHeadersRow();
+            for(size_t i=0;i<definitionDecoded_->fields.size();++i) {
+                const auto& field=definitionDecoded_->fields[i];const auto value=definitionwrite::fieldValue(field);ImGui::PushID(int(i));
+                ImGui::TableNextRow();ImGui::TableSetColumnIndex(0);ImGui::TextWrapped("%s",field.name.c_str());
+                ImGui::TableSetColumnIndex(1);ImGui::TextWrapped("%s",field.type.c_str());
+                ImGui::TableSetColumnIndex(2);size_t previewSize=std::min<size_t>(2048,value.size());
+                while(previewSize>0 && previewSize<value.size() && (static_cast<unsigned char>(value[previewSize])&0xc0)==0x80) --previewSize;
+                const auto preview=value.size()>previewSize?value.substr(0,previewSize)+" ... (full value: right-click to copy)":value;
+                ImGui::TextWrapped("%s",preview.c_str());auto_.registerWidget(("definition_field_"+std::to_string(i)).c_str());
+                if(ImGui::BeginPopupContextItem("##definitionvalue")) {if(ImGui::MenuItem("Copy full value")) ImGui::SetClipboardText(value.c_str());ImGui::EndPopup();}
+                if(const auto offset=definitionread::nameOffset(*definitionDecoded_,i)) {
+                    const auto found=definitionNameIndices_.find(*offset);
+                    if(found!=definitionNameIndices_.end()) {
+                        const auto& name=definitionFile_.originalNames()[found->second].second;
+                        ImGui::TextWrapped("Name: %s",name.empty()?"(empty name)":name.c_str());
+                        auto_.registerWidget(("definition_name_reference_"+std::to_string(i)).c_str());
+                    }
+                }
+                if(definitionBank_=="game.bin") if(const auto model=definitionread::objectModelId(entry,*definitionDecoded_,i)) {
+                    ImGui::BeginDisabled(definitionEditing_ || definitionsBusy() || modFilesBusy() || !ctx_.ready() || ctxFuture_.valid());
+                    if(ImGui::SmallButton(("Open model "+std::to_string(*model)).c_str()) && selectModelById(*model)) assetsTab_=1;
+                    auto_.registerWidget(("definition_model_"+std::to_string(i)).c_str());ImGui::EndDisabled();
+                }
+                if(definitionBank_=="game.bin") if(const auto texture=definitionread::themeTextureId(entry,*definitionDecoded_,i)) {
+                    ImGui::BeginDisabled(definitionEditing_ || definitionsBusy() || modFilesBusy() || !ctx_.ready() || ctxFuture_.valid());
+                    if(ImGui::SmallButton(("Open texture "+std::to_string(*texture)).c_str())) {
+                        if(!texturesLoaded_) refreshTextures();
+                        std::string error;const auto* row=texbrowse::findTextureRowById(texRows_,"GBANK_MAIN_PC",*texture,error);
+                        if(row) {if(selectTexture(row->name)) assetsTab_=0;}
+                        else pushLog("textures: "+error,1);
+                    }
+                    auto_.registerWidget(("definition_texture_"+std::to_string(i)).c_str());ImGui::EndDisabled();
+                }
+                if(definitionwrite::fieldEditable(field)) {
+                    ImGui::BeginDisabled(definitionEditing_ || definitionsBusy() || modFilesBusy());
+                    if(ImGui::SmallButton("Edit field")) beginDefinitionEdit(i);
+                    auto_.registerWidget(("btn_definition_edit_"+std::to_string(i)).c_str());ImGui::EndDisabled();
+                }
+                ImGui::PopID();
+            }
+            ImGui::EndTable();
+        }
+    } else theme::hint("This record has no confirmed field decode. Its complete payload remains available below.");
+    ImGui::Separator();theme::label("Raw payload");auto_.registerWidget("definition_raw_payload");
+    ImGui::BeginChild("##definitionraw",ImVec2(0,S(230)));
+    ImGuiListClipper clipper;clipper.Begin(int((entry.data.size()+15)/16),ImGui::GetTextLineHeightWithSpacing());
+    while(clipper.Step()) for(int line=clipper.DisplayStart;line<clipper.DisplayEnd;++line) {
+        const size_t start=size_t(line)*16;char buffer[96];int written=std::snprintf(buffer,sizeof buffer,"%06zx  ",start);
+        for(size_t i=start;i<std::min(start+16,entry.data.size());++i) written+=std::snprintf(buffer+written,sizeof buffer-size_t(written),"%02x ",entry.data[i]);
+        ImGui::TextUnformatted(buffer);
+    }
+    ImGui::EndChild();ImGui::EndChild();
+}
+} // namespace albion::gui

@@ -31,7 +31,16 @@ struct TextureRow {
 // Every entry of every bank, in file order (a retail textures.big has ~6,300).
 std::vector<TextureRow> listTextures(const std::filesystem::path& texturesBig, std::string& error);
 
-// Decode an entry's first mip to RGBA.
+// Browser row lookup uses the same exact-name/unique-shortcut rules as decoding.
+// The returned pointer is owned by rows; failure leaves a diagnostic in error.
+const TextureRow* findTextureRow(const std::vector<TextureRow>& rows, const std::string& nameOrId, std::string& error);
+
+// Resolve an explicit bank/ID reference; names and other banks cannot shadow it.
+const TextureRow* findTextureRowById(const std::vector<TextureRow>& rows, const std::string& bank,
+                                     uint32_t id, std::string& error);
+
+// Decode an entry's first mip to RGBA. Exact names take priority over display
+// labels and numeric IDs; each lookup must identify one entry unambiguously.
 bool decodeTexture(const std::filesystem::path& texturesBig, const std::string& entryName,
                    terrainexport::Image& out, std::string& error);
 // The same from an archive already open (the list thumbnails decode many entries).

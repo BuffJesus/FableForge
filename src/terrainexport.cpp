@@ -457,7 +457,20 @@ struct TextureCache {
             warn("texture id " + std::to_string(id) + " is not in GBANK_MAIN_PC");
             return nullptr;
         }
-        const auto mip = forge::terraintex::decodeMip0(e->second->subHeader, big->entryData(*e->second));
+        if (!e->second) {
+            failed.insert(id);
+            warn("texture id " + std::to_string(id) + " is ambiguous in GBANK_MAIN_PC");
+            return nullptr;
+        }
+        std::vector<uint8_t> payload;
+        try {
+            payload = big->entryData(*e->second);
+        } catch (const std::exception& ex) {
+            failed.insert(id);
+            warn("texture " + e->second->name + " (" + std::to_string(id) + "): " + ex.what());
+            return nullptr;
+        }
+        const auto mip = forge::terraintex::decodeMip0(e->second->subHeader, payload);
         if (!mip.ok) {
             failed.insert(id);
             warn("texture " + e->second->name + " (" + std::to_string(id) + "): " + mip.error);
@@ -633,7 +646,7 @@ bool Context::textureInfo(uint32_t id, std::string& name, forge::terraintex::Tex
     if (!ready() || id == 0) return false;
     std::lock_guard<std::mutex> lock(impl_->cache.mutex);
     const auto e = impl_->cache.byId.find(id);
-    if (e == impl_->cache.byId.end()) return false;
+    if (e == impl_->cache.byId.end() || !e->second) return false;
     name = e->second->name;
     std::string err;
     return forge::terraintex::parseTextureInfo(e->second->subHeader.data(), e->second->subHeader.size(), info, err);
@@ -673,7 +686,10 @@ bool Context::load(const fs::path& gameRoot, const fs::path& texturesBig, std::s
         const auto* bank = impl->big.findBank("GBANK_MAIN_PC");
         if (!bank) throw std::runtime_error("no GBANK_MAIN_PC bank in " + texturesBig.string());
         impl->cache.big = &impl->big;
-        for (const auto& e : bank->entries) impl->cache.byId[e.id] = &e;
+        for (const auto& e : bank->entries) {
+            const auto [it, inserted] = impl->cache.byId.emplace(e.id, &e);
+            if (!inserted) it->second = nullptr; // An ID cannot choose between bank entries.
+        }
     } catch (const std::exception& e) {
         error = std::string("cannot open textures.big: ") + e.what();
         return false;

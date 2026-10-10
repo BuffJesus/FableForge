@@ -40,6 +40,7 @@
 #include "lodbake.hpp"
 #include "dxt1.hpp"
 #include "forge/stbinfo.hpp"
+#include "forge/stage.hpp"
 
 namespace fs = std::filesystem;
 namespace te = albion::terrainexport;
@@ -57,8 +58,12 @@ std::optional<int> runInstall(const std::string& cmd, const Args& args) {
             else { std::fprintf(stderr, "usage: forge backups | restore [--forget] [--install <root>]\n"); return 2; }
         }
         const Install install = findInstall(installArg);
-        if (!install.valid) { std::fprintf(stderr, "no Fable install (use --install)\n"); return 2; }
+        const bool explicitFolder=!installArg.empty() && fs::is_directory(install.root);
+        if (!install.valid && !explicitFolder) { std::fprintf(stderr, "no Fable install (use --install)\n"); return 2; }
         const auto entries = albion::backups::scan(install.root);
+        if (!install.valid && entries.empty() && !fs::is_regular_file(forge::stage::manifestPath(install.root))) {
+            std::fprintf(stderr, "no Fable install or tracked backup records in the selected folder\n"); return 2;
+        }
         if (cmd == "backups") {
             size_t changed = 0;
             for (const auto& e : entries) {

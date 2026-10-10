@@ -97,7 +97,9 @@ def main():
         baseline = snapshot(root)
         green, blue = case/'green.png', case/'replacement.png'
         Image.new('RGB', (64,64), (0,255,0)).save(green)
-        Image.new('RGB', (64,64), (0,0,255)).save(blue)
+        # Replacement must keep the 64x64 slot when the source is larger/smaller.
+        replacement_size = 64 if args.add else (128 if scale == 1 else 32)
+        Image.new('RGB', (replacement_size,replacement_size), (0,0,255)).save(blue)
         blue_hash, green_hash = digest(blue), digest(green)
         for name in (probe, other_name):
             result = subprocess.run([str(gui.with_name('forge.exe')), 'texture-add', name,

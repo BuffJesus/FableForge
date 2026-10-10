@@ -35,6 +35,7 @@
 #include "forge/budget.hpp"
 #include "forge/fillerfit.hpp"
 #include "forge/worldmerge.hpp"
+#include "forge/defexternal.hpp"
 #include "forge/lev.hpp"
 #include "forge/temporarydirectory.hpp"
 #include "forge/terrain.hpp"
@@ -99,6 +100,11 @@ void testDisabledEffects() {
     CHECK(effect.parsedFully && effect.systems==3);
     CHECK(effect.sprites.size()==1);
     if(effect.sprites.size()==1) CHECK(effect.sprites[0].sprite==30);
+    auto trailing=payload; trailing.push_back(0);
+    const auto withTrailing=albion::effects::decode(trailing);
+    CHECK(!withTrailing.parsedFully && withTrailing.sprites.size()==1);
+    auto unsupported=payload; unsupported[0]=101;
+    CHECK(!albion::effects::decode(unsupported).parsedFully);
     payload.pop_back();
     CHECK(!albion::effects::decode(payload).parsedFully);
 }
@@ -863,6 +869,143 @@ void testWater(const fs::path& dir) {
 
 // The level document: byte-exact round trip, frame edits in retail spelling,
 // duplicate/remove/place with undo, and the change summary.
+void testScriptNameSafety() {
+    const std::string source = "Version 2;\r\nXXXSectionStart NULL;\r\nNewThing Object;\r\nUID 1;\r\nDefinitionType \"OBJECT_A\";\r\nScriptName ROLE_TEST;\r\nHealth 1.0;\r\nEndThing;\r\nXXXSectionEnd;\r\n";
+    const std::vector<std::string> invalid = {"15360", "1ROLE", "\"ROLE\"", "ROLE TEST", "ROLE;Health 2", "ROLE\nTEST", "", "\xc3\xa9ROLE"};
+    const auto refused = [](auto operation) {
+        try { operation(); } catch (const std::invalid_argument&) { return true; }
+        return false;
+    };
+    // The same native token reader consumes creature brain and Switch names.
+    for (const auto& [type,key] : std::vector<std::pair<std::string,std::string>>{
+            {"AICreature","OverridingBrainName"},{"Switch","TriggeredByThing"},{"Switch","EnvironmentDef"}}) {
+        const std::string input="Version 2;\nXXXSectionStart NULL;\nNewThing "+type+
+            ";\nPlayer 4;\nUID 1;\nDefinitionType \"TEST_DEF\";\n"+key+
+            " ROLE_TEST;\nHealth 1.0;\nEndThing;\nXXXSectionEnd;\n";
+        for (const auto& value : invalid) {
+            for (int mode=0;mode<3;++mode) {
+                auto file=forge::tng::File::parseText(input);
+                if(mode==2) file.removeThingProperty(0,key);
+                const auto before=file.serialize();
+                CHECK(refused([&]{
+                    if(mode==0) file.setThingProperty(0,key,value);
+                    else if(mode==1) file.setThingPropertyAll(0,key,value);
+                    else file.insertThingPropertyBefore(0,key,value,"Health");
+                }));
+                CHECK(file.serialize()==before);
+            }
+            albion::editor::Document fieldDoc;
+            std::string fieldError;
+            CHECK(fieldDoc.openText("Native name fields",input,fieldError));
+            const auto revision=fieldDoc.revision();
+            CHECK(!fieldDoc.setPropertyValue(0,"",key,value));
+            CHECK(fieldDoc.text()==input && fieldDoc.revision()==revision && !fieldDoc.canUndo());
+            CHECK(refused([&]{fieldDoc.setProperty(0,key,value);}));
+            CHECK(fieldDoc.text()==input && fieldDoc.revision()==revision && !fieldDoc.canUndo());
+        }
+        auto legacy=input;
+        legacy.replace(legacy.find("ROLE_TEST"),9,"\"Legacy\"");
+        albion::editor::Document fieldDoc;
+        std::string fieldError;
+        CHECK(fieldDoc.openText("Legacy native name",legacy,fieldError));
+        CHECK(fieldDoc.setPropertyValue(0,"",key,"_VALID_2"));
+        CHECK(fieldDoc.text().find(key+" _VALID_2;")!=std::string::npos);
+        CHECK(fieldDoc.undo() && fieldDoc.text()==legacy);
+        CHECK(fieldDoc.setPropertyValue(0,"",key,"NULL"));
+    }
+    // A same-spelled unknown field on another thing type stays raw.
+    auto unrelated=forge::tng::File::parseText(source);
+    unrelated.setThingProperty(0,"OverridingBrainName","15360");
+    CHECK(unrelated.things()[0].find("OverridingBrainName")==std::optional<std::string_view>("15360"));
+    for (const auto& name : invalid) {
+        for (int mode = 0; mode != 3; ++mode) {
+            auto file = forge::tng::File::parseText(source);
+            if (mode == 2) file.removeThingProperty(0, "ScriptName");
+            const auto before = file.serialize();
+            CHECK(refused([&] {
+                if (mode == 0) file.setThingProperty(0, "scriptname", name);
+                else if (mode == 1) file.setThingPropertyAll(0, "ScriptName", name);
+                else file.insertThingPropertyBefore(0, "ScriptName", name, "Health");
+            }));
+            CHECK(file.serialize() == before && file.things().size() == 1);
+        }
+        albion::editor::Document doc;
+        std::string error;
+        CHECK(doc.openText("Script names", source, error));
+        const auto revision = doc.revision();
+        CHECK(!doc.setPropertyValue(0, "", "ScriptName", name));
+        CHECK(doc.text() == source && doc.revision() == revision && !doc.dirty() && !doc.canUndo());
+        CHECK(refused([&] { doc.setProperty(0, "ScriptName", name); }));
+        CHECK(doc.text() == source && doc.revision() == revision && !doc.dirty() && !doc.canUndo());
+        CHECK(refused([&] { doc.placeTrackNode(0, 0, 0, name); }));
+        CHECK(doc.text() == source && doc.revision() == revision && !doc.canUndo());
+        if (!name.empty()) {
+            const float position[3] = {0, 0, 0};
+            CHECK(refused([&] { doc.placeFishingSpot(position, "", name); }));
+            CHECK(doc.text() == source && doc.revision() == revision && !doc.canUndo());
+            forge::thingplacer::Placement placement;
+            placement.definitionType = "OBJECT_A";
+            placement.scriptName = name;
+            CHECK(refused([&] { doc.place(placement); }));
+            CHECK(doc.text() == source && doc.revision() == revision && !doc.canUndo());
+            CHECK(refused([&] { forge::thingplacer::serialize(placement, "\r\n"); }));
+            auto file = forge::tng::File::parseText(source);
+            CHECK(refused([&] { forge::thingplacer::place(file, placement); }));
+            CHECK(file.serialize() == source);
+        }
+    }
+    albion::editor::Document doc;
+    std::string error;
+    CHECK(doc.openText("Script names", source, error));
+    CHECK(doc.setPropertyValue(0, "", "ScriptName", "_ROLE_2"));
+    CHECK(doc.text().find("ScriptName _ROLE_2;") != std::string::npos);
+    doc.undo();
+    CHECK(doc.text() == source);
+    CHECK(doc.canRedo());
+    forge::thingplacer::Placement rejected;
+    rejected.definitionType = "OBJECT_A";
+    rejected.scriptName = "1ROLE";
+    const auto undoneRevision = doc.revision();
+    CHECK(refused([&] { doc.place(rejected); }));
+    CHECK(doc.canRedo() && !doc.canUndo() && doc.text() == source && doc.revision() == undoneRevision);
+    const auto node = doc.placeTrackNode(0, 0, 0, "ROLE_ROUTE");
+    const auto before = doc.text();
+    const auto revision = doc.revision();
+    CHECK(!doc.renameTrack(node, "1ROLE"));
+    CHECK(doc.text() == before && doc.revision() == revision);
+    CHECK(doc.renameTrack(node, "_ROLE_ROUTE_2"));
+    forge::thingplacer::Placement placement;
+    placement.definitionType = "OBJECT_A";
+    CHECK(forge::thingplacer::serialize(placement, "\r\n").find("ScriptName NULL;") != std::string::npos);
+    const std::string legacy = "Version 2;\r\nXXXSectionStart NULL;\r\nNewThing Object;\r\nScriptName \"Legacy\";\r\nHealth 1.0;\r\nEndThing;\r\nXXXSectionEnd;\r\n";
+    auto file = forge::tng::File::parseText(legacy);
+    CHECK(file.serialize() == legacy);
+    file.setThingProperty(0, "Health", "2.0");
+    CHECK(file.serialize().find("ScriptName \"Legacy\";") != std::string::npos);
+    albion::editor::Document legacyDoc;
+    CHECK(legacyDoc.openText("Legacy script name", legacy, error));
+    CHECK(legacyDoc.setPropertyValue(0, "", "ScriptName", "_CORRECTED_2"));
+    CHECK(legacyDoc.text().find("ScriptName _CORRECTED_2;") != std::string::npos);
+    legacyDoc.undo();
+    CHECK(legacyDoc.text() == legacy && legacyDoc.canRedo());
+    CHECK(!legacyDoc.setPropertyValue(0, "", "ScriptName", "15360"));
+    CHECK(legacyDoc.text() == legacy && legacyDoc.canRedo() && !legacyDoc.canUndo());
+    const std::string legacyTracks = "Version 2;\nXXXSectionStart NULL;\nNewThing TrackNode;\nUID 1;\nScriptName \"Legacy\";\nLinkedToUID1 0;\nLinkedToUID2 0;\nEndThing;\nNewThing TrackNode;\nUID 2;\nScriptName ROLE_ROUTE;\nLinkedToUID1 0;\nLinkedToUID2 0;\nEndThing;\nXXXSectionEnd;\n";
+    albion::editor::Document tracks;
+    CHECK(tracks.openText("Legacy tracks", legacyTracks, error));
+    const auto trackRevision = tracks.revision();
+    bool threw = false, linked = false;
+    try { linked = tracks.linkTrackNodes(0, 1, error); } catch (const std::invalid_argument&) { threw = true; }
+    CHECK(!threw && !linked && !error.empty());
+    CHECK(tracks.text() == legacyTracks && tracks.revision() == trackRevision && !tracks.canUndo());
+    // Correcting the name permits the same link operation.
+    if (tracks.text() == legacyTracks) {
+        CHECK(tracks.renameTrack(0, "_CORRECTED_ROUTE"));
+        CHECK(tracks.linkTrackNodes(0, 1, error));
+    }
+}
+
+
 void testLevelDocument() {
     auto near = [](float a, float b) { return std::fabs(a - b) < 1e-5f; };
     const std::string tng =
@@ -891,7 +1034,7 @@ void testLevelDocument() {
         "NewThing Marker;\r\n"
         "UID 18446744073709551614;\r\n"
         "DefinitionType \"MARKER_BASIC\";\r\n"
-        "ScriptName \"Start\";\r\n"
+        "ScriptName Start;\r\n"
         "EndThing;\r\n"
         "\r\n"
         "XXXSectionEnd;\r\n";
@@ -903,10 +1046,30 @@ void testLevelDocument() {
     CHECK(doc.thingCount() == 2);
     const auto s0 = doc.summary(0);
     CHECK(s0.definition == "OBJECT_BARREL_01" && s0.hasFrame && s0.scriptName.empty());
-    CHECK(doc.summary(1).scriptName == "\"Start\"" || doc.summary(1).scriptName == "Start");
+    CHECK(doc.summary(1).scriptName == "Start");
     albion::editor::Frame f;
     CHECK(doc.frameOf(0, f));
     CHECK(near(f.pos[0], 10.5f) && near(f.forward[1], 1.0f) && near(f.up[2], 1.0f) && near(f.scale, 1.0f));
+    for(bool owned:{false,true}) for(size_t component=0;component<10;++component)
+        for(const float invalid:{std::numeric_limits<float>::quiet_NaN(),std::numeric_limits<float>::infinity(),-std::numeric_limits<float>::infinity()}) {
+            albion::editor::Document candidate;CHECK(candidate.openText("Synthetic",tng,err));
+            auto invalidFrame=f;
+            float* value=component<3?&invalidFrame.pos[component]:component<6?&invalidFrame.forward[component-3]:
+                         component<9?&invalidFrame.up[component-6]:&invalidFrame.scale;
+            *value=invalid;
+            const auto revision=candidate.revision();
+            if(owned) candidate.setOwnedFrame(0,invalidFrame);else candidate.setFrame(0,invalidFrame);
+            CHECK(candidate.text()==tng && candidate.revision()==revision && !candidate.canUndo());
+        }
+    for(bool owned:{false,true}) {
+        albion::editor::Document candidate;CHECK(candidate.openText("Synthetic",tng,err));
+        auto moved=f;moved.pos[0]+=1;candidate.setFrame(0,moved);const auto changed=candidate.text();
+        CHECK(candidate.undo() && candidate.canRedo());const auto revision=candidate.revision();
+        moved.scale=std::numeric_limits<float>::infinity();
+        if(owned) candidate.setOwnedFrame(0,moved);else candidate.setFrame(0,moved);
+        CHECK(candidate.text()==tng && candidate.revision()==revision && !candidate.canUndo() && candidate.canRedo());
+        CHECK(candidate.redo() && candidate.text()==changed);
+    }
 
     // frame <-> matrix agree with thingBasis' convention and invert each other
     float m[16]; albion::editor::frameToMatrix(f, m);
@@ -915,6 +1078,32 @@ void testLevelDocument() {
     for (int r = 0; r < 3; ++r) for (int c = 0; c < 3; ++c) CHECK(near(m[r * 4 + c], basis[r * 3 + c]));
     albion::editor::Frame back; CHECK(albion::editor::matrixToFrame(m, back));
     CHECK(near(back.pos[1], 20.25f) && near(back.forward[1], 1.0f) && near(back.scale, 1.0f));
+    for(const float scale:{1e-5f,1.0f,1e20f,1e30f}) {
+        auto large=f;large.scale=scale;
+        float matrix[16];albion::editor::frameToMatrix(large,matrix);
+        albion::editor::Frame recovered;
+        CHECK(albion::editor::matrixToFrame(matrix,recovered));
+        CHECK(std::isfinite(recovered.scale) && std::abs(double(recovered.scale)/scale-1)<1e-6 &&
+              near(recovered.forward[1],1) && near(recovered.up[2],1));
+    }
+    {
+        auto large=f;large.forward[1]=1e30f;large.up[2]=1e30f;
+        float matrix[16];albion::editor::frameToMatrix(large,matrix);
+        for(size_t element=0;element<16;++element) CHECK(near(matrix[element],m[element]));
+    }
+    for(size_t element=0;element<16;++element)
+        for(const float bad:{std::numeric_limits<float>::quiet_NaN(),std::numeric_limits<float>::infinity(),-std::numeric_limits<float>::infinity()}) {
+        float invalid[16];std::copy(m,m+16,invalid);invalid[element]=bad;
+        auto preserved=f;CHECK(!albion::editor::matrixToFrame(invalid,preserved));
+        CHECK(std::equal(preserved.pos,preserved.pos+3,f.pos) && std::equal(preserved.forward,preserved.forward+3,f.forward) &&
+              std::equal(preserved.up,preserved.up+3,f.up) && preserved.scale==f.scale);
+    }
+    {
+        float oversized[16];std::copy(m,m+16,oversized);
+        oversized[0]=oversized[5]=oversized[10]=std::numeric_limits<float>::max();
+        auto preserved=f;CHECK(!albion::editor::matrixToFrame(oversized,preserved));
+        CHECK(preserved.pos[0]==f.pos[0] && preserved.scale==f.scale);
+    }
     float inv[16], id[16]; CHECK(albion::editor::invert(m, inv)); albion::editor::multiply(m, inv, id);
     CHECK(near(id[0], 1) && near(id[5], 1) && near(id[10], 1) && near(id[15], 1) && near(id[12], 0));
 
@@ -964,8 +1153,8 @@ void testLevelDocument() {
     bool removed = false; for (const auto& c : ch) removed = removed || c.rfind("removed OBJECT_BARREL_01", 0) == 0;
     CHECK(removed);
     // setProperty + markSaved
-    doc.setProperty(0, "ScriptName", "\"Exit\"");
-    CHECK(doc.text().find("ScriptName \"Exit\";") != std::string::npos);
+    doc.setProperty(0, "ScriptName", "Exit");
+    CHECK(doc.text().find("ScriptName Exit;") != std::string::npos);
     doc.markSaved();
     CHECK(!doc.dirty() && doc.changes().empty());
     // a batch is one undo step: two moves + a duplicate, one undo restores all
@@ -2461,6 +2650,13 @@ void testListEntries() {
     ed::Document doc;
     std::string err;
     CHECK(doc.openText("Lists", tng, err));
+    for (const size_t index : {size_t(0),size_t(1)}) {
+        const auto before=doc.text();
+        const auto revision=doc.revision();
+        CHECK(!doc.addListEntry(index,"CTCCreatureGenerator","CreatureFamilies",std::string("\"a\0b\"",5)));
+        CHECK(doc.text()==before && doc.revision()==revision && !doc.canUndo());
+    }
+
     CHECK((doc.listEntries(0, "CTCCreatureGenerator", "CreatureFamilies") == std::vector<std::string>{"\"BEETLES_02\"", "\"HOBBES_02_A\""}));
     CHECK(doc.addListEntry(0, "CTCCreatureGenerator", "CreatureFamilies", "\"WASPS_01\""));
     CHECK(doc.text().find("CreatureFamilies[1] \"HOBBES_02_A\";\r\nCreatureFamilies[2] \"WASPS_01\";\r\nGenerationRadius") != std::string::npos);
@@ -2571,9 +2767,9 @@ void testQuestSections() {
     namespace ed = albion::editor;
     const std::string tng =
         "Version 2;\r\nXXXSectionStart NULL;\r\n"
-        "NewThing Object;\r\nUID 100;\r\nDefinitionType \"OBJECT_BARREL_01\";\r\nScriptName NULL;\r\nEndThing;\r\n\r\n"
+        "NewThing Object;\r\nPlayer 4;\r\nUID 100;\r\nDefinitionType \"OBJECT_BARREL_01\";\r\nScriptName NULL;\r\nEndThing;\r\n\r\n"
         "XXXSectionEnd;\r\n\r\nXXXSectionStart Q_TEST;\r\n"
-        "NewThing Object;\r\nUID 200;\r\nDefinitionType \"OBJECT_CRATE_01\";\r\nScriptName NULL;\r\nEndThing;\r\n\r\n"
+        "NewThing Object;\r\nPlayer 4;\r\nUID 200;\r\nDefinitionType \"OBJECT_CRATE_01\";\r\nScriptName NULL;\r\nEndThing;\r\n\r\n"
         "XXXSectionEnd;\r\n";
     ed::Document doc;
     std::string err;
@@ -2613,9 +2809,9 @@ void testDayNightSections() {
     CHECK((ed::Document::splitDayNight("Q_TEST%dayonly").second == 0));   // the engine compares exactly
     const std::string tng =
         "Version 2;\r\nXXXSectionStart NULL;\r\n"
-        "NewThing Object;\r\nUID 100;\r\nDefinitionType \"OBJECT_BARREL_01\";\r\nScriptName NULL;\r\nEndThing;\r\n\r\n"
+        "NewThing Object;\r\nPlayer 4;\r\nUID 100;\r\nDefinitionType \"OBJECT_BARREL_01\";\r\nScriptName NULL;\r\nEndThing;\r\n\r\n"
         "XXXSectionEnd;\r\n\r\nXXXSectionStart Q_TEST;\r\n"
-        "NewThing Object;\r\nUID 200;\r\nDefinitionType \"OBJECT_CRATE_01\";\r\nScriptName NULL;\r\nEndThing;\r\n\r\n"
+        "NewThing Object;\r\nPlayer 4;\r\nUID 200;\r\nDefinitionType \"OBJECT_CRATE_01\";\r\nScriptName NULL;\r\nEndThing;\r\n\r\n"
         "XXXSectionEnd;\r\n";
     ed::Document doc;
     std::string err;
@@ -2623,8 +2819,10 @@ void testDayNightSections() {
     const auto day = doc.setDayNight(1, 1);
     CHECK(day && doc.sectionOf(*day) == "Q_TEST%DayOnly" && doc.summary(*day).definition == "OBJECT_CRATE_01");
     CHECK(doc.text().find("XXXSectionStart Q_TEST%DayOnly;") != std::string::npos);
+    CHECK(forge::defexternal::reviewTng(doc.text()).definitionIndependent);
     const auto night = doc.setDayNight(*day, 2);
     CHECK(night && doc.sectionOf(*night) == "Q_TEST%NightOnly");
+    CHECK(forge::defexternal::reviewTng(doc.text()).definitionIndependent);
     const auto both = doc.setDayNight(*night, 0);
     CHECK(both && doc.sectionOf(*both) == "Q_TEST");
     CHECK(doc.setDayNight(*both, 0) == both);                     // already there: nothing to do
@@ -2647,6 +2845,33 @@ void testDayNightSections() {
         return std::string("none");
     };
     CHECK(player(c) == "2" && player(v) == "4");
+    // Section names use a delimited native string, so numeric names and spaces
+    // stay supported. A new header cannot contain statement/line delimiters.
+    for (const std::string name : {std::string(""), std::string(" "), std::string("\t"),
+                                  std::string(" Quest"), std::string("Quest "),
+                                  std::string("Q;Other"), std::string("Q\nOther"),
+                                  std::string("Q\rOther"), std::string("Q\0Other",7)}) {
+        const std::string empty = "Version 2;\r\n";
+        auto file = forge::tng::File::parseText(empty);
+        bool refused = false;
+        try { file.addSection(name); } catch (const std::exception&) { refused = true; }
+        CHECK(refused && file.serialize()==empty);
+        file = forge::tng::File::parseText(empty);
+        refused = false;
+        try { file.insertThingBlock(name, "NewThing Object;\r\nUID 1;\r\nEndThing;\r\n"); }
+        catch (const std::exception&) { refused = true; }
+        CHECK(refused && file.serialize()==empty && file.things().empty());
+    }
+    auto names = forge::tng::File::parseText("Version 2;\n");
+    CHECK(names.addSection("15360") && names.addSection("Quest Label") && names.addSection("NULL%DayOnly"));
+    CHECK(names.sectionNames()==std::vector<std::string>({"15360","Quest Label","NULL%DayOnly"}));
+    // Preserve an imported unsupported header rather than partially editing it.
+    const std::string legacy = "Version 2;\nXXXSectionStart Q;Legacy;\nNewThing Object;\nUID 1;\nDefinitionType \"OBJECT_A\";\nEndThing;\nXXXSectionEnd;\n";
+    ed::Document legacyDoc;
+    CHECK(legacyDoc.openText("Legacy section",legacy,err));
+    const auto revision = legacyDoc.revision();
+    CHECK(!legacyDoc.setDayNight(0,1));
+    CHECK(legacyDoc.text()==legacy && legacyDoc.revision()==revision && !legacyDoc.canUndo());
 }
 
 // The per-component property grid (vanilla Thing Properties tabs): kinds, the
@@ -2675,6 +2900,70 @@ void testThingProperties() {
     CHECK(find("CTCDoor", "StartOpen") && find("CTCDoor", "StartOpen")->kind == K::Bool);
     CHECK(find("CTCDoor", "LockLevel") && find("CTCDoor", "LockLevel")->kind == K::Int);
     CHECK(!find("", "UID") && !find("", "DefinitionType") && !find("CTCPhysicsStandard", "PositionX") && !find("CTCOwnedEntity", "OwnerUID"));
+    // A quoted value must still occupy one serialized line. Refuse before undo.
+    for (const std::string value : {std::string("\"a\nb\""), std::string("\"a\rb\""),
+                                    std::string("\"a\0b\"",5)}) {
+        ed::Document unsafe;
+        CHECK(unsafe.openText("Unsafe property", tng, err));
+        const auto revision = unsafe.revision();
+        CHECK(!unsafe.setPropertyValue(0, "", "ScriptData", value));
+        CHECK(unsafe.text()==tng && unsafe.revision()==revision && !unsafe.canUndo());
+    }
+    // Numeric-looking text must fit the serialized float before creating undo.
+    for (const std::string value : {std::string(40,'9'), "-"+std::string(40,'9'),
+                                    std::string(40,'9')+".0"}) {
+        ed::Document unsafe;
+        CHECK(unsafe.openText("Float property range",tng,err));
+        const auto revision=unsafe.revision();
+        CHECK(!unsafe.setPropertyValue(0,"","Health",value));
+        CHECK(unsafe.text()==tng && unsafe.revision()==revision && !unsafe.canUndo());
+    }
+    for (const std::string value : {"0","-2.5","+2.5","99999999999999999999999999999999999999"}) {
+        ed::Document valid;
+        CHECK(valid.openText("Finite float property",tng,err));
+        CHECK(valid.setPropertyValue(0,"","Health",value));
+        auto expected=tng;
+        expected.replace(expected.find("Health 1.0;"),11,"Health "+value+";");
+        CHECK(valid.text()==expected);
+        CHECK(valid.undo() && valid.text()==tng);
+    }
+    {
+        ed::Document sequence;
+        CHECK(sequence.openText("Float integer spelling",tng,err));
+        CHECK(sequence.setPropertyValue(0,"","Health","3"));
+        bool typedFloat=false;
+        for(const auto& row:sequence.propertiesOf(0))
+            if(row.ctc.empty() && row.key=="Health") typedFloat=row.kind==K::Float;
+        CHECK(typedFloat);
+        const auto before=sequence.text();
+        const auto revision=sequence.revision();
+        CHECK(!sequence.setPropertyValue(0,"","Health",std::string(40,'9')));
+        CHECK(sequence.text()==before && sequence.revision()==revision);
+        CHECK(sequence.undo() && sequence.text()==tng);
+    }
+    for(const auto& [type,key]:std::vector<std::pair<std::string,std::string>>{
+            {"Object","ObjectScale"},{"Marker","Health"},{"Building","Health"},
+            {"Village","Health"},{"Holy Site","Health"},{"TrackNode","Health"},
+            {"Switch","TriggerRadius"},{"Switch","TimeToChangeEnvironmentDef"},
+            {"AICreature","InitialPosX"}}) {
+        const std::string input="Version 2;\nXXXSectionStart NULL;\nNewThing "+type+
+            ";\nUID 1;\nDefinitionType \"TEST\";\n"+key+" 3;\nEndThing;\nXXXSectionEnd;\n";
+        ed::Document typed;
+        CHECK(typed.openText("Native scalar kind",input,err));
+        const auto revision=typed.revision();
+        CHECK(!typed.setPropertyValue(0,"",key,std::string(40,'9')));
+        CHECK(typed.text()==input && typed.revision()==revision && !typed.canUndo());
+        CHECK(typed.setPropertyValue(0,"",key,"2.5"));
+        CHECK(typed.undo() && typed.text()==input);
+    }
+    for(const std::string type:{"Thing","UnknownThing"}) {
+        ed::Document raw;
+        const std::string input="Version 2;\nXXXSectionStart NULL;\nNewThing "+type+
+            ";\nHealth 3;\nEndThing;\nXXXSectionEnd;\n";
+        CHECK(raw.openText("Unclassified scalar",input,err));
+        CHECK(!raw.setPropertyValue(0,"","Health","2.5"));
+        CHECK(raw.text()==input && !raw.canUndo());
+    }
     CHECK(doc.setPropertyValue(0, "CTCDoor", "StartOpen", "TRUE"));
     CHECK(doc.text().find("StartOpen TRUE;") != std::string::npos);
     CHECK(!doc.setPropertyValue(0, "CTCDoor", "StartOpen", "3"));      // a bool stays a bool
@@ -3394,7 +3683,40 @@ void testMeshCompose() {
         CHECK(g.vertices[4].nz > 0.9f);
     }
     CHECK(packNormal({0, 0, 1}) == (uint32_t(511) << 22));
+    {
+        auto native=m;native.name="";native.originalId=7;native.originalMapFlags=0x81234567;
+        native.diffuseId=0x80000002;native.bumpId=9;native.reflectId=10;native.illumId=11;
+        native.decalId=12;native.selfIllum=-1;native.nativeFlags=std::array<uint8_t,5>{2,3,4,0,1};
+        native.filenames={"diff.bin","bump.bin","reflect.bin","illum.bin"};
+        Material sentinel;sentinel.name="DegenerateTriangles";sentinel.originalId=0;
+        sentinel.nativeFlags=std::array<uint8_t,5>{0,0,0,1,0};
+        const auto source=composeStatic("MESH_PRESERVED_MATERIALS",{p},{native,sentinel},false,0,false);
+        const auto decoded=forge::meshpreview::decodeLod0(source.payload,1);
+        CHECK(decoded.materials.size()==2 && decoded.materials[0].name.empty() && decoded.materials[0].id==7);
+        CHECK(decoded.materials[0].nativeFlags==*native.nativeFlags && decoded.materials[0].filenames==native.filenames);
+        CHECK(decoded.materials[0].decalId==12 && decoded.materials[0].textureFlags==0x81234567 && decoded.materials[0].glowStrength==UINT32_MAX);
+        CHECK(decoded.triangles.size()==p.faces.size() && decoded.triangles.front().material==0);
+        auto changed=p;changed.verts[4].z=3;
+        const auto replaced=composeStatic("MESH_PRESERVED_MATERIALS",{changed},{native,sentinel},true,0,false);
+        const auto after=forge::meshpreview::decodeLod0(replaced.payload,1);
+        for(size_t slot=0;slot<2;++slot) {
+            const auto& a=decoded.materials[slot];const auto& b=after.materials[slot];
+            const size_t aWord=(*a.textureWordOffsets)[0],bWord=(*b.textureWordOffsets)[0];
+            const size_t aStart=aWord-a.name.size()-9,bStart=bWord-b.name.size()-9;
+            size_t length=aWord+29-aStart;
+            if(a.nativeFlags[4]) for(const auto& filename:a.filenames) length+=filename.size()+1;
+            CHECK(std::equal(source.payload.begin()+aStart,source.payload.begin()+aStart+length,replaced.payload.begin()+bStart));
+        }
+        CHECK(after.vertices[4].z==3);
+    }
     CHECK(compressUv(0.0f) == 16384 && compressUv(1.0f) == 18432);
+    CHECK(compressUv(1e20f)==32767 && compressUv(-1e20f)==-32768);
+    CHECK(compressUv(std::numeric_limits<float>::max())==32767);
+    bool invalidUv=false;
+    try { (void)compressUv(std::numeric_limits<float>::quiet_NaN()); }
+    catch(const std::invalid_argument&) { invalidUv=true; }
+    CHECK(invalidUv);
+
     bool threw = false;
     try { composeStatic("NOTMESH", {p}, {m}); } catch (const std::invalid_argument&) { threw = true; }
     CHECK(threw);
@@ -3412,6 +3734,13 @@ void testMeshCacheLifetime(const fs::path& dir) {
         forge::big::Entry entry;
         entry.id = 77; entry.type = 1; entry.name = "MESH_CACHE_LIFETIME";
         entry.data = mesh.payload; entry.subHeader = mesh.info;
+        // Two authored LODs also exercise the deferred read after another
+        // install becomes active and the process-wide cache is closed.
+        uint32_t lodSize=0, two=2;
+        std::memcpy(&lodSize,mesh.info.data()+48,4);
+        std::memcpy(entry.subHeader.data()+44,&two,4);
+        entry.subHeader.insert(entry.subHeader.begin()+52,mesh.info.begin()+48,mesh.info.begin()+52);
+        entry.data.insert(entry.data.begin()+lodSize,mesh.payload.begin(),mesh.payload.begin()+lodSize);
         bank.entries.push_back(std::move(entry));
         const auto bytes = file.serialize();
         std::ofstream out(path, std::ios::binary);
@@ -3448,6 +3777,139 @@ void testMeshCacheLifetime(const fs::path& dir) {
     resume.set_value();
     CHECK(reader.get());
     CHECK(lifetime.expired()); // no retired-bank leak after the last reader exits
+
+    CHECK(fe::openMeshBank(first, error));
+    auto before = fe::cachedMesh(77, error);
+    const auto stamp = fs::last_write_time(first);
+    writeBank(first, 12);
+    fs::last_write_time(first, stamp + std::chrono::seconds(2));
+    CHECK(fe::openMeshBank(first, error));
+    auto changed = fe::cachedMesh(77, error);
+    CHECK(changed && changed->vertices[2].z == 12 && changed != before);
+    CHECK(before && before->vertices[2].z == 2);
+    fs::remove(first);
+    CHECK(!fe::openMeshBank(first, error));
+    CHECK(!error.empty());
+    CHECK(!fe::cachedMesh(77, error) && fe::meshName(77).empty());
+    writeBank(first, 15);
+    CHECK(fe::openMeshBank(first, error));
+    CHECK(error.empty());
+    auto restored = fe::cachedMesh(77, error);
+    CHECK(restored && restored->vertices[2].z == 15);
+    { std::ofstream corrupt(first, std::ios::binary); corrupt << "bad"; }
+    CHECK(!fe::openMeshBank(first, error));
+    CHECK(!error.empty());
+    CHECK(changed && changed->vertices[2].z == 12);
+    CHECK(!fe::cachedMesh(77, error) && fe::meshIdByName("MESH_CACHE_LIFETIME") == 0);
+    fe::closeMeshBank();
+
+    writeBank(first, 2);
+    albion::thingsexport::Options options;
+    options.gameRoot=dir/"mesh-worker-no-effects";
+    options.graphicsBig=first; options.particles=true; options.textures=false;
+    options.tngText="Version 2;\nXXXSectionStart NULL;\nNewThing Object;\nUID 1;\n"
+        "DefinitionType \"OBJECT_TEST\";\nGraphicOverride \"MESH_CACHE_LIFETIME\";\n"
+        "StartCTCPhysicsStandard;\nPositionX 1;\nPositionY 2;\nPositionZ 3;\n"
+        "EndCTCPhysicsStandard;\nEndThing;\nXXXSectionEnd;\n";
+    bool switched=false;
+    options.log=[&](const std::string& message) {
+        if(message.find("particle effects unavailable:")==std::string::npos) return;
+        // Force another worker to open a different install between this
+        // export's bank open and its first model lookup, without timing races.
+        auto other=std::async(std::launch::async,[&] {
+            std::string detail;return fe::openMeshBank(second,detail);
+        });
+        switched=other.get();
+    };
+    albion::terrainexport::Context context;
+    auto scene=albion::thingsexport::load("fixture",options,context);
+    CHECK(switched && scene.meshes.size()==1);
+    if(!scene.meshes.empty()) CHECK(scene.meshes[0].geometry.vertices[2].z==2);
+    auto otherMesh=fe::cachedMesh(77,error);
+    CHECK(otherMesh && otherMesh->vertices[2].z==9);
+    std::weak_ptr<fe::MeshBank> retained=scene.meshBank;
+    fe::closeMeshBank();
+    auto sceneMesh=fe::cachedMesh(scene.meshBank,77,error);
+    CHECK(sceneMesh && sceneMesh->vertices[2].z==2 && !retained.expired());
+    fe::loadWorldLods(scene,context);
+    CHECK(scene.meshes.size()==1 && scene.meshes[0].lods.size()==1);
+    if(!scene.meshes.empty() && !scene.meshes[0].lods.empty())
+        CHECK(scene.meshes[0].lods[0].geometry.vertices[2].z==2);
+    scene.meshBank.reset();
+    CHECK(retained.expired());
+    auto ambiguous=forge::big::File::openFully(second);
+    auto duplicate=ambiguous.banks()[0].entries[0];
+    duplicate.data=ambiguous.entryData(duplicate);
+    duplicate.name="OTHER_MESH_WITH_SAME_ID";
+    ambiguous.banks()[0].entries.push_back(duplicate);
+    const auto ambiguousPath=dir/"mesh_ambiguous_id.big";
+    {
+        const auto bytes=ambiguous.serialize();std::ofstream out(ambiguousPath,std::ios::binary);
+        out.write(reinterpret_cast<const char*>(bytes.data()),bytes.size());
+    }
+    CHECK(!fe::openMeshBank(ambiguousPath,error));
+    CHECK(error.find("duplicate mesh entry ID")!=std::string::npos);
+    bool refused=false;
+    try { (void)forge::meshpreview::readLod0(ambiguousPath,77); }
+    catch(const std::exception& e) { refused=std::string(e.what()).find("duplicate mesh entry ID")!=std::string::npos; }
+    CHECK(refused);
+    fe::closeMeshBank();
+}
+
+void testParticleExportReload(const fs::path& dir) {
+    const auto root=dir/"effects-export-reload";
+    const auto effectPath=root/"data/Misc/pc/effects.big";
+    const auto meshPath=root/"data/graphics/graphics.big";
+    auto write=[&](const fs::path& path,const std::vector<uint8_t>& data) {
+        fs::create_directories(path.parent_path());
+        std::ofstream out(path,std::ios::binary);
+        out.write(reinterpret_cast<const char*>(data.data()),data.size());
+    };
+    forge::big::File graphics;graphics.addBank("MBANK_ALLMESHES",205);
+    write(meshPath,graphics.serialize());
+    std::vector<uint8_t> payload;
+    auto u32=[&](uint32_t n){for(int k=0;k<4;++k)payload.push_back(uint8_t(n>>(8*k)));};
+    auto str=[&](const char* value){do{payload.push_back(uint8_t(*value));}while(*value++);};
+    u32(100);str("Reload light");payload.insert(payload.end(),7+5*4+4+5,0);
+    u32(1);str("light");payload.push_back(1);payload.push_back(0);
+    u32(0);u32(0);u32(0);u32(1);str("CPSCLight");u32(0);payload.push_back(1);
+    std::vector<uint8_t> light(71,0);const float radius=3;
+    std::memcpy(light.data()+20,&radius,4);light[50]=1;
+    std::fill(light.begin()+59,light.begin()+63,255);
+    payload.insert(payload.end(),light.begin(),light.end());payload.push_back(0x7b);payload.push_back(0x26);
+    forge::big::File effects;auto& bank=effects.addBank("PARTICLE_MAIN_PC",111);
+    forge::big::Entry entry;entry.name="RELOAD_LIGHT";entry.id=1;entry.data=payload;bank.entries.push_back(entry);
+    const auto good=effects.serialize();write(effectPath,good);
+    albion::thingsexport::Options options;options.gameRoot=root;options.particles=true;options.textures=false;
+    options.tngText="Version 2;\nXXXSectionStart NULL;\nNewThing Object;\nUID 1;\n"
+        "DefinitionType \"PARTICLE_EMITTER_PLACEABLE\";\nStartCTCPhysicsStandard;\n"
+        "PositionX 1;\nPositionY 2;\nPositionZ 3;\nEndCTCPhysicsStandard;\n"
+        "StartCTCDParticleEmitter;\nParticleTypeName \"RELOAD_LIGHT\";\nEndCTCDParticleEmitter;\n"
+        "EndThing;\nXXXSectionEnd;\n";
+    albion::terrainexport::Context context;albion::thingsexport::Stats stats;
+    auto scene=albion::thingsexport::load("fixture",options,context,&stats);
+    CHECK(scene.lights.size()==1 && stats.particlesPlaced==1 && stats.particlesUnknown==0);
+    auto held=albion::effects::byName(root,"RELOAD_LIGHT");
+    write(effectPath,{1,2,3});
+    scene=albion::thingsexport::load("fixture",options,context,&stats);
+    CHECK(scene.lights.empty() && stats.particlesPlaced==0 && stats.particlesUnknown==1);
+    CHECK(std::any_of(scene.warnings.begin(),scene.warnings.end(),[](const auto& warning){
+        return warning.find("particle effects unavailable:")!=std::string::npos;
+    }));
+    CHECK(held && held->lights.size()==1);
+    fs::remove(effectPath);
+    scene=albion::thingsexport::load("fixture",options,context,&stats);
+    CHECK(scene.lights.empty() && stats.particlesUnknown==1);
+    write(effectPath,good);
+    scene=albion::thingsexport::load("fixture",options,context,&stats);
+    CHECK(scene.lights.size()==1 && stats.particlesPlaced==1 && stats.particlesUnknown==0);
+    auto duplicate=entry;duplicate.id=2;bank.entries.push_back(duplicate);
+    write(effectPath,effects.serialize());
+    scene=albion::thingsexport::load("fixture",options,context,&stats);
+    CHECK(scene.lights.empty() && stats.particlesUnknown==1);
+    CHECK(std::any_of(scene.warnings.begin(),scene.warnings.end(),[](const auto& warning){
+        return warning.find("has no unique match in effects.big")!=std::string::npos;
+    }));
 }
 
 void testEffectsBankLifetime(const fs::path& dir) {
@@ -3502,6 +3964,49 @@ void testEffectsBankLifetime(const fs::path& dir) {
     const auto changed=fx::byName(first,"SAME_EFFECT");
     CHECK(changed && changed->displayName=="Changed size automatically invalidates");
     CHECK(fresh && fresh->displayName=="Fresh");
+    const auto namesRoot=dir/"effects-name-collisions";
+    writeBank(namesRoot,"Names");
+    const auto namesPath=namesRoot/"data/Misc/pc/effects.big";
+    auto namesFile=forge::big::File::openFully(namesPath);
+    auto* namesBank=namesFile.findBank("PARTICLE_MAIN_PC");
+    auto firstName=namesBank->entries.front(); firstName.id=100; firstName.name="Mixed";
+    auto secondName=firstName; secondName.id=101; secondName.name="MIXED";
+    namesBank->entries.push_back(firstName); namesBank->entries.push_back(secondName);
+    const auto nameBytes=namesFile.serialize();
+    { std::ofstream out(namesPath,std::ios::binary);
+      out.write(reinterpret_cast<const char*>(nameBytes.data()),nameBytes.size()); }
+    CHECK(fx::openBank(namesRoot,error,true));
+    const auto mixed=fx::byName(namesRoot,"Mixed"), upperMixed=fx::byName(namesRoot,"MIXED");
+    CHECK(mixed && mixed->id==100 && upperMixed && upperMixed->id==101);
+    CHECK(!fx::byName(namesRoot,"mixed")); // ambiguous case-insensitive convenience query
+    CHECK(fx::entryNames(namesRoot)==std::vector<std::string>({"MIXED","Mixed","SAME_EFFECT"}));
+    CHECK(fx::byName(namesRoot,"same_effect")->id==42);
+    CHECK(fx::byName(namesRoot,"same_effect")==fx::byName(namesRoot,"SAME_EFFECT"));
+    namesBank->entries.push_back(firstName);
+    const auto duplicateBytes=namesFile.serialize();
+    { std::ofstream out(namesPath,std::ios::binary);
+      out.write(reinterpret_cast<const char*>(duplicateBytes.data()),duplicateBytes.size()); }
+    CHECK(fx::openBank(namesRoot,error,true));
+    CHECK(!fx::byName(namesRoot,"Mixed") && !fx::byName(namesRoot,"mixed"));
+    CHECK(fx::byName(namesRoot,"MIXED")->id==101);
+    CHECK(mixed && mixed->id==100); // retained snapshot survives the ambiguous reload
+
+    auto& unrelated=namesFile.addBank("PARTICLE_FRONTEND_PC",111);
+    auto unrelatedEntry=firstName; unrelatedEntry.data=namesFile.entryData(firstName); unrelatedEntry.name="SAME_EFFECT"; unrelatedEntry.id=999;
+    unrelated.entries.push_back(unrelatedEntry);
+    const auto multiBank=namesFile.serialize();
+    { std::ofstream out(namesPath,std::ios::binary);
+      out.write(reinterpret_cast<const char*>(multiBank.data()),multiBank.size()); }
+    CHECK(fx::openBank(namesRoot,error,true));
+    const auto mainOnly=fx::byName(namesRoot,"SAME_EFFECT");
+    CHECK(mainOnly && mainOnly->id==42 && fx::entryCount()==4);
+    forge::big::File missingMain;
+    missingMain.addBank("PARTICLE_FRONTEND_PC",111).entries.push_back(unrelatedEntry);
+    const auto missingBytes=missingMain.serialize();
+    { std::ofstream out(namesPath,std::ios::binary);
+      out.write(reinterpret_cast<const char*>(missingBytes.data()),missingBytes.size()); }
+    CHECK(!fx::openBank(namesRoot,error,true));
+    CHECK(error.find("PARTICLE_MAIN_PC")!=std::string::npos);
     std::weak_ptr<const fx::Effect> originalLifetime=held, refreshedLifetime=fresh;
     held.reset(); fresh.reset();
     CHECK(originalLifetime.expired() && refreshedLifetime.expired());
@@ -3544,6 +4049,27 @@ void testNavigationDetail() {
         rejected = false;
         try { decodeHull(bytes, {}); } catch (const std::runtime_error&) { rejected = true; }
         CHECK(rejected);
+    }
+}
+
+void testNavigationPhysicsReferences(const fs::path& dir) {
+    forge::meshcompose::Primitive primitive;
+    primitive.verts={{0,0,0},{1,0,0},{0,1,0}};primitive.faces={{0,1,2}};
+    for(uint32_t physics:{0u,0x7fffffffu,0x80000000u,0xfffffffeu,0xffffffffu}) {
+        forge::big::File fixture;
+        auto& bank=fixture.addBank("MBANK_ALLMESHES",205);
+        forge::big::Entry render;render.id=1;render.type=1;render.name="MESH_REFERENCE";
+        render.subHeader.resize(4);std::memcpy(render.subHeader.data(),&physics,4);
+        forge::big::Entry collision;collision.id=physics;collision.type=3;collision.name="MESH_REFERENCE[PHYSICS]";
+        collision.data=forge::meshcompose::composePhysics({primitive});
+        bank.entries.push_back(std::move(render));bank.entries.push_back(std::move(collision));
+        const auto bytes=fixture.serialize();const auto path=dir/("physics-reference-"+std::to_string(physics)+".big");
+        {std::ofstream out(path,std::ios::binary);out.write(reinterpret_cast<const char*>(bytes.data()),bytes.size());}
+        const auto archive=forge::big::File::open(path);
+        albion::navlines::HullCache cache(archive,{});
+        const auto* hull=cache.forRenderMesh(1);
+        CHECK((hull!=nullptr)==(physics!=0 && physics!=0xffffffffu));
+        if(hull) CHECK(hull->radius>0);
     }
 }
 
@@ -3662,7 +4188,25 @@ void testGroundNavigation(const fs::path& dir) {
     CHECK(rejected);
 }
 
-int main() {
+int main(int argc, char** argv) {
+    if (argc==3 && std::string_view(argv[1])=="--effects-bank") {
+        const auto bank=forge::big::File::open(argv[2]);
+        size_t count=0,complete=0;
+        for (const auto& b:bank.banks()) if (b.name=="PARTICLE_MAIN_PC")
+            for (const auto& entry:b.entries) {
+                ++count;
+                const auto effect=albion::effects::decode(bank.entryData(entry));
+                if(effect.parsedFully) ++complete;
+                else {
+                    std::cerr << entry.name << ":";
+                    for(const auto& reason:effect.previewUnsupported) std::cerr << " " << reason;
+                    std::cerr << '\n';
+                }
+            }
+        std::cout << "Effect payload decode: " << complete << '/' << count << " complete\n";
+        return count && complete==count ? 0 : 1;
+    }
+    if(argc!=1) return 2;
     const fs::path dir = fs::temp_directory_path() / "FableForgeTests";
     fs::create_directories(dir);
     const fs::path lev = writeSyntheticLev(dir / "synthetic.lev", 4, 3,
@@ -3675,8 +4219,10 @@ int main() {
     testFoliageGlb(lev, dir);
     testThingBasis();
     testNavigationDetail();
+    testNavigationPhysicsReferences(dir);
     testGroundNavigation(dir);
     testWater(dir);
+    testScriptNameSafety();
     testLevelDocument();
     testTerrainEditing(lev, dir);
     testThemeToolsAndPaths(dir);
@@ -3688,6 +4234,7 @@ int main() {
     testParticlePreviewParameters();
     testParticleOrbitAttractorParameters();
     testEffectsBankLifetime(dir);
+    testParticleExportReload(dir);
     testThingLinks();
     testQuestSections();
     testDayNightSections();

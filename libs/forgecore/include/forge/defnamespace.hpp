@@ -2,6 +2,7 @@
 
 #include "forge/defrelocate.hpp"
 #include <span>
+#include <map>
 
 namespace forge::defnamespace {
 
@@ -25,6 +26,34 @@ struct Plan {
 // Maps contain changed IDs only. No input is mutated and no files are written.
 // This plans game.bin IDs only, not script/frontend IDs or external references.
 Plan allocate(Input baseline, std::span<const Input> sources);
+
+struct NameLookupChange {
+    uint32_t crc = 0;
+    std::vector<uint32_t> sourceSlotsInPlan;
+    std::vector<uint32_t> plannedSlots;
+};
+struct SourceNameLookups {
+    size_t existingQueryGroups = 0;
+    size_t addedQueryGroups = 0;
+    std::vector<NameLookupChange> changed;
+};
+struct NameLookupAnalysis {
+    // All compiled CRC candidates, including anonymous rows under CRC zero.
+    // Slot order is diagnostic, not the native equal-key sorting order.
+    std::map<uint32_t, std::vector<uint32_t>> plannedCandidates;
+    // Ambiguities reached by nonempty names already present in the plan.
+    // Other query strings can still collide with any plannedCandidates group.
+    std::vector<uint32_t> ambiguousNamedCrcs;
+    std::vector<SourceNameLookups> sources;
+    // Empty queries bypass the native table and have no candidates here.
+    std::span<const uint32_t> candidatesFor(std::string_view name) const;
+};
+
+// Check literal/stored name CRCs and source-map identity/injectivity before
+// comparing candidate sets. Throws on inconsistent pools/plans. Does not choose
+// duplicate winners or certify runtime class registration, payloads, external
+// query coverage, source admission or serialization safety.
+NameLookupAnalysis analyzeNameLookups(const Plan& plan, std::span<const Input> sources);
 
 struct Contributor {
     uint32_t targetSlot;

@@ -4,6 +4,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <limits>
 #include <stdexcept>
 #ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
@@ -119,6 +120,49 @@ int main() {
         check(second.id == 12 && second.name == "Untouched" && second.subHeader == entry.subHeader &&
               changed.entryData(second) == entry.data, "unrelated entry changed");
         check(get(base / relative) == std::string(bytes.begin(), bytes.end()), "source bank changed");
+        // A legacy donor's zero marker must not propagate into new BIGB rows.
+        const auto addedResource=resource.parent_path()/"Added.resource";
+        put(addedResource,"added payload");
+        const auto addedOut=work.path()/"resource-added-output";
+        check(forge::egocore::applyResourceOverrides(mod,base,addedOut,report)==2,"resource add count");
+        const auto added=forge::big::File::open(addedOut/relative);
+        check(added.banks()[0].entries.size()==3 && added.banks()[0].entries.back().magic==42,
+              "new BIGB resource inherited an invalid donor marker");
+        check(added.banks()[0].entries[0].magic==0 && added.banks()[0].entries[1].magic==0,
+              "existing resource markers changed");
+        auto empty=source; empty.banks()[0].entries.clear();
+        const auto emptyBytes=empty.serialize();
+        const auto emptyBase=work.path()/"empty-base", emptyOut=work.path()/"empty-out";
+        put(emptyBase/relative,{emptyBytes.begin(),emptyBytes.end()});
+        check(forge::egocore::applyResourceOverrides(mod,emptyBase,emptyOut,report)==2,"empty-bank add count");
+        const auto filled=forge::big::File::open(emptyOut/relative);
+        check(filled.banks()[0].entries.size()==2 && filled.banks()[0].entries[0].magic==42 &&
+              filled.banks()[0].entries[1].magic==42,"empty BIGB bank received zero markers");
+        auto exhausted=source;
+        exhausted.banks()[0].entries.front().id=std::numeric_limits<uint32_t>::max();
+        const auto exhaustedBytes=exhausted.serialize();
+        const auto exhaustedBase=work.path()/"exhausted-base", exhaustedOut=work.path()/"exhausted-out";
+        put(exhaustedBase/relative,{exhaustedBytes.begin(),exhaustedBytes.end()});
+        put(exhaustedOut/relative,{exhaustedBytes.begin(),exhaustedBytes.end()});
+        bool exhaustedRefused=false;
+        try { forge::egocore::applyResourceOverrides(mod,exhaustedBase,exhaustedOut,report); }
+        catch (const std::runtime_error& error) {
+            exhaustedRefused=std::string(error.what()).find("no free entry ID")!=std::string::npos;
+        }
+        check(exhaustedRefused,"exhausted resource IDs wrapped to zero");
+        check(get(exhaustedOut/relative)==std::string(exhaustedBytes.begin(),exhaustedBytes.end()),
+              "exhausted resource IDs replaced prior output");
+        check(get(exhaustedBase/relative)==std::string(exhaustedBytes.begin(),exhaustedBytes.end()),
+              "exhausted resource IDs changed source");
+        const auto replacementOnly=work.path()/"replacement-only";
+        put(replacementOnly/"Data/graphics/probe.big/TestBank/Changed.resource","replacement after refusal");
+        check(forge::egocore::applyResourceOverrides(replacementOnly,exhaustedBase,exhaustedOut,report)==1,
+              "ID exhaustion blocked a valid replacement");
+        const auto replaced=forge::big::File::open(exhaustedOut/relative);
+        const auto replacementBytes=replaced.entryData(replaced.banks()[0].entries[0]);
+        check(replaced.banks()[0].entries[0].id==std::numeric_limits<uint32_t>::max() &&
+              std::string(replacementBytes.begin(),replacementBytes.end())=="replacement after refusal",
+              "replacement after ID exhaustion changed identity or payload");
         std::cout << "EgoCore copy, override I/O failures and successful retry: PASS\n";
         return 0;
     } catch (const std::exception& e) { std::cerr << e.what() << '\n'; return 1; }

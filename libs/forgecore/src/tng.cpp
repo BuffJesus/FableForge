@@ -8,6 +8,22 @@
 namespace fs = std::filesystem;
 
 namespace forge::tng {
+bool isUnquotedIdentifier(std::string_view name) {
+    const auto letter = [](char c) {
+        return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || c == '_';
+    };
+    if (name.empty() || !letter(name.front())) return false;
+    for (const char c : name)
+        if (!letter(c) && !(c >= '0' && c <= '9')) return false;
+    return true;
+}
+bool isScriptName(std::string_view name) { return isUnquotedIdentifier(name); }
+bool isSafeSectionName(std::string_view name) {
+    return !name.empty() && !std::isspace(static_cast<unsigned char>(name.front())) &&
+           !std::isspace(static_cast<unsigned char>(name.back())) &&
+           name.find_first_of(";\r\n\0",0,4)==name.npos;
+}
+
 namespace {
 
 bool equalsIgnoreCase(std::string_view a, std::string_view b) {
@@ -55,6 +71,13 @@ const Property* findProperty(const std::vector<Property>& properties,
 }
 
 } // namespace
+
+bool isIdentifierProperty(std::string_view thingType, std::string_view key) {
+    return equalsIgnoreCase(key,"ScriptName") ||
+           (equalsIgnoreCase(thingType,"AICreature") && equalsIgnoreCase(key,"OverridingBrainName")) ||
+           (equalsIgnoreCase(thingType,"Switch") &&
+            (equalsIgnoreCase(key,"TriggeredByThing") || equalsIgnoreCase(key,"EnvironmentDef")));
+}
 
 std::optional<std::string> Thing::find(std::string_view key) const {
     if (const Property* prop = findProperty(properties, key)) {
@@ -234,6 +257,8 @@ void File::reindex() {
 void File::setThingProperty(size_t thingIndex, std::string_view key,
                             std::string_view value) {
     const Thing& thing = thingAt(thingIndex);
+    if (isIdentifierProperty(thing.type,key) && !isUnquotedIdentifier(value))
+        throw std::invalid_argument("tng: " + std::string(key) + " must be an unquoted identifier");
     if (const Property* prop = findProperty(thing.properties, key)) {
         replaceValueOnLine(prop->line, value);
         reindex();
@@ -248,6 +273,8 @@ void File::setThingProperty(size_t thingIndex, std::string_view key,
 void File::insertThingPropertyBefore(size_t thingIndex, std::string_view key,
                                      std::string_view value, std::string_view anchorKey) {
     const Thing& thing = thingAt(thingIndex);
+    if (isIdentifierProperty(thing.type,key) && !isUnquotedIdentifier(value))
+        throw std::invalid_argument("tng: " + std::string(key) + " must be an unquoted identifier");
     if (findProperty(thing.properties, key))
         throw std::invalid_argument("tng: top-level property already exists: " + std::string(key));
     size_t at = thing.endLine;
@@ -287,6 +314,8 @@ void File::setCtcProperty(size_t thingIndex, std::string_view ctcName,
 
 size_t File::setThingPropertyAll(size_t thingIndex, std::string_view key, std::string_view value) {
     const Thing& thing = thingAt(thingIndex);
+    if (isIdentifierProperty(thing.type,key) && !isUnquotedIdentifier(value))
+        throw std::invalid_argument("tng: " + std::string(key) + " must be an unquoted identifier");
     std::vector<size_t> lines;
     for (const auto& p : thing.properties)
         if (equalsIgnoreCase(p.key, key)) lines.push_back(p.line);
@@ -411,6 +440,8 @@ size_t File::insertThingBlock(std::string_view sectionName,
     }
     if (!found) {
         if (!hasAnySection) {
+            if (!isSafeSectionName(sectionName))
+                throw std::invalid_argument("tng: section name must be nonempty without leading/trailing whitespace, semicolon, CR, LF or NUL");
             std::string section;
             if (!rawLines_.empty() && !isBlankLine(rawLines_.back())) section += eol;
             section += "XXXSectionStart " + std::string(sectionName) + ';' + eol;
@@ -497,6 +528,8 @@ std::vector<std::string> File::thingSections() const {
 bool File::addSection(std::string_view name) {
     for (const auto& n : sectionNames())
         if (equalsIgnoreCase(n, name)) return false;
+    if (!isSafeSectionName(name))
+        throw std::invalid_argument("tng: section name must be nonempty without leading/trailing whitespace, semicolon, CR, LF or NUL");
     const std::string& eol = lineTerminator_;
     if (!rawLines_.empty() && !isBlankLine(rawLines_.back())) {
         // the last line may lack a terminator: give it one before appending

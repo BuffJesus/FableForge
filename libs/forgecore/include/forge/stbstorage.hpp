@@ -61,4 +61,28 @@ struct BankMetadata {
 // payload spans before the TOC; does not inspect gap bytes or payload contents.
 BankMetadata validateBankMetadata(std::span<const uint8_t> header,
                                   std::span<const uint8_t> table,uint64_t fileSize);
+struct ChunkStorage {
+    size_t foregroundFrames=0,backgroundFrames=0,detailFrames=0;
+    uint64_t decodedBytes=0,zeroPaddingBytes=0;
+};
+// Follow native runtime pointers from a validated common record. Every live
+// structure/frame must be bounded and disjoint; shared frames may have multiple
+// owners only within the same domain. Decode and validate every owned frame,
+// check detail palette indices and require zero bytes in all remaining gaps.
+// Generation-only edge/shore/checksum pointers are intentionally not followed.
+// This read-only supported-subset check does not validate external asset IDs.
+ChunkStorage validateMapChunk(const std::vector<uint8_t>& chunk,
+                              const std::vector<uint8_t>& record,uint32_t logicalOffset);
+struct BankStorage {
+    size_t entries=0,maps=0,seas=0,paletteRows=0;
+    uint64_t zeroBankPaddingBytes=0;
+    ChunkStorage chunks;
+};
+// Complete read-only storage review for compact retail banks in the supported
+// metadata/common/chunk subset. Every entry must belong to the common manifest
+// or be a validated sea entry. Map names and IDs must agree; all bytes outside
+// live bank payloads must be zero. Append-only banks retaining old tables in
+// unreachable space are outside this subset. Does not certify asset resolution
+// or gameplay and never rewrites the bank.
+BankStorage validateBankStorage(const std::filesystem::path& path);
 }

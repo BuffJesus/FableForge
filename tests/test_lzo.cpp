@@ -80,6 +80,7 @@ void checkEncoderSynthetic() {
     for (size_t n = 0; n <= 40; ++n) { v.assign(n, 'a'); roundTrip(v, "run-of-a"); }
     for (size_t n = 0; n <= 40; ++n) { v.resize(n); for (size_t i = 0; i < n; ++i) v[i] = uint8_t(i * 7 + 3); roundTrip(v, "short-ramp"); }
     v.assign(100000, 0); roundTrip(v, "zeros-100k");
+    v.assign(1024*1024, 0); roundTrip(v, "zeros-1MiB");
     // pseudo-random: incompressible, exercises long literal runs
     uint32_t s = 12345; v.resize(70000); for (auto& b : v) { s = s * 1664525u + 1013904223u; b = uint8_t(s >> 24); } roundTrip(v, "random-70k");
     // periodic with distances that hit each match class and the extended-length paths
@@ -250,17 +251,19 @@ void checkCorrupt() {
 
 } // namespace
 
-int main() {
+int main(int argc,char** argv) {
+    if(argc>2) {std::fprintf(stderr,"usage: fableforge_lzo_tests [read-only install root]\n");return 1;}
     if (lzo_init() != LZO_E_OK) { std::fprintf(stderr, "minilzo init failed\n"); return 1; }
     checkExactRange();
     checkCorrupt();
     checkEncoderSynthetic();
     fs::path root;
-    try {
+    if(argc==2) root=fs::u8path(argv[1]);
+    else try {
         const auto env = forge::env::Environment::detect();
         if (env.installValid) root = env.installDir;
     } catch (...) {}
-    if (root.empty()) { std::printf("fableforge_lzo_tests: no Fable install, corrupt-input checks only (%d failures)\n", g_fail); return g_fail ? 1 : 0; }
+    if (root.empty()) { std::printf("fableforge_lzo_tests: no Fable install; synthetic/corrupt checks ran, retail corpus skipped (%d failures)\n", g_fail); return g_fail ? 1 : 0; }
 
     const fs::path stbPath = root / "data" / "Levels" / "FinalAlbion_RT.stb";
     const auto archive = forge::stb::Archive::open(stbPath);

@@ -28,6 +28,18 @@ int audit(int argc, char** argv) {
     nlohmann::json report{{"scope", "Read-only namespace and BIN reference audit; no external-reference or writer acceptance"},
         {"baseline", argv[1]}, {"entries", plan.entries.size()}, {"names", plan.names.size()},
         {"sources", nlohmann::json::array()}, {"preparation_error",preparationError}};
+    const auto lookups=defnamespace::analyzeNameLookups(plan,inputs);
+    report["core_name_lookup"]={{"ambiguous_groups",nlohmann::json::array()},
+        {"sources",nlohmann::json::array()}};
+    for(const auto crc:lookups.ambiguousNamedCrcs)
+        report["core_name_lookup"]["ambiguous_groups"].push_back({{"crc",crc},{"slots",lookups.plannedCandidates.at(crc)}});
+    for(const auto& source:lookups.sources) {
+        nlohmann::json row={{"source_crc_groups",source.existingQueryGroups},{"added_crc_groups",source.addedQueryGroups},
+            {"changed_existing_groups",nlohmann::json::array()}};
+        for(const auto& change:source.changed)row["changed_existing_groups"].push_back({{"crc",change.crc},
+            {"source_slots_in_plan",change.sourceSlotsInPlan},{"planned_slots",change.plannedSlots}});
+        report["core_name_lookup"]["sources"].push_back(std::move(row));
+    }
     for (size_t i = 0; i < files.size(); ++i) {
         const auto& maps = plan.sources[i];
         nlohmann::json source{{"root", argv[i + 3]}, {"game_map", maps.gameEntries},
@@ -178,6 +190,57 @@ int main(int argc, char** argv) {
           "individual duplicate baseline name offsets preserved");
     check(a[2].indexInDefinition == 1 && b[2].indexInDefinition == 1 &&
           bn.size() == 4 && base.size() == 2, "inputs unchanged after successes and failures");
+    {
+        auto namesFor=[](const std::vector<bin::Entry>& entries) {
+            std::map<std::string,uint32_t> unique;
+            for(const auto& e:entries)for(const auto& name:{e.definition,e.name})unique[name]=bin::nameCrc(name);
+            std::vector<Name> names;
+            for(const auto& [name,crc]:unique)names.emplace_back(crc,name);
+            return names;
+        };
+        check(bin::nameCrc("CREATURE_TRADER_01")==0xAA22BB08 && bin::nameCrc("Graphic")==0x2E6B63C8,
+              "native name CRC differs from original known values");
+        check(bin::nameCrc("LOOKUP_ZERO_SY2CT3I")==0 && bin::nameCrc("")==0,
+              "nonempty CRC-zero fixture changed");
+        std::vector<bin::Entry> lb{{"CDef","",0,{}}};
+        auto la=lb, lc=lb;
+        la.push_back({"OBJECT","LOOKUP_ZERO_SY2CT3I",0,{}});
+        lc.push_back({"CDef","",1,{}});
+        auto lbn=namesFor(lb), lan=namesFor(la), lcn=namesFor(lc);
+        std::array<Input,2> li{{{la,lan},{lc,lcn}}};
+        const auto lp=allocate({lb,lbn},li);
+        const auto review=analyzeNameLookups(lp,li);
+        check(review.plannedCandidates.at(0)==std::vector<uint32_t>({0,1,2}) &&
+              review.ambiguousNamedCrcs==std::vector<uint32_t>{0},"zero-CRC candidates lost anonymous rows");
+        check(review.candidatesFor("").empty() && review.candidatesFor("LOOKUP_ZERO_SY2CT3I").size()==3 &&
+              review.candidatesFor("missing").empty(),"empty query confused with nonempty zero-CRC query");
+        check(review.sources[0].changed.size()==1 &&
+              review.sources[0].changed[0].sourceSlotsInPlan==std::vector<uint32_t>({0,1}) &&
+              review.sources[0].changed[0].plannedSlots==std::vector<uint32_t>({0,1,2}) &&
+              review.sources[1].addedQueryGroups==1,"zero-CRC source candidate growth not reported");
+        auto invalid=lp;
+        invalid.sources.pop_back();
+        rejects([&]{analyzeNameLookups(invalid,li);},"source/map count mismatch accepted");
+        invalid=lp;invalid.sources[1].gameEntries[0]=2;
+        rejects([&]{analyzeNameLookups(invalid,li);},"noninjective lookup mapping accepted");
+        invalid=lp;invalid.sources[1].gameEntries[1]=1;
+        rejects([&]{analyzeNameLookups(invalid,li);},"mapped lookup identity mismatch accepted");
+        invalid=lp;invalid.sources[1].gameEntries[9]=2;
+        rejects([&]{analyzeNameLookups(invalid,li);},"out-of-range map key accepted");
+        invalid=lp;invalid.names[0].first^=1;
+        rejects([&]{analyzeNameLookups(invalid,li);},"invalid planned name CRC accepted");
+        lan[0].first^=1;
+        rejects([&]{analyzeNameLookups(lp,li);},"invalid source name CRC accepted");
+        lan[0].first^=1;
+        la[1].name="LOOKUP_IOAQYHT9HSJ4";
+        lc[1]={"OBJECT","LOOKUP_MC32E53Z7H9W",0,{}};
+        lan=namesFor(la);lcn=namesFor(lc);li={{{la,lan},{lc,lcn}}};
+        const auto collision=analyzeNameLookups(allocate({lb,lbn},li),li);
+        check(collision.ambiguousNamedCrcs==std::vector<uint32_t>{0x5B4D7946} &&
+              collision.plannedCandidates.at(0x5B4D7946)==std::vector<uint32_t>({1,2}) &&
+              collision.sources[0].changed.size()==1 && collision.sources[1].changed.size()==1,
+              "distinct names sharing a CRC were treated as independent lookups");
+    }
     // Source-local references must be normalized before version comparison.
     const auto schema = defschema::Schema::loadText(R"({
         "SCALAR":{"prefix_len":3,"fields":[{"name":"Index","type":"CDefIndex"}]}

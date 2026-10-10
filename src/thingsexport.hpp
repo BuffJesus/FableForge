@@ -79,7 +79,7 @@ struct Stats {
     int childParticles = 0;  // CREATEPARTICLE dummies seen in placed meshes
     int particles = 0;       // emitters found (mesh dummies + PARTICLE_EMITTER_PLACEABLE things)
     int particlesPlaced = 0; // ...that produced at least one proxy or light
-    int particlesUnknown = 0;// effect name not in effects.big
+    int particlesUnknown = 0;// effect unavailable (bank failed or no unique name)
     int particleLights = 0;  // point lights exported from CPSCLight components
 };
 

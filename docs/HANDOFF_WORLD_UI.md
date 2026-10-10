@@ -1,5 +1,4184 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-09 continuous Forge continuation
+
+Text drafts now edit ordered dialogue tags: bounded ASCII names, signed stored
+positions, append and selected removal. Unsupported original names remain
+read-only and survive edits to other tags. Content edits do not remap positions.
+Both-size real add/remove/name/position controls, signed boundaries, legacy names,
+stale refusal and exact Restore pass. Neighboring reference-input checks pass.
+An independent retail copy appends one tag to ID 1, checking all 28,913 payloads
+and headers, exact backup/Restore and unchanged real source hash. Evidence:
+build/text-tags-{build,source-checks,retail-copy,metadata-regression}-20261009.log;
+C:/Users/Cornelio/AppData/Local/FableForgeEvidence/20261009/retail-text-tags-copy-0tyqzk8o.
+Gate registered as text_tags and validated in the retained tags ZIP below. No runtime cue/in-game claim.
+
+Text editing now uses the existing pack chooser and writes the selected pack's
+language-bank tree. Reads prefer that pack's bank, then the save folder, then base;
+first save copies the loaded bank with transactional creation tracking. Existing
+pack banks retain one-time originals. Drafts capture destination identity and
+refuse switches or invalid/missing pack manifests. No manifest format extension.
+An end-to-end scratch gate edits speaker/index, references and tags, adds a string,
+then composes with a sibling's unrelated string edit; both window sizes preserve
+source and manifest, validate destination/manifest refusal and restore the bank.
+Restore exposed a CLI gap: explicitly selected tracked folders without game.bin
+were refused. Backups/Restore now accept those folders with recognized records
+or a stage manifest; empty unrecognized folders and implicit invalid installs still
+refuse. Existing running-owner/alias and stage preflight remain unchanged.
+Both-size pack gates, neighboring tags/folder gates and text-only physical/junction/
+stage/offline recovery pass. Initial gate raced the reload before its destination
+message; corrected barrier. Initial GUI Restore targeted the original install;
+using explicit CLI pack root exposed and fixed the actual missing-game.bin gate.
+Evidence: build/text-pack-{destination-final-checks,restore-text-only-checks,
+tags-regression,folder-regression,composition-probe,destination-probe}-20261009.log.
+Registered text_pack_destination and text_only_restore pass in the retained
+pack checkpoint below. No live-game claim.
+
+Single-byte text metadata now renders and exports through a byte-preserving
+Latin-1-to-UTF8 presentation helper (src/textdisplay.hpp). Before probe: CLI JSON
+refuses byte 0x80 with invalid-UTF8 error. GUI metadata/tag labels, TSV fields/tag
+JSON and CLI text show output now handle all nonzero byte values. CLI JSON exposes
+metadata_byte_encoding=latin1; native payload/storage writers are unchanged.
+Both-size all-byte/UTF8-like/Unicode/quoting tests pass without source or backup
+changes. Existing metadata-input and 21 strict identity checks pass. Retail TSV
+independently matches all 28,913 rows, 26,807 strings, 2,105 groups and 379 narrator
+names; real source hash stays unchanged. Evidence: build/text-byte-export-
+{before-byte-range,verified-build,source-checks,metadata-regression,
+identity-regression,retail-tsv}-20261009.log and C:/Users/Cornelio/AppData/Local/
+FableForgeEvidence/20261009/retail-text-tsv-mil3sk4n. A broad text replacement briefly
+converted draft-buffer pointer copies too; caught, restored raw pointers and
+forced a fresh compile before any tests. New test's initial encoding-field oracle
+preceded the field addition; separate raw-byte probe confirmed the actual failure.
+CLI help/generated reference now describe tracked-folder recovery, with the
+correct usage-source pointer. Registered text_byte_export passes in the retained byte-export checkpoint below.
+
+Open text drafts now participate in close/install-switch guards and asynchronous
+world/recovery exit conditions. Before probe: Close exits with a modified draft
+before prompt assertions run; the new gate checks execution as well as RESULT PASS.
+The existing modal offers Review text after other saveable work, returning to
+Assets > Text without publication. Cancel keeps the draft; Discard permits exit.
+Both-size real modal/Save controls pass review/save, review after destination
+refusal, Cancel and Discard. A tiny synthetic lip-sync bank also verifies mixed
+text/dialogue review order and staged dialogue preservation without source writes.
+Ten scenarios pass; no native source used. Evidence: build/text-close-prompt-
+{before,build,source-checks,mixed-checks}-20261009.log, source fixtures
+build/text-close-prompt-eh6jz46j. Async completion guards were inspected in source;
+this scoped gate does not force concurrent world/recovery completion. Registered
+text_close_prompt passes in the retained close checkpoint below.
+
+Current retained checkpoint: dist/development/20261009-text-close,
+ZIP SHA256 6d0b5c94b4231fad6620c0b2634e48f54426cde452558eb92d1825f931edc330.
+Extracted identities (109 files), documentation links (127) and eighteen selected
+workflows pass; 88 not run, zero skipped. Evidence: build/text-close-prompt-
+{package,extracted-package}-20261009.log and C:/Users/Cornelio/AppData/Local/
+FableForgeEvidence/20261009/package-smoke-3vqz1qzl. Superseded byte-export snapshot
+removed after archive/executable checks; metadata retained under snapshot-cleanup/
+text-byte-export-checkpoint-replaced. Only this snapshot remains. The broad gate
+was not repeated; no release/live-game claim. Older checkpoints are historical.
+
+Current retained checkpoint: dist/development/20261009-text-byte-export,
+ZIP SHA256 86942c55ac92ec8bc23a5e4b22a2a63d7af7e06039f5d02d5a6690a01c1ff29e.
+Extracted identities (109 files), documentation links (127) and seventeen selected
+workflows pass; 88 not run, zero skipped. Evidence: build/text-byte-export-
+{package,extracted-package}-20261009.log and C:/Users/Cornelio/AppData/Local/
+FableForgeEvidence/20261009/package-smoke-8x_xffw9. Superseded pack snapshot removed
+after archive/executable checks; metadata retained under snapshot-cleanup/
+text-pack-checkpoint-replaced. Only this snapshot remains. The broad gate was not
+repeated; no release/live-game claim. Older checkpoint statements are historical.
+
+Current retained checkpoint: dist/development/20261009-text-pack,
+ZIP SHA256 d9e59452367c2bc9c3f734fc823bf7cd5deb6d35d04a129d9ddf98f1f1c0a0f2.
+Extracted identities (109 files), documentation links (127) and sixteen selected
+workflows pass; 88 not run, zero skipped. Evidence: build/text-pack-
+{package,extracted-package}-20261009.log and C:/Users/Cornelio/AppData/Local/
+FableForgeEvidence/20261009/package-smoke-b82gakcd. Superseded tags snapshot removed
+after archive/executable checks; metadata retained under snapshot-cleanup/
+text-tags-checkpoint-replaced. Only this snapshot remains. The broad gate was
+not repeated; no release/live-game claim. Older checkpoint statements are historical.
+
+Current retained checkpoint: dist/development/20261009-text-tags,
+ZIP SHA256 a188b7a2700750ffeb2ff18ae710b800dcca6cb518107fd3c75c58c1d032e816.
+Extracted identities (109 files), documentation links (127) and fourteen selected
+workflows pass; 88 not run, zero skipped. Evidence: build/text-tags-
+{package,extracted-package}-20261009.log and C:/Users/Cornelio/AppData/Local/
+FableForgeEvidence/20261009/package-smoke-qtgcc4pa. Superseded metadata snapshot
+removed after archive/executable checks; metadata retained under snapshot-cleanup/
+text-metadata-checkpoint-replaced. Only this snapshot remains. The broad gate was
+not repeated; no release/runtime cue/in-game claim. Older checkpoints are historical.
+
+Current retained checkpoint: dist/development/20261009-text-metadata,
+ZIP SHA256 010d5675055aa3fc09521697cd27289035a475acb195dd817e811fcd4853f991.
+Extracted identities (109 files), documentation links (127) and thirteen selected
+workflows pass; 88 not run, zero skipped. Evidence: build/text-metadata-
+{package,extracted-package}-20261009.log and C:/Users/Cornelio/AppData/Local/
+FableForgeEvidence/20261009/package-smoke-zplpfd__. Superseded speaker-picker
+snapshot removed after archive/executable checks; metadata retained under
+snapshot-cleanup/speaker-picker-checkpoint-replaced. Only this snapshot remains.
+The broad gate was not repeated; no release or in-game validation claim.
+Older checkpoint statements below are historical.
+
+Text drafts now edit speech-bank references and existing-string identifiers.
+New values are ASCII and shorter than 4096 bytes; empty values are allowed.
+Unsupported original byte values remain read-only and survive other edits.
+Donor additions retain the new record name as their identifier. Tags, record IDs
+and unrelated headers remain intact. Both-size real-input checks, stale/refusal/
+Restore cases and neighboring content/donor/folder/speaker workflows pass.
+An independent retail copy changes only ID 1's two references, preserves all
+28,913 headers and other payloads, and restores exactly; actual source is unchanged.
+Evidence: build/text-metadata-{corrected-checks,retail-copy,speaker-regression,
+content-regression,donor-regression,folder-regression}-20261009.log; native copy
+C:/Users/Cornelio/AppData/Local/FableForgeEvidence/20261009/retail-text-metadata-copy-irh6ytjv.
+The initial new-record test incorrectly expected donor magic rather than the
+required BIGB magic 42; corrected test passes. No audio playback or in-game claim.
+These controls are included in the validated metadata checkpoint above.
+
+Current retained checkpoint: dist/development/20261009-speaker-picker,
+ZIP SHA256 1ef5215913ff81f509fa027f1fb6c77d4ec6bb68f22ee2a1ff038d00ecf7f320.
+Extracted identities (109 files), documentation links (127) and twelve selected
+workflows pass; 88 not run, zero skipped. Evidence: build/speaker-picker-
+{package,extracted-package}-20261009.log and C:/Users/Cornelio/AppData/Local/
+FableForgeEvidence/20261009/package-smoke-edk69jhu. Superseded CLI-speaker
+removed after archive/executable checks, with metadata retained under
+snapshot-cleanup/text-speaker-checkpoint-replaced. Only this snapshot remains.
+
+Text drafts now offer a
+speaker picker using the bank's unique existing narrator names, including empty.
+Existing strings and donor additions update payload speaker plus its header index
+while retaining other payload/header metadata. Original speaker/header are kept
+when no different speaker is chosen. Explicit speaker changes refuse stale record
+headers, unsupported indices/list metadata and stale payloads before publication.
+Both-size gates click the real dropdown and cover empty-speaker addition, invalid
+index/unknown choice refusal, external header changes, folder-copy creation and
+exact Restore. Existing content/donor GUI gates pass. A retail copy checks all
+28,913 payloads and 28,912 untouched headers, only replacing ID 1's speaker and
+index, then restoring exactly; real-source hash remains unchanged. Evidence:
+build/text-speaker-picker-{after,folder-checks,retail-copy,content-regression,
+donor-regression}-20261009.log; C:/Users/Cornelio/AppData/Local/FableForgeEvidence/
+20261009/retail-text-speaker-picker-copy-pvz9yq9n. Initial compile caught a string
+widget ID passed to a const-char API; corrected and rebuilt. Gate registered as
+text_speaker_picker and validated in the checkpoint above. Speech-bank/identifier/
+tag editing and new narrator creation remain pending; no audio/voice-change claim.
+
+Current retained checkpoint: dist/development/20261009-text-speaker,
+ZIP SHA256 df3d02dc7739a7e2c83a6e3427f30c86707b973e304d28f788f9d5c877f69797.
+Extracted identities (109 files), documentation links (127) and eleven selected
+workflows pass; 88 not run, zero skipped. Evidence: build/text-speaker-
+{package,extracted-package}-20261009.log and C:/Users/Cornelio/AppData/Local/
+FableForgeEvidence/20261009/package-smoke-awlz49i3. Superseded text-folder
+removed after archive/executable checks; metadata retained under
+snapshot-cleanup/text-folder-checkpoint-replaced. Only this snapshot remains.
+
+CLI text set/import now
+synchronize the type-0 narrator index with the chosen payload speaker, using only
+the bank's existing narrator list. Retail-copy before probe changed speaker to
+FARMER but left Info at NONE (0 instead of 4); corrected scratch fixture/code
+checks cover empty speakers, donor addition, repeated backups and malformed/
+missing/ambiguous/out-of-range narrator refusal. Headerless generic banks without
+narrator lists retain their existing support. Prepared publication verifies the
+complete changed payload and speaker header. Core upsert donor-copy policy and
+GUI content/donor preservation remain unchanged.
+Twenty speaker cases, 32 publication cases, 13 ID and 25 import-validation cases
+pass. A retail copy changes ID 1 and adds ID 28,914 with FARMER index 4, checking
+all 28,913 original headers/payloads and exact backup preservation; actual source
+hash remains f1b76255aaf469a00cdb484cac5bcf68a65f5a370cc011d185985dd1def26f0c.
+Evidence: build/text-speaker-header-{confirmed,final-checks,verified-build}-20261009.log,
+build/text-speaker-retail-copy-20261009.log and C:/Users/Cornelio/AppData/Local/
+FableForgeEvidence/20261009/retail-text-speaker-copy-7q8x40u_. Registered gate
+text_speaker_header and validated in the checkpoint above. Native contract:
+FableTLC docs/formats/TEXT.md lines 160-163. No live-game/in-game voice claim.
+
+Further user-requested D-drive cleanup removed 98 old generated mod-asset-refresh,
+setup-asset-restore and terrain-drafts fixtures: 126,086,755,340 logical bytes
+(117.43 GiB). The newest fixture in each group stays. All files <=4 MiB and
+text/source metadata were copied and hash-checked on C (2.07 GiB), with complete
+inventories. Native PowerShell checked exact build-root ownership, timestamps,
+active processes and absence of reparse points before removal. Audit and retained
+evidence: C:/Users/Cornelio/AppData/Local/FableForgeEvidence/20261009/
+d-drive-storage/old-forge-fixtures/{plan.json,removed.json,deletion.log,retained}.
+D reported 345.5 GiB free afterward; additional free-space changes are not
+attributed to this operation. Source/game/download folders were untouched.
+
+Current retained checkpoint: dist/development/20261009-text-folder,
+ZIP SHA256 b113225116b11069b74f0b5bdafa1e838888616c70938ff9f351f2249cae2a13.
+Extracted identities (109 files), documentation links (127) and ten selected
+workflows pass; 88 not run, zero skipped. Evidence: build/text-folder-
+{package,extracted-package}-20261009.log and C:/Users/Cornelio/AppData/Local/
+FableForgeEvidence/20261009/package-smoke-cnlskxv6. Superseded restore-alias
+removed after archive/executable checks, metadata retained under
+snapshot-cleanup/restore-alias-checkpoint-replaced. Only this snapshot remains.
+
+Text edits and donor
+addition can copy the loaded bank into an absent separate folder destination.
+The bank and `.forge-created` marker are prepared in the same PendingBanks
+transaction; subsequent writes retain creation ownership, and CLI Restore removes
+the new bank. Base bytes and old entry/header metadata remain intact. All six
+orphaned recovery suffixes and externally appearing destinations refuse unchanged.
+Both-size creation/refusal/Restore checks, existing content/donor GUI gates and
+32 CLI publication regressions pass. Evidence: build/text-folder-destination-
+{before,after,final-guards,build}-20261009.log and text-folder-{content,donor,
+publication}-regression-20261009.log. The first expanded guard check expected a
+different error phrase; corrected to the actual source/destination-change guard.
+Registered as text_folder_destination and validated in the checkpoint above.
+An isolated full retail-bank copy also passes: 28,913 entry headers and payloads
+independently checked, only the selected content changes; creation tracking and
+Restore removal pass. Both the copied base and actual retail SHA256 remain exact.
+Evidence: build/text-folder-retail-copy-20261009.log and C:/Users/Cornelio/
+AppData/Local/FableForgeEvidence/20261009/retail-text-folder-copy-84fbc2j_.
+
+Current retained checkpoint: dist/development/20261009-restore-alias,
+ZIP SHA256 2598a266c5487d8cd0c11647e07072f334339762a781fe7d42e206247ebd51d8.
+Extracted identities (109 files), documentation links (127) and nine selected
+workflows pass; 88 not run, zero skipped. Evidence: build/restore-alias-
+{package,extracted-package}-20261009.log and C:/Users/Cornelio/AppData/Local/
+FableForgeEvidence/20261009/package-smoke-1l8abr3m. Superseded donor checkpoint
+removed after archive/executable checks, metadata retained under
+snapshot-cleanup/text-donor-checkpoint-replaced. Only this snapshot remains.
+
+Restore now checks the physical owner
+of standard text-bank targets before changing backups, consuming staged recovery
+or removing created files. The shared running-game check compares resolved
+install and executable paths, covering whole-install junctions for other files.
+Before-fix scratch probes changed a text bank through a language junction and a
+quest file through an install-root junction while the owning helper was running.
+The new Windows gate covers both refusals, physical/aliased executable launch,
+unrelated installs, offline retries and stage-created banks without backups.
+Logs: build/text-restore-{root-alias-after,stage-alias-after,alias-publication-regression,
+alias-ui-regression,alias-stage-regression}-20261009.log. The alias gate, 32 text
+publication checks, both-size multilingual Restore and stage-plan recovery pass.
+Registered in source/package gates and validated in the checkpoint above. Tests use
+tiny owned fixtures and their own holding executable; no real game was changed.
+
+Current retained checkpoint: dist/development/20261009-text-donor,
+ZIP SHA256 06f4e0e9ec61f796498f93b45be8a105d6e822c82e684c1fb743f596a66a59f7.
+It includes donor creation, content editing and all preceding text/restore fixes.
+Extracted identities (109 files), documentation links (127), and eight selected
+workflows (defs, GUI, Text browser, restore, content edit, donor addition, strict
+identity, publication) pass; 88 not run, zero skipped. Evidence:
+build/text-donor-{package,extracted-package}-20261009.log and
+C:/Users/Cornelio/AppData/Local/FableForgeEvidence/20261009/package-smoke-rgawggw5.
+Superseded text-edit was removed after hash/identity checks, leaving only this
+checkpoint. Audit: snapshot-cleanup/text-edit-checkpoint-replaced. Older package
+paths/statements below are historical; no full gate/release/in-game claim.
+
+Assets > Text now offers New string from donor, using the existing core upsert
+allocator and copying donor headers/metadata while retaining every donor record.
+The new identifier matches the new name; empty/existing names, exhausted IDs,
+opaque payloads and stale donors refuse before publication. Existing destination
+banks only; metadata editing, missing-bank creation and pack output remain pending.
+Source/full scoped rebuilds pass. Both-size GUI gates pass actual donor/Save/Cancel
+controls, ID allocation over strings/groups/narrators, copied headers, unchanged
+old records, one-time originals, stale refusal/preservation and exact Restore.
+An isolated retail copy adds ID 28,914 from donor ID 1, independently matches all
+28,913 old payloads/headers and the new payload/header, then restores byte-exactly.
+The original retail hash remains unchanged. Logs build/text-donor-{add-build,
+reveal-final-build,tool-body-build,final-build,final-checks,final-browser-regression,
+final-setup-regression,retail-copy}-20261009.log. Final fixtures text-donor-add-vf15fzdq,
+text-browser-ui-slppx8fh, setup-restore-failure-ujfiu5bj; native copy evidence
+C:/Users/Cornelio/AppData/Local/FableForgeEvidence/20261009/retail-text-donor-copy-ftpf32w1.
+Existing content editing also passes in text-content-edit-x0j6j6ax.
+
+Automation Reveal now waits for the click centre to enter the current clip
+rectangle (10-second timeout), retrying when newly expanded content has not yet
+contributed to ScrollMax. Initial donor button clicks were below the panel after
+language switches. Non-scrolling auto-height cards are skipped when scrolling
+ancestors; constrained auto-height tool bodies still scroll. The first broad skip
+incorrectly excluded Object properties' scrollable body; the narrow window browser
+gate caught it, and the final flag-qualified condition passes Text/property and
+partial Restore gates at both sizes. Temporary reveal trace code was removed.
+Diagnostic logs/fixtures remain under build/text-donor-reveal-* and
+text-add-button-probe-*; no full gate or in-game validation was performed.
+
+Content editing also passes on an isolated copy of the original retail English
+bank: edited TEXT_ENGLISH_MAIN ID 1, independently compared all 28,913 payloads
+and all 28,913 record/header identities, retained the exact original backup and
+restored the exact original archive. The real bank hash remains unchanged.
+Evidence build/text-content-retail-copy-20261009.log and
+C:/Users/Cornelio/AppData/Local/FableForgeEvidence/20261009/retail-text-content-copy-p6fdn9zm.
+
+Current retained checkpoint: dist/development/20261009-text-edit,
+ZIP SHA256 785faa19a0d5878a04b0cda1c19a17bf40f8c5c2fcba772a174e67bec0b6690b.
+It includes the existing-string content editor and preceding text fixes. Extracted
+identities (109 files), documentation links (127) and seven selected workflows
+(defs, GUI, Text browser, text restore, content edit, identity, publication) pass;
+88 not run, zero skipped. Evidence build/text-edit-{package,extracted-package}-20261009.log
+and C:/Users/Cornelio/AppData/Local/FableForgeEvidence/20261009/package-smoke-t32cddi_.
+Superseded text-recovery was removed only after hash/identity checks; metadata and
+inventory remain in snapshot-cleanup/text-recovery-checkpoint-replaced. This is
+the only dist/development checkpoint. Package statements below are historical.
+Independent read-only retail payload walking accepts all 26,807 strings with
+no trailing/invalid payload bytes; 2,105 groups and one narrator record remain
+unchanged. Original SHA256 remains f1b76255aaf469a00cdb484cac5bcf68a65f5a370cc011d185985dd1def26f0c.
+Evidence build/text-content-retail-layout-20261009.log and
+C:/Users/Cornelio/AppData/Local/FableForgeEvidence/20261009/retail-text-content-layout-mpynw1oy.
+This checks layout compatibility; it is not an in-game editing validation.
+
+Existing-string content editing is implemented in Assets > Text. Drafts are
+bounded to 1 MiB; real Save confirmation/Cancel controls write only to an
+existing destination bank, preserving ID/header metadata, speaker, speech bank,
+identifier (including an empty identifier), tags/positions and unrelated payloads.
+src/textwrite.hpp now shares the previously validated prepared publication and
+resolved-path running guards with the CLI. The content writer refuses stale
+identity/content/metadata and payloads that do not round-trip exactly, so unknown
+trailing bytes are retained. Pack destinations/missing destination banks,
+metadata editing and new-string creation remain pending. Save is synchronous,
+matching existing texture replacement; large-bank responsiveness remains unmeasured.
+Build/final/card rebuilds pass. Two-size UI tests pass repeated edits, exact
+headers/unrelated payloads, one-time original retention, externally changed bank
+refusal/preservation and byte-exact Restore. Desktop passed first; the small-window
+Cancel was clipped because the expanded off-screen card kept its prior height.
+AlwaysAutoResize fixes it; explicit draft assertions and visible Save screenshots
+now pass. An initial metadata probe confused TOC length with block alignment;
+the corrected independent parser passes. Existing Text browser tests pass both
+sizes and the shared CLI publication suite passes all 32 cases. Logs:
+build/text-content-{edit-build,edit-final-build,edit-checks,edit-final-checks,
+edit-confirm-checks,edit-card-build,edit-card-checks,browser-regression,
+shared-publication}-20261009.log. Final fixtures text-content-edit-mlu85rcy,
+text-browser-ui-epm20__5, text-write-publication-t3xexagr. This feature is newer
+than the retained text-recovery checkpoint below; no full gate/in-game check.
+
+Current retained development checkpoint: dist/development/20261009-text-recovery,
+ZIP SHA256 703ea90d0dca6b93f25111e8f62cf4243a305c360f86a83943f2f7c76c3c8b74.
+It includes the strict CLI lookup/narrator reader, prepared text set/import
+publication and alias guards, and multilingual restore/cache fixes below.
+Extracted package identities (109 files), documentation links (127), and six
+workflows (defs, GUI, Text browser, text identity, text publication, text restore)
+pass; 88 workflows were not run, zero skipped. No full gate/release claim.
+Evidence: build/text-recovery-{package,extracted-package}-20261009.log and
+C:/Users/Cornelio/AppData/Local/FableForgeEvidence/20261009/package-smoke-pke147bq.
+The superseded text-browser checkpoint was removed after hash/identity checks;
+metadata and inventory remain in snapshot-cleanup/text-browser-checkpoint-replaced.
+Only this new checkpoint remains in dist/development. Earlier package statements
+below describe their validation at that time; removed paths are historical.
+
+Localization restore now scans each immediate language directory instead of only
+English, retaining the nonrecursive scope. Setup restoration refuses while the
+text-bank future is held, and any successful restoration clears the Text browser
+index/selection so returning to it reloads restored bytes. Before probes showed
+one backup instead of three and stale edited content after English restoration.
+Full build plus scoped automation rebuild pass. The new scratch workflow passes
+at 1440x900 and 800x600, covering English/French/Unicode folder names, modern and
+legacy originals, exact restored/backup bytes, ignored top-level/nested records,
+the text-reader barrier and refreshed content. Existing partial locked-write
+restore/retry/map-refresh checks pass at both sizes. Logs:
+build/text-{restore-cache-before,backup-languages-before,backup-restore-build,
+backup-restore-final-build,backup-restore-checks,restore-partial-regression}-20261009.log.
+Fixtures build/text-backup-restore-czopcn2q and setup-restore-failure-aeu4f1_b.
+Registered in source/package gates; the retained ZIP predates this correction.
+
+Text-write running guards now also resolve Windows final paths by handle while
+retaining the caller's installed path. Before this change, an asset-folder
+junction outside the installation bypassed the guard; the language-folder link
+in the opposite direction already refused. The guard now checks both owning
+install candidates, including missing destinations via their nearest existing
+ancestor, and refuses unresolved paths. Windows API contract:
+https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-getfinalpathnamebyhandlew.
+Scoped forge-tools build passes. Thirty-two publication checks now cover both
+set/import and output/in-place modes across both junction directions, alongside
+the existing locking, backup, preservation, unrelated-install and retry cases.
+Existing ID allocation (13) and import validation (25) checks also pass. Logs
+build/text-write-{language-alias-before,asset-alias-before,alias-build,alias-checks,
+alias-test_text_write_publication,alias-test_text_entry_ids,alias-test_text_import_validation}-20261009.log;
+final fixture build/text-write-publication-aszrvc51. No new package/full gate.
+
+CLI text set/import now serialize into owned PendingBanks staging, close and
+reopen/verify the prepared archive before publication, then commit through the
+existing rollback path. In-place writes retain the one-time original backup;
+standard data/lang/<language>/text.big destinations are checked for a running
+installation before staging and immediately before commit. UTF-8 source,
+manifest and destination paths are converted explicitly. Before the fix, a
+Windows handle allowing writes but denying new reads let text set overwrite
+the old output and then return failure at reopen verification. The first probe
+used a zero-access handle, which did not enforce the intended sharing condition;
+the corrected generic-read probe reproduces the actual changed-on-failure bug.
+Release forge-tools build passes. Twenty-four Windows checks cover both routes,
+read/rename-denied targets, directory destinations, retry, locked source,
+blocked backup path, exact original retention across repeated writes, Unicode
+paths, running output/in-place installs, unrelated output acceptance and exit
+retry. Only test-owned holding processes were terminated. Unrelated entries and
+refused destinations remain unchanged and staging directories are cleaned up.
+Existing ID allocation (13), import validation (25) and read-only identity/header
+(21) checks pass. Logs build/text-write-publication-{before,before-readlock,build,
+checks,final-checks}-20261009.log and build/text-write-regression-*-20261009.log;
+fixture build/text-write-publication-o_swt5pm. Registered Windows gate and future
+package workflow. Core/GUI unchanged; no repeated core/GUI/full gate or new ZIP.
+These two CLI corrections are newer than the text-browser packaged checkpoint.
+
+CLI text show now gives exact names priority and requires complete uint32 decimal
+ID tokens; duplicate names/IDs across banks refuse instead of choosing the last
+bank. Before the fix, 123junk incorrectly selected ID 123 from the other bank.
+Type-2 output now decodes narrator TOC headers (JSON narrators array / indexed
+plain output), refusing malformed headers and unexpected payloads. Existing
+string/group JSON fields remain unchanged. Scoped forge-tools Release build,
+21 identity/header checks and four existing truncation checks pass; all fixture
+banks remain byte-identical. Retail name/ID lookups each match all 379 original
+header names and preserve the original bank hash. Logs
+build/text-show-{identity-before,identity-build,identity-checks,decode-regression,retail}-20261009.log;
+fixture build/text-show-identity-5jgonsm0; retail evidence
+C:/Users/Cornelio/AppData/Local/FableForgeEvidence/20261009/retail-text-show-q02mon0s.
+Registered in check_all. This CLI fix is newer than the text-browser ZIP; no
+new ZIP/full gate or unchanged core/GUI gate rerun.
+
+Latest local development checkpoint includes the preceding fixes and the Text
+browser/property links/narrator preview/TSV export:
+dist/development/20261009-text-browser/FableForge-0.18.1-rc.1-win64.zip,
+SHA256 7623f34eb57c34e431511f914ba104f3dfb081623e3a04c5626a91be97ede81d.
+Package checks validate 109 file identities and 127 local documentation links.
+Extracted defs, GUI smoke and both-size text browser workflows pass from an
+unrelated working directory: 3 run, 88 not run, 0 skipped. All three extracted
+executables retain their recorded hashes. Evidence
+C:/Users/Cornelio/AppData/Local/FableForgeEvidence/20261009/package-smoke-p3d3in52;
+build/text-browser-{package,extracted-package}-20261009.log. This is a scoped
+local checkpoint, not a rerun of the historical full gate or a published release.
+After validation, removed the superseded static-mesh-replacement checkpoint
+(94,483,700 bytes) and retained its small metadata/manifests under
+snapshot-cleanup/retained-checkpoint-replaced on C:. Only the new checkpoint
+directory remains in dist/development. Earlier retained-package references below
+describe historical states; current source/game files remain untouched by cleanup.
+
+Assets > Text now exports the entire loaded bank to a new UTF-8 TSV on a worker,
+including rows outside the current filter. Columns preserve bank/ID/name/type,
+content/speaker/speech-bank/identifier, JSON tags/member IDs/narrator names and
+per-entry errors. UTF-8 BOM and quoted cells preserve quotes, tabs and newlines.
+Uses an owned temporary directory and exclusive MoveFileExW publication without
+replacement; existing files, source-bank aliases and missing parents refuse.
+Writes no game bank and reads only the captured in-memory index. Release build
+passes (build/text-tsv-export-build-20261009.log); actual-control checks at both
+sizes cover Unicode output paths, filtered full-bank export, exact special
+characters, metadata/errors, existing-file/source-alias preservation and cleanup.
+Log build/text-tsv-export-ui-20261009.log; fixture build/text-browser-ui-9suwn2c2.
+Retail probe independently verifies all 28,913 exported rows against original
+bytes: 26,807 complete strings and metadata/tags, 2,105 groups and 379 narrator
+names. Original text.big SHA256 unchanged; no temporary export directories remain.
+Evidence C:/Users/Cornelio/AppData/Local/FableForgeEvidence/20261009/retail-text-tsv-8crhyd6r;
+build/text-tsv-export-retail-20261009.log. Prior 52-group core gate still applies
+to unchanged core code; no full-gate rerun/new ZIP. Text editing/addition pending.
+
+Read-only narrator preview now decodes type-2 names from the TOC subheader,
+following FableTLC docs/formats/TEXT.md section 4 (u32 count plus terminated
+ASCII names; no payload). New forge::textbig::decodeNarrators bounds the count,
+rejects truncated/unterminated/non-ASCII/trailing bytes, and accepts empty names
+and empty lists. Existing writer and compatibleSpeakerHeader remain unchanged.
+Assets > Text renders indexed names with clipping and contains malformed-list
+errors per entry. Release build passes; all 52 core groups pass in 28.78 seconds,
+including every truncated prefix and malformed narrator-header cases. Desktop
+and small-window workflows pass with native-shaped headers, exact names and
+malformed-list handling; property navigation and previous browser workflows pass.
+Retail read-only probe independently parses the original header and verifies
+all 379 displayed names, all 28,913 entries and zero decoding errors. Screenshot
+visually inspected; original text.big hash remains
+f1b76255aaf469a00cdb484cac5bcf68a65f5a370cc011d185985dd1def26f0c.
+Logs build/text-narrator-preview-{build,final-build,core,ui}-20261009.log and
+build/text-narrator-retail-ui-20261009.log; UI fixture build/text-browser-ui-j6gz6_ym;
+retail evidence C:/Users/Cornelio/AppData/Local/FableForgeEvidence/20261009/retail-text-narrators-jq5xidio.
+New assert_text_narrator compares an indexed name. No narrator writer, new ZIP
+or full-gate rerun; text editing/addition/export remain pending.
+
+Object property links now open Assets > Text for CTCActionUseReadable's
+GameTextDefName and CTCInfoDisplay's TextTag/TextTagBack. These three mappings
+come from docs/re_reference/vanilla_property_fields.tsv lines 111-113. Links
+queue selection through a cold async bank load, retain the current language,
+clear the browser filter and close the property inspector. Missing/ambiguous
+references preserve the prior text selection; no document edit occurs.
+Release builds pass (build/text-property-jump-{build,final-build}-20261009.log).
+Both desktop/small-window actual-control regressions pass, including cold load,
+numeric-symbolic-name priority, warm navigation and missing-reference handling;
+the original map and every source bank remain unchanged and doc_changes is zero.
+Log build/text-property-jump-ui-20261009.log; fixture build/text-browser-ui-jlqelq0b.
+Existing text browser/root/group/error checks also pass. No new ZIP/full gate.
+
+User-authorized old-snapshot cleanup removed 49 superseded local development
+directories (3,888,278,774 bytes), retaining the static-mesh-replacement ZIP and
+verifying SHA256 c1dc63d2d31cd00373a65fdd64188a4c660b105b4b859882e9b2d047f6bd8a3e.
+Also removed build/texture.zip and build/aeon_controller.zip (83,693,624,275 bytes)
+after identifying their generated regression roots and preserving every file up
+to 4 MiB with CRC-checked extraction and complete archive manifests on C:.
+Total removed: 87,581,903,049 bytes; D: reported 92,973,158,400 bytes free afterward.
+Evidence/manifests: C:/Users/Cornelio/AppData/Local/FableForgeEvidence/20261009/snapshot-cleanup.
+Historical package/archive paths below intentionally no longer exist; their
+small metadata/evidence are retained there. Current build/fixtures and latest
+package-smoke-7vhb9gsg extraction were retained. No game/source files removed.
+
+Text content now wraps within the read-only viewport. Release build and both
+window-size regressions pass (build/text-browser-wrap-ui-20261009.log; fixture
+build/text-browser-ui-4t0amff6). Retail long-string probe also passes and its
+screenshot shows wrapped text; all 28,913 entries decode as before and original
+bank hash is unchanged. Evidence
+C:/Users/Cornelio/AppData/Local/FableForgeEvidence/20261009/retail-text-browser-f3hp_82d;
+build/text-browser-retail-wrap-20261009.log. No new package/full gate.
+
+Read-only Assets > Text browser implemented using forge::big/textbig. Async
+indexing retains every row; unsupported narrator lists and malformed entries stay
+visible, with entry errors contained instead of failing the whole bank. Supports
+language selection, cached name/ID/content filtering, virtualized rows, metadata
+and tags, read-only copyable content, and same-bank group member links. Exact
+names take precedence over numeric ID shortcuts; ambiguous/missing lookups
+preserve the prior selection. Missing/ambiguous group IDs remain disabled links.
+Save-root/language changes discard stale worker results and use per-language
+base fallback. Text readers participate in the existing mod-reader barrier;
+mod completion invalidates the text index. No text writer was added.
+
+GUI Release build passes. Actual-control regressions at 1440x900 and 800x600
+cover Unicode search and exact full content, attempted edits, language switching,
+groups including a cycle/missing/duplicate member, numeric symbolic-name priority,
+ambiguous selection, malformed content, narrator refusal, Refresh and staged/base/
+empty-folder fallback. Native input/source hashes are unchanged. Logs
+build/text-browser-{build,final-build,content-assert-build,content-ui,retail-build,
+retail-ui,model-regression,model-identity-regression,texture-regression}-20261009.log.
+The first screen run's existing assert_state only compared one token; new
+assert_text_content compares the full UTF-8 sentence without changing that older
+command. Evidence build/text-browser-ui-v97wa1d4. Four replacement workflows,
+model identity checks and texture-root checks at both sizes pass unchanged.
+
+Retail read-only GUI probe indexes 28,913 English entries: 26,807 strings,
+2,105 groups and one narrator list, with zero string/group decode errors. Native
+tutorial text independently decoded from original bytes matches the selected
+read-only content, and a group member link works. Screenshot visually inspected.
+Source text.big SHA256 remains
+f1b76255aaf469a00cdb484cac5bcf68a65f5a370cc011d185985dd1def26f0c.
+Evidence C:/Users/Cornelio/AppData/Local/FableForgeEvidence/20261009/retail-text-browser-t00ommma;
+helper build/test_text_browser_retail_20261009.py. Existing native TEXT.md routes
+payload/tag/group evidence. Windows tiny UI test registered in check_all; no
+full-gate rerun/new ZIP/in-game claim. Shared core is unchanged from the prior
+52-group run. String editing/addition, narrator preview, TSV export and property
+grid text-field jumps remain pending.
+
+Non-staged `forge-tools mods merge/build` refuses an output containing a running
+Fable.exe, independent of the selected base install. Previously final publication
+could overwrite another running installation. The preflight is before composition,
+publication rechecks before preparation and immediately before PendingBanks
+commit. Existing rollback/receipt ownership behavior stays unchanged. Scoped CLI
+Release rebuild passes; ten output publish/lock/directory/process-refusal/exit
+retry cases pass, and all 58 reusable-output ownership checks pass in each of
+ordinary and --complete-data modes (116 total). Only test-owned harmless holding
+processes are started/terminated. Logs build/mod-output-running-{before,build,
+final-build,checks,ownership,complete-data}-20261009.log. Evidence
+mod-output-publish-rsy49zbp, mod-build-ownership-3cjrlb9n and
+mod-build-ownership-__5s3rhc. This Windows-only publication regression is now
+registered in check_all. The historical full gate was not rerun and the latest
+ZIP predates this guard. Shared core source is unchanged from the 52-group run
+below; no game install files were modified.
+
+New-model GUI import's selected-save-root running guard was independently checked
+alongside replacement with the same isolated helper; both refuse, preserving
+all bytes. Evidence mesh-replace-ui-r0ek0drl and
+build/mesh-replace-running-import-regression-20261009.log. Recipe imports run in
+the composer's temporary workspace; the new final-output guard protects where
+that finished composition is published.
+
+Replacement's running-game guard now checks outRoot before preparation and
+before commit, including when it differs from baseRoot. Previously redirected
+replacement could write an install with Fable running from that destination.
+The fourth GUI workflow launches only its own harmless holding Fable.exe under
+the tiny staged root, reproduces the former write, and now proves refusal with
+all source/destination hashes unchanged and no pending directory. Only that test
+process is terminated. All Release targets and 52 core groups pass (23.22 sec),
+16 replacement CLI cases and four GUI workflows pass. Existing install guard
+regression passes sibling, own/nested, canonical alias and exit retry cases.
+Logs build/mesh-replace-{running-before-ui,running-build,running-core,running-cli,
+running-ui,install-guard-regression}-20261009.log. Evidence
+mesh-replace-ui-gbxu6ywj and install-guard-mf_detzv. This is later than the ZIP.
+
+Two more owned package extraction folders, package-smoke-7vhb9gsg and
+package-smoke-cqmw7iqw, moved under the same C: evidence directory with junctions
+at their old build paths. Latest replacement extraction executable hashes were
+verified afterward. No evidence removed; D: free rose to approximately 467 MB.
+
+Static replacement refuses noncanonical root matrices before writes. MESH.md
+section 3.2 identifies the 12-float identity root after counts; the composer
+always reconstructs it. Previously a translated donor root silently vanished.
+Two independent raw-header mutations (translation and NaN) now refuse with
+unchanged file hashes; all 16 replacement CLI checks and three GUI workflows
+pass. Release build and all 52 core groups pass in 40.16 seconds. Logs
+build/mesh-replace-root-{before,build,core,cli,ui}-20261009.log; fixtures
+mesh-replace-ztmxdyqj and mesh-replace-ui-liqw1vhk. Strict canonical-byte identity
+is intentional until other root metadata can be preserved with native evidence.
+This source is later than the last ZIP; no in-game probe/full gate rerun.
+
+Disk pressure: retained finite-editor-transform extraction
+build/package-smoke-e2imbl1a moved to
+C:/Users/Cornelio/AppData/Local/FableForgeEvidence/20261009/package-smoke-e2imbl1a,
+with a junction at the original path. Recorded extracted executable SHA256 values
+were verified through that path after the move. No evidence deleted. D: remained
+under 250 MB free; use tiny fixtures and avoid another full corpus/package copy.
+
+Active glTF skin instances now refuse before composition, requesting a baked
+static posed shape. The former static importer applied node transforms but
+ignored joint transforms, silently importing unposed geometry. A valid one-joint
+weighted triangle regression reproduces this; unused skin declarations and skin
+nodes outside the selected scene remain accepted as ordinary static geometry.
+The CLI fixture has real JOINTS_0/WEIGHTS_0 data and proves source/bank hashes and
+pending-directory inventory remain unchanged. Native skin import/baking is not
+implemented. Khronos glTF 2.0 sections 3.7.3/3.7.4 define skin instantiation:
+https://registry.khronos.org/glTF/specs/2.0/glTF-2.0.html.
+Release build passes; all 52 core groups pass in 26.83 seconds (732 model-input
+checks), 91 geometry CLI cases, 14 replacement cases and three replacement GUI
+workflows pass. Logs build/gltf-skin-{before-build,before-core,build,core,
+geometry-cli,replace-cli,replace-ui}-20261009.log; fixtures
+mesh-invalid-geometry-addvsfi8, mesh-replace-nhxo523y, mesh-replace-ui-xvsxirkt.
+This correction is later than the last ZIP. Full gate and retail/in-game probes
+were not rerun. Disk pressure limits further work to small fixtures.
+
+glTF material slots now use material-array identity rather than display names.
+Previously two distinct materials named stone/default/empty collapsed, including
+collision between named default and the omitted-material default. Three new
+four-primitive regressions reproduce the loss and now retain distinct slots,
+shared references and a separate implicit default. Khronos glTF 2.0 section 3.3
+states references use array indices and names are not guaranteed unique:
+https://registry.khronos.org/glTF/specs/2.0/glTF-2.0.html.
+First-use slot order stays unchanged. Release build passes; 52 core groups pass
+in 27.17 seconds (729 model-input checks), 90 geometry CLI checks, 14 replacement
+CLI checks and three replacement GUI workflows pass. Logs
+build/gltf-material-identity-{before-build,before-core,build,core,geometry-cli,
+replace-cli,replace-ui}-20261009.log. Tiny evidence mesh-invalid-geometry-n30uleex,
+mesh-replace-ui6rqkni, mesh-replace-ui-utrysnet. This fix is later than the ZIP.
+
+Neighboring texture save-folder regression passes at 1440x900 and 800x600:
+rows, decoded export pixels and screenshot pixels follow destination/fallback,
+same-root selection survives, and source/target inventories remain unchanged.
+Tiny source build/mesh-replace-ui-ve7tsb3e/install; evidence
+build/texture-destination-qk07zq85; log
+build/mesh-replace-texture-root-regression-20261009.log. No retail bank copy.
+
+Models now follow save-folder graphics changes without dropping a selected
+identity that exists in the new bank. A screen regression reproduced stale
+staged geometry after returning to base; setSaveRoot updates the model root,
+refreshes a changed bank and reselects the identity. The three replacement GUI
+workflows now also cover base -> staged -> empty-output fallback, and pass:
+build/mesh-replace-preview-root-{before,build,ui}-20261009.log. CLI coverage now
+includes three metadata-header refusals and an independent byte-for-byte material
+record comparison with noncanonical boolean bytes and opaque map/self-illumination
+words: 14 checks pass, build/mesh-replace-yl39_bru and
+build/mesh-replace-material-bytes-20261009.log. These later source/test changes
+are not included in the static-replacement ZIP below.
+
+Save-folder changes now clear replacement errors/success messages, matching
+other file operation feedback. A screen regression first reproduced stale
+success after returning from staged output to the base folder; the reset fixes
+it. Release build and all three replacement GUI workflows pass; evidence
+build/mesh-replace-ui-ybxjwowr and logs
+build/mesh-replace-destination-{before-build,before-ui,build,ui}-20261009.log.
+This feedback-only fix is later than the static-replacement ZIP below.
+
+Static-replacement development checkpoint:
+dist/development/20261009-static-mesh-replacement/FableForge-0.18.1-rc.1-win64.zip,
+SHA256 c1dc63d2d31cd00373a65fdd64188a4c660b105b4b859882e9b2d047f6bd8a3e.
+Extraction build/package-smoke-7vhb9gsg verifies 109 file identities, 127 links
+and one GUI workflow (89 not run). Its actual extracted executables pass 90
+geometry, 88 storage, 70 definition and 10 replacement CLI checks plus all three
+replacement screen workflows, without changing executable hashes. Logs:
+build/mesh-replace-{package,package-smoke,extracted-checks}-20261009.log.
+Retained extracted replacement fixtures: mesh-replace-dpvy72of and
+mesh-replace-ui-j5dc21ox. No full gate, retail replacement or publication.
+
+Bounded existing static geometry replacement is implemented through
+meshimport::replaceModel, `forge mesh-replace`, and Models > Replace geometry.
+Native MESH.md material/static-block layout evidence informed preservation:
+material records retain names, IDs, map flags, raw boolean bytes and optional
+filenames; descriptor physics/texture list and every unrelated bank entry remain
+unchanged. Geometry/bounds/LOD size update under the existing pending-bank commit,
+backup and running-game guards. Donors require BIGB, unique type-1 MESH_ identity,
+one LOD, canonical material IDs, no helpers/bones/cloth/animated blocks or radius
+override. Inputs require matching material slot count/order. Collision rebuilding,
+animated import, complex donors and modpack recipe integration remain pending.
+
+Final Release build passes; all 52 core groups pass in 18.51 seconds. Ten tiny
+replacement CLI checks pass (build/mesh-replace-bx7jw9x0); three actual-control
+GUI workflows pass (build/mesh-replace-ui-o8wyqror): refusal, in-place replacement,
+and graphics-only staged output. Staged output preserves every base file and
+keeps the definition/texture context ready while reloading the selected preview.
+Logs: build/mesh-replace-{staged-build,staged-ui,final-core,final-cli}-20261009.log.
+Earlier source checks cover 90 geometry and 70 finite definition cases. Tests are
+registered in check_all; the historical full gate was not rerun. No real game bank
+was replaced, no in-game probe performed, and nothing published.
+
+The prior finite editor transforms development ZIP includes the frame guards,
+matrix range correction and subnormal parser but predates replacement:
+dist/development/20261009-finite-editor-transforms/FableForge-0.18.1-rc.1-win64.zip,
+SHA256 acdbc01778dd6779d39511f97c3adfce1b2d86d5384286a239e5f4e7bd4beef9.
+Package checks verified 109 file identities and 127 links, one GUI workflow
+(89 not run), plus extracted CLI checks: 90 geometry, 88 storage, 70 definitions.
+This is a dirty-source local checkpoint, not release provenance.
+
+Editor frame/matrix conversions now use double hypot lengths and a double scale
+average. Prior float-squared lengths overflowed for finite 1e20/1e30 scales and
+1e30 forward/up vectors, yielding infinite scale or changing orientation. Matrix
+input must be finite and the recovered scale must fit float before the output
+Frame changes. Tests cover four valid scale magnitudes, large direction vectors,
+48 non-finite matrix entries and an unrepresentable recovered scale. All Release
+targets build; all 52 core groups pass in 22.80 seconds; owned_movement and
+selection_actions GUI automation pass. Logs build/frame-matrix-range-{before-core,
+build,core,ui}-20261009.log; GUI evidence build/frame-matrix-range-ui-20261009.
+Native row/basis conventions and existing small-length refusal thresholds remain
+the same. This correction is later than the latest finite-model-writers ZIP.
+
+Document::setFrame/setOwnedFrame now refuse any non-finite position, forward,
+up or scale component before undo/text/revision changes. Sixty prior failures
+cover NaN and both infinities across all ten components and both writers; two
+further cases prove refusal preserves redo and its exact reapplication. Existing
+direct locks and owned-child lock exceptions retain their behavior. All Release
+targets build; all 52 core groups pass in 31.53 seconds, placement and
+track_preview GUI automation pass. Logs build/frame-finite-{before-core,build,
+core,ui}-20261009.log; GUI evidence build/frame-finite-ui-20261009. This source
+change and subnormal definition parsing are later than the latest ZIP.
+
+Typed definition float parsing now also accepts representable nonzero subnormals,
+which std::stof rejected on UCRT with ERANGE. strtof retains complete-token and
+finite checks, permits ERANGE only with a finite nonzero result, and refuses
+overflow/underflow to zero. All 70 direct writer checks pass, including positive
+and negative minimum subnormals, vector storage, hexadecimal C-float grammar,
+leading whitespace, signed zero, maximum finite float, ten bad spellings across
+all scalar/vector positions, and exact untouched legacy bytes. All Release
+targets build; all 52 core groups pass in 34.27 seconds. Logs build/defs-subnormal-
+{before-cli,build,cli,core}-20261009.log; fixture defs-finite-values-zftnebtp.
+This change is later than the finite-model-writers ZIP.
+
+Packaged checkpoint for the active-morph, imported-definition-size and finite
+definition writer fixes: dist/development/20261009-finite-model-writers/
+FableForge-0.18.1-rc.1-win64.zip SHA256
+51ab8f6323cc77ab54ffb95b9364a7d8716f962506331e85c4c6c5f86d3dd550.
+Package identities 109, links 127 and GUI pass (1 run, 89 not run, zero skips).
+Actual extracted tools pass 90 geometry/URI, 88 storage and 53 definition-writer
+checks; neither executable changes. Evidence build/package-smoke-cqmw7iqw,
+finite-model-writers-{package-smoke,extracted-cli}-20261009.log. Retail/full gate
+not rerun. Subsequent representable-subnormal parser work is outside this ZIP.
+
+Typed compiled-definition float edits now require finite values. The shared
+defedit float parser rejects NaN/Inf before mutation, covering scalar, C2DVector
+and C3DVector writers. Raw byte edits and untouched legacy fields retain their
+existing preservation contract. New tools/test_defs_finite_values.py reproduces
+the old NaN acceptance and now passes 53 checks: eight non-finite spellings in
+all six scalar/vector positions refuse without output or source changes; five
+valid edits independently decode exact expected float words and preserve every
+other field, including an untouched legacy NaN payload. All Release targets build,
+52 core groups pass in 38.13 seconds, and all 90 geometry CLI checks still pass.
+The new test is registered in check_all; that full gate was not rerun. Evidence
+build/defs-finite-{before-cli,build,cli,core,mesh-cli}-20261009.log; fixtures
+defs-finite-values-modvwf7l and mesh-invalid-geometry-l46iwaf2. This change is
+later than the lock-and-polygon ZIP.
+
+Imported definition sizes now subtract mesh bounds in double before converting
+centimetres to world units. Opposite finite endpoints previously overflowed the
+float subtraction and wrote an infinite MeshRadius despite a finite final size.
+Two successful tiny-bank OBJ imports cover wide and tall bounds; independent
+defs decode reads the raw saved float words of MeshHeight, ApproxMaxMeshHeight
+and MeshRadius and checks their expected finite values. Source OBJ hashes stay
+unchanged. All Release targets build; 52 core groups pass in 23.82 seconds and
+90 geometry/URI CLI checks pass. Logs build/mesh-def-bounds-{before-cli,build,
+core,cli}-20261009.log; successful fixture mesh-invalid-geometry-l4qhid2p.
+This change is later than the lock-and-polygon ZIP; no in-game claim is made.
+
+After the lock-and-polygon ZIP, active glTF morph shapes now refuse before bank
+writes instead of silently importing base geometry. MeshInstance retains node
+weights; node weights take precedence over mesh defaults, and absent weights
+mean zero. Nonzero effective weights (including negative and 1e-100), malformed
+numeric weights and target-count mismatches refuse with bake-to-static guidance.
+Zero effective weights remain supported, including node zero overriding nonzero
+mesh defaults and no-scene mesh libraries. Khronos glTF 2.0 sections 3.7.2/3.7.4:
+https://registry.khronos.org/glTF/specs/2.0/glTF-2.0.html . This is a bounded static
+import contract, not morph playback/baking or a full unconsumed-target validator.
+Before regression accepted an active shape. All Release targets build, all 52
+core groups pass in 28.09 seconds (726 model-input checks); 88 geometry/URI CLI
+checks pass, including three new refusal cases with all fixture banks and source
+files unchanged and no pending import directory. Logs build/mesh-active-morph-
+{before-core,all-targets,core,cli}-20261009.log; fixture mesh-invalid-geometry-hroqzw7b.
+This change is later than the latest ZIP; no packaged/full-gate claim is made.
+
+Latest local development ZIP: dist/development/20261009-lock-and-polygon/
+FableForge-0.18.1-rc.1-win64.zip, SHA256
+01b1b8662e3c29d98cf4063085a8b862dcf3d2c297614604d68dcd0f31246f15.
+It includes the Light lock and straight-edge polygon fixes below. Packaged
+identities 109 and documentation links 127 pass; GUI 1 run, 89 not run, zero
+skipped (retail not rerun). Evidence build/package-smoke-88milthu. Actual extracted
+executables pass 85 geometry/URI and 88 storage CLI checks without changing either
+executable; build/lock-polygon-extracted-cli-20261009.log and the extraction's
+lock-polygon-extracted-tools.json retain the result. The straight-edge suite also
+covers a concave nine-corner U shape in both windings and all start positions:
+18 further cases pass the focused model-input test (717 total); no additional
+production change was needed. Focused log obj-straight-concave-core-20261009.log.
+The historical 190-workflow full gate still predates these fixes.
+
+OBJ straight-edge corner regression: a five-corner rectangle with three corners
+on its bottom edge produced a collapsed fan triangle. Convex fans are retained
+only when every fan triangle has positive signed projected area; other simple
+planar polygons use the existing bounded ear clipping. Ten cases cover both
+windings and every start corner, checking nonzero triangle orientation, analytic
+area, three triangles and participation of all five attributed corners. Before
+the fix the focused mesh-input check failed. All Release targets now build, all
+52 core groups pass in 25.23 seconds, model-input reports 699 checks and geometry
+CLI reports 85 checks. Logs: build/obj-straight-edge-{build,core,cli}-20261009.log;
+CLI fixture build/mesh-invalid-geometry-1rn_kns0. This change and the Light lock
+guard below are later than the concave-obj ZIP; no package or full gate rerun is
+claimed.
+
+After the concave-obj ZIP, locked property-grid edits now also protect
+CTCPhysicsLight PositionX/Y/Z. Before regression changed a locked object's first
+position field. The existing Standard/Navigator transform lock rule is extended
+only to Light's confirmed Base position storage (inherited OnSerialise 0246E620),
+without assigning Standard RHS semantics to Light. Tests cover all three axes,
+unchanged text/revision/undo on refusal, owner edits, unlock/edit and byte-exact
+undo, plus preserved redo after another refusal. All Release targets build;
+52 core groups pass in 28.32 seconds and locked_things GUI automation passes.
+Logs: build/light-physics-lock-{before-core,all-targets,core,ui}-20261009.
+This property-grid guard is later than the latest ZIP. It does not add Light
+frame/gizmo support; physicsOf retains its existing Standard/Navigator scope.
+
+OBJ concave faces now triangulate without fan overlap/outside coverage. Independent
+projected ear clipping retains original corner indices/UVs/normals and winding;
+valid convex fans and triangles retain previous order. A face is bounded to 1024
+corners and 8,388,608 ear candidate point tests. Self intersections, collapsed
+projected polygons and non-planar concave faces refuse before bank writes and ask
+for exporter triangulation. Geometry is centered for double projection predicates.
+Algorithmic reference: Assimp official TriangulateProcess.cpp (simple/nearly planar
+polygon requirement); no external library or source code was copied into Forge.
+Before fixture's U-shaped polygon overlaps/exceeds its area. After: 64 cases cover
+four planes including tilted, both windings and all eight start corners, preserve
+attributes and analytic area, with valid 1024/refused 1025 corners and convex order.
+All Release targets build, 52 core groups pass in 21.69 seconds; mesh-input has
+689 checks. Expanded geometry CLI passes 85 cases, including three polygon refusals
+with input/bank hashes unchanged and successful six-triangle concave import linked
+to a decoded type-3 hull. Initial CLI harness used nonexistent hull triangles key;
+corrected independent chunk/identity checks pass in fresh mesh-invalid-geometry-mzwjb3zs.
+Latest local checkpoint includes preceding component float underflow fix:
+dist/development/20261009-concave-obj/FableForge-0.18.1-rc.1-win64.zip
+SHA256 b97932c7af79fe84b18b8f02a56cd820c1cbec10e74911a051acc3a403bfbfce.
+Package-smoke-pfbplyiz passes 109 identities, 127 links and GUI (1 run, 89 not run,
+zero skips); actual extracted forge/forge-tools pass all 85 geometry and 88 storage
+checks, both executable hashes unchanged. Retail smoke was not rerun for this ZIP.
+No new concave in-game/visual claim. Hashes/scope: build/obj-concave-checkpoint-20261009.json.
+Public model test accepts --forge/--tool to validate actual extracted binaries;
+EDITOR.md documents polygon bounds and exporter triangulation fallback.
+
+After the native-property-types ZIP, component float overrides also reject
+float underflow before mutation/undo. The prior double parser admitted MessageRadius
+1e-100 (range 0..30), which cannot retain a nonzero float. An additional complete
+finite float parse now rejects it while retaining the original double-valued
+metadata range check: 30.0000001 remains out of range even if float rounds to 30.
+Zero and representable 1e-40 retain exact authored spelling and byte-exact undo;
+refusal after undo preserves redo/revision. Before focused test failed seven
+assertions including downstream byte preservation; final all Release targets build,
+52 core groups pass in 19.47 seconds and component_overrides GUI passes.
+Logs: build/component-float-underflow-{before-core,all-targets,core,ui}-20261009.
+This source change is later than the latest native-property-types ZIP.
+Additional post-ZIP composition checks: 36 TNG contributor, 24 identical contributor,
+and staged baseline merge/build/review projection checks pass with input/restoration
+contracts intact (native-property-mod-{tng-contributors,tng-identical,baseline}-20261009).
+
+Property-grid float edits now require complete finite float-range values before
+undo/mutation. Three overflowing decimal cases reproduced six failures. A second
+sequence reproduced four failures: saving integer spelling 3 had reclassified
+Health as Int, bypassing the initial guard. Confirmed top-level native float
+fields now retain Float kind across spelling changes: physical Health/ObjectScale/
+angles, Switch radius/environment time and creature InitialPos XYZ. Explicit
+confirmed physical classes only; base Thing and unknown types keep prior kinds.
+Native proof is reused from namespace-tng-storage-routing-20261008.c (CThingPhysical
+01F1F560), class-routing evidence and existing creature/switch packets. Valid zero,
+negative, explicit-plus and large finite decimal values preserve exact field delta
+and undo. Unknown raw fields and parsed input bytes are not normalized.
+All Release targets build; final 52 core groups pass in 23.07 seconds and
+selection_actions/component_overrides GUI pass. Latest local checkpoint:
+dist/development/20261009-native-property-types/FableForge-0.18.1-rc.1-win64.zip
+SHA256 dd9f5603d884fc6758a0974cfeb73b51561e0228f14653724e64c5ab3b917e24.
+Package-smoke-4xkzcwy0 validates 109 identities, 127 links, retail/GUI (2 run,
+88 not run, zero skips), plus all 88 actual extracted-tool checks unchanged.
+Includes all preceding section/name/property fixes. Evidence/input hashes:
+build/property-float-kind-inputs-20261009.json. The frozen full 190-workflow gate
+remains separate from this subsequent targeted validation.
+
+Native brain/switch name authoring now matches storage review. Native evidence
+is reused from namespace-brain-name-token-native-20261008.txt (01D6E95E to
+03057BD0) and namespace-switch-name-token-native-20261008.txt (027F935C/027F948B).
+New tng::isUnquotedIdentifier/isIdentifierProperty helpers share the rule for
+ScriptName, AICreature.OverridingBrainName and Switch.TriggeredByThing/EnvironmentDef.
+Core setters, insert-before and set-all reject invalid identifiers before mutation;
+Document property APIs do so before undo/revision. Legacy quoted inputs remain
+byte-preserved; correction to a bare identifier is permitted and undo is exact.
+Unknown same-spelled fields on other types stay raw. Editor errors name the field
+and explain ASCII letter/underscore first, ASCII letters/digits/underscore afterward,
+and NULL to clear. Before regression: 234 failed assertions; after: all 52 core
+groups pass in 26.27 seconds, all 88 public CLI checks and selection_actions/
+component_overrides UI pass. All Release targets build and final build is up to date.
+Latest local development checkpoint, including previous whitespace/numeric fixes:
+dist/development/20261009-native-name-authoring/FableForge-0.18.1-rc.1-win64.zip
+SHA256 f296e263d8d5f99cdf5b33d220d52481c1caff824d58ac327d39e2ec5f430873.
+Package-smoke-jn8w84py passes 109 identities, 127 links and retail/GUI (2 run,
+88 not run, zero skips). Its actual extracted tool passes all 88 storage checks
+unchanged. Source/evidence hashes: build/native-name-authoring-inputs-20261009.json.
+This is subsequent targeted validation; the frozen 190-workflow gate is separate.
+
+New section names additionally refuse surrounding whitespace: four blank/padded
+cases reproduced eight safety failures before this fix. The parser trims those
+names while reindexing, so implicit first-section creation previously mutated
+then failed lookup. Refusal now precedes mutation; numeric names, internal
+spaces and day/night suffixes retain round-trip names. All Release targets build,
+52 core groups pass in 27.88 seconds, 88 CLI checks and owner_daynight GUI pass.
+Logs: build/tng-section-whitespace-{before-core,all-targets,core,cli,ui}-20261009.
+This writer change and the preceding numeric diagnostic are later than the
+property-list-lines ZIP; both remain un-packaged at this checkpoint.
+
+After the latest ZIP, storage numeric diagnostics now distinguish from_chars
+result_out_of_range as "numeric value outside supported range" from malformed
+syntax. UID 18446744073709551615 remains accepted; 18446744073709551616 and
+original Seasons spelling 1844674165887537688224486 remain refused at UID line 5
+in public fixtures, while 1junk retains "invalid numeric value". All Release
+targets build, 52 core groups pass in 22.96 seconds and 88 public CLI checks pass.
+Original-source audit tng-numeric-range-lookups-20261009 proves identical input
+and plan hashes, coverage counts, refusal locations and decisions after normalizing
+only the new diagnostic wording. This change is subsequent to the
+property-list-lines ZIP and has not been packaged. No source admission broadened.
+
+The following list-entry fix adds NUL to its existing semicolon/CR/LF refusal,
+before insertion and undo. Both empty and nonempty lists had accepted embedded
+NUL before the fix (tng-list-nul-before-core-20261009.log); both now refuse
+without text/revision/undo changes. Combined property/list changes build all
+Release targets and pass 52 core groups in 18.37 seconds; container_lists GUI
+passes last-entry removal, re-add and undo. Latest local development ZIP:
+dist/development/20261009-property-list-lines/FableForge-0.18.1-rc.1-win64.zip
+SHA256 2f7860fbeb974c652fcf08e4ab4aae9c17f62a262010d02cf307163bb3bf8328.
+Package-smoke-4kk_qkbr validates 109 file identities, 127 links, retail/GUI
+(2 run, 88 not run, zero skips); all 84 checks pass against its unchanged
+extracted tool. This ZIP includes the preceding section and property-grid fixes.
+The 190-workflow gate remains the earlier frozen checkpoint, not a rerun here.
+
+After the section ZIP checkpoint, property-grid edits now reject CR, LF and NUL
+before mutation, revision changes or undo creation. Three quoted-value cases
+failed six assertions before the fix (tng-property-lines-before-core-20261009.log)
+and pass afterward. All Release targets build, 52 core groups pass in 27.62
+seconds, and selection_actions/component_overrides GUI workflows pass. Evidence:
+build/tng-property-lines-core-20261009.log and tng-property-lines-ui-20261009.
+This source change is later than the section ZIP; it is not included in that ZIP.
+
+The subsequent TNG section contract fix admits exact native %DayOnly/%NightOnly
+suffixes on existing token bases. LoadEntitiesFromScript 01D38EED uses the
+ReadAsStringUntilString 030574D0 reader; GetFullSectionNameForThing 01C56240
+and literals 04292308/04292310 establish the suffixes. Native evidence is in
+build/tng-section-reader-native-20261009.txt and tng-daynight-constants-native-20261009.txt.
+New raw section headers refuse empty names, semicolon, CR, LF and NUL before
+mutation; numeric names and spaces retain their behavior. Unsafe imported
+headers cannot cause a partial day/night edit or an undo/revision change.
+All Release targets build; final core checks pass 52/52 in 15.00 seconds,
+public storage CLI checks pass 84/84, and owner_daynight GUI automation passes.
+Original source and namespace-plan hashes and coverage counts are unchanged
+(build/tng-daynight-lookups-20261009.json). Latest local checkpoint:
+dist/development/20261009-tng-section-contract/FableForge-0.18.1-rc.1-win64.zip
+SHA256 04f0692efb5f0bbbc3378a726264ad90f126918be8478956668408d68817c645.
+Package evidence build/package-smoke-5q7c86qg passes 109 file identities,
+127 documentation links, retail/GUI (2 run, 88 not run, zero skips), plus all
+84 actual extracted-tool CLI checks with executable bytes unchanged.
+This targeted validation follows the frozen 190-workflow gate; that full gate
+was not rerun for these later changes.
+
+Fresh corrected fixed-build broad gate completes with 190 passes, zero failures
+and ALL PASS in build/forge-corrected-full-check-20261009.log. Its executable,
+script and pre-promotion source hashes are recorded in the adjacent
+forge-corrected-full-check-20261009-checkpoint.json. Explicit partial coverage:
+20,214 retail lipsync entries round-trip; 291 empty/non-type-1 entries are skipped.
+GB level/WAD fixtures explicitly exclude bulk graphics; full graphics-inclusive
+overlap remains unverified. All previously failing corpus workflows now pass.
+
+Latest local development checkpoint includes the promoted writer guards:
+dist/development/20261009-native-writer-guards/FableForge-0.18.1-rc.1-win64.zip,
+SHA256 a9f63f7a9d549d3b22c6e2804df0a15e81d075c28117f0cf7059b59ffd37cac9.
+Package smoke package-smoke-onc52klk passes 109 identities/127 links and retail/
+GUI workflows (2 run, 88 not run, zero skips). Its actual extracted tool passes
+all 76 storage CLI checks unchanged (native-writer-guards-extracted-cli-20261009.log).
+
+The subsequently validated ScriptName and minimap-number writer drafts are now
+promoted to their main-checkout files after verifying all 12 original hashes.
+They pass combined affected core tests and original-file audits in isolation;
+ordinary Release rebuild passes in script-name-wld-all-targets-20261009.log.
+All 52 core groups pass in 27.65s (script-name-wld-core-20261009.log) and
+76 public storage CLI checks pass with fixture bytes unchanged
+(script-name-wld-storage-cli-20261009.log). Promotion text is verified against
+both candidates, with hashes in script-name-wld-promoted-inputs-20261009.json.
+Post-promotion editor placement, track preview and property override workflows
+all pass (script-name-wld-ui-20261009.log and its retained evidence directory).
+The completed 190-check gate belongs to the preceding fixed checkpoint, not
+these newly promoted guards. No commits, publication or live-game writes.
+
+Preceding local development checkpoint contains the AI/door/WLD-token fixes:
+dist/development/20261009-world-token-review/FableForge-0.18.1-rc.1-win64.zip,
+SHA256 7d0d929b3183283491c0bf0ce3470ee6912641b86e3060af6724aebe848f6514.
+package-smoke-3i_u514y passes 109 file identities/127 links, retail and GUI
+smoke (2 run, 88 not run, zero skips). Actual extracted forge-tools.exe passes
+71 storage CLI checks in world-token-review-extracted-cli-20261009.log.
+That ZIP predates the subsequently promoted ScriptName/minimap-number guards.
+
+ScriptName input contract, investigated while preserving that fixed checkpoint:
+CThing::ConstructFromLevelScript 01CEEC80 reads ScriptName through ReadAsString
+at 01CEF260, requiring an unquoted identifier. Original-byte packet
+build/tng-script-fields-native-20261009.txt confirms it. Before-fix read-only
+public probes at tng-script-name-probe-20261009/result.json accept numeric
+15360 and digit-first 1ROLE; valid/underscore/NULL pass and quoted names refuse.
+Validated draft lives in build/script-name-candidate-20261009 and is now
+promoted after the broad gate completed. Its shared
+ASCII identifier guard covers raw ScriptName setters, property edits, generic
+and five custom placement writers, track placement and track renaming before
+undo/revision changes. Empty optional placement still emits NULL. Legacy raw
+input remains exact; a quoted legacy name can be corrected to a valid identifier
+and undone back to its original bytes. The old Start/Exit writer fixture now
+uses native bare names in the draft. Baseline safety checks expose 127 failures;
+the first fixed draft has zero. Final augmented core and external-domain tests
+plus 76 CLI checks pass in full-validation-final.log. Original Seasons/Secrets
+source reviews and all source/namespace-plan hashes match the preceding door
+inventory exactly (original-lookups.json/.log). A scoped promotion.patch is
+prepared only after verifying all nine original file hashes, then applied.
+Draft GUI messages state the same first-character/ASCII rule and compile with
+normal Release flags. Linking a legacy quoted-name track exposed two failures
+in the initial draft (exception and partial link/undo mutation); a pre-undo
+link-name check now refuses with a rename instruction. New regression coverage
+also proves correction permits the same link operation. The final augmented
+candidate rerun full-validation-track-safe.log passes augmented core/external
+tests and all 76 CLI cases. Original input/plan hashes remain protected; raw
+legacy addThing/replaceThing/insertThingBlock paths intentionally keep their
+preservation behavior rather than silently normalizing incoming content.
+Initial isolated harness attempts lacked the source-local textformat.hpp include
+and Python tools import path; both were corrected before the final clean pass.
+Non-NULL ScriptData is separate: original ArenaSpawn uses "8", ArenaCellDoorGuard2
+uses "Left", HenchmanComment uses "ARENA". The native loader copies quoted text;
+script-specific interpretation remains unproved. These are not blank blocks,
+and the remaining opaque-parameter refusals must not be broadly relaxed.
+
+Second writer contract is isolated in build/wld-number-candidate-20261009.
+Before-fix setRegionText accepts nan/inf, trailing junk, float overflow and an empty
+value for MiniMapScale/OffsetX/OffsetY, then existing reviewWld refuses the output:
+15 reproduced mismatches in wld-number-writer-probe-20261009.log. Native packet
+wld-minimap-number-native-20261009.txt confirms calls at 01C7B49D/01C7B4E9/
+01C7B535 to target 03057A70; wld-minimap-float-reader-native-20261009.txt shows
+numeric item types 3/4 and a 32-bit float result. This is debug-build evidence;
+it does not establish every possible numeric lexical spelling. The draft matches
+the already supported storage-review subset by requiring a complete finite
+float before raw mutation. It preserves valid caller spelling, zero and negative
+values and refuses empty numeric clears. Augmented worldinstall unit is red
+before the fix and green with it, covering existing/absent directives and exact
+unrelated-byte preservation. Original overhaul WLD samples use plain decimal
+integers/floats, including zero and negative offsets; no new positivity rule.
+Both drafts pass combined affected core/worldinstall/external tests; the
+separately named build/FableForge-script-name-candidate-20261009.exe links with
+both without replacing any broad-gate executable. The minimap-number draft
+also accepts all 106 observed field/value spellings from the four original
+overhaul WLDs through a complete scratch WLD header, storage review and exact
+unrelated-byte checks (original-values.json / original-values-final.log).
+Their hashes match the prior world inventory. Initial corpus harness omitted
+the required world header; corrected before the final successful audit.
+Both drafts are promoted only after that prior fixed-build broad gate completes.
+
+WLD initial-quest lexical follow-through: bounded native packet
+build/wld-initial-quest-native-20261009.txt now traces the text-mode map reader's
+common top-level ReadAsString call at 01C79BA1 -> 03057BD0. It processes the
+initial preamble as well as map/region directives; numeric/quoted items have
+the wrong parser type. reviewWld now requires an identifier for initial names,
+retaining duplicate checks and separate unresolved-script scope. Core/public
+CLI before-fix cases admit numeric 15360; after-fix focused core and 71 CLI
+checks pass. The initial CLI relink was held by single-source Seasons; after
+it completed, all Release targets build and 52 core groups pass in 25.73s
+(wld-quest-all-targets-20261009.log / wld-quest-core-20261009.log). The same
+packet traces SaveInitialActiveQuests 0207ED60's master-
+then-nonmaster script-info filtering and CWorld::InitQuests 01B47560's
+ActivateMultipleQuests call; complete preamble-to-activation ownership is still
+not proved and no script registration or game.bin-reference claim is added.
+Original-world reviewer/audit also passes all six original WLD/BWD inputs.
+world-initial-quest-same-plans-20261009.json retains identical inventories,
+queries against both original zero-CRC plans, and all 20 protected input hashes
+from world-minimap-name-token-lookups-20261009.json. The additional final/negative
+BIN-plan packet world-initial-quest-lookups-20261009.json has identical region
+inventories, but different plan identifiers; it is not a byte-identical report.
+
+Fresh corrected Expanded Chapters workflow passes at expanded_chapters_p2hhmzgl:
+expanded-chapters-full-source-rerun-20261009.log, original bank/text exactness
+and preserved input inventories in acceptance/result.json, 798 source/583 built
+WAD payload comparisons, 579 replacements/four appends, zero direct missing
+meshes. Unlike the retained post-check above, this is a fresh complete offline
+workflow; it does not establish gameplay compatibility. Single-source Seasons
+bounded WAD fixture also passes at gb-content-dytiwxw7
+(gb-single-levels-bounded-rerun-20261009.log): individual full-source bank/text
+audit, 423 WAD payloads and 75 TNG copies/no conflicts; level/WAD composition
+takes 49.3s. Both originally failed GB workflows now have corrected focused
+passes with graphics exclusion explicit.
+
+Canonical legacy door annotation: reviewTng preserves DoorTriggerType 1 only
+inside CTCDoor. Native OnSerialise 0257E9F0 consumes only Open/OldOpen; the
+annotation does not override CDoorDef::TriggerType. Original-byte packet:
+build/tng-door-trigger-native-20261009.txt (same FableWin SHA256 below).
+Retail/source DemonDoor_Guild bytes match, SHA256
+c7debc430296a15bf3e5051a31cf7be1da57ea8af1f47772f1a839ca1307e4f9.
+Before-fix core/public CLI fail; after-fix focused core, 67 public CLI checks
+and retail storage review pass. Noncanonical, malformed, duplicate/misplaced
+fields refuse. All Release targets build; all 52 core tests pass in 27.80s
+(build/tng-door-core-20261009.log).
+Lookup inventory build/tng-door-lookups-20261009.json retains every source
+and namespace-plan input hash. Seasons loose 319 -> 322, Secrets 317 -> 320;
+each parked WAD 305 -> 308. Remaining WAD refusals are opaque script data.
+No complete-source or gameplay admission follows from these storage counts.
+
+Broad gate build/forge-full-check-20261009.log completes with 182 workflow
+passes and eight original failures; corrected focused evidence remains distinct.
+Lost Content narrowed level/asset rerun now passes at lost_content_9sqhoknh:
+1002 source level comparisons, 704 built loose payloads, 498 replaced/206
+appended WAD entries, zero direct missing meshes; full-source refusal preserves
+inputs and prior output. Definitions/language banks are explicitly excluded
+from this diagnostic overlay. Seasons/Secrets overlap changes strategy after
+the five-minute bulk-graphics timeout: check_all now selects --skip-graphics
+for its WAD fixture, retaining individual full-source bank/text audits. Original
+graphics-inclusive mode remains available and unverified for the overlap.
+Bounded rerun build/gb-levels-bounded-rerun-20261009.log / gb-content-zrs9xs0l
+passes: both individual full-source bank/text audits, 433 built WAD payloads,
+85 merged TNG levels (3 thing-merged/82 copies) and 16 expected thing conflicts.
+Level/WAD composition takes 83.1s. Graphics-inclusive overlap remains unverified.
+Fresh single-source variant and corrected Expanded Chapters workflow are running
+in gb-single-levels-bounded-rerun-20261009.log and
+expanded-chapters-full-source-rerun-20261009.log. No blanket joint-overhaul
+claim; numeric slot collision remains.
+
+AI increment development ZIP:
+dist/development/20261009-ai-scratchpad/FableForge-0.18.1-rc.1-win64.zip,
+SHA256 7f4828bf87c311b2deb942e8721ee9b8d10929a13f3628ed03d437ad934c3990.
+Extracted package-smoke-gfvdtjar passes 109 identities, 127 links, retail and
+GUI smoke: 2 run / 88 not run / zero skips. Actual extracted forge-tools.exe
+also passes 62 storage CLI checks (ai-scratchpad-extracted-worldreview-20261009.log).
+This snapshot predates the new door annotation increment; no publication.
+
+Expanded Chapters baseline correction exposes another obsolete rejection
+expectation: original full source composes successfully against pristine
+retail definitions/text. The corrected workflow audits supported full-source
+banks/text and level packing, replacing its content-only success path.
+Independent post-composition audit of retained expanded_chapters_a10gsyb2:
+build/expanded-chapters-existing-bank-audit-20261009.json preserves 15522 game,
+611 script, 810 frontend rows and 29301 text entries exactly. Shared level
+validator passes all 798 source and 583 built loose payload comparisons,
+579 replaced/4 appended WAD entries and zero direct missing meshes:
+build/expanded-chapters-existing-level-audit-20261009.log. Original stale
+refusal failure is retained; this post-check is not a fresh complete gate or
+gameplay claim. Lost Content level/asset rerun remains active; full source
+refusal and its excluded definition/language-bank scope remain explicit.
+
+Empty AI scratchpad storage increment: reviewTng now recognizes an empty
+CTCAIScratchpad, matching four authored blocks in original ArenaHallOfHeroes.
+Its own native serializer (01E81B80, vtable 04117F5C) consumes dynamic gossip
+maps; this is not a no-op serializer and every nonempty field remains refused.
+Bounded original-byte evidence: build/tng-ai-scratchpad-native-20261009.txt,
+FableWin SHA256 a9d6d0977d9d7fc8242da4292ae7ed92e926ca80364a95c003d9b9f689e41845.
+Extracted retail level SHA256
+05c83c40a8804ec467fae74ecf48dc47d409087168a5153454bce2d28082c2e3;
+build/tng-ai-scratchpad-retail-review-20261009.json reports supported storage,
+source_admitted=false. Before-fix unit/public CLI fail; after-fix unit and
+62 public CLI checks pass, including empty TNG/GTG and three nonempty refusals.
+All Release targets build (build/ai-scratchpad-all-targets-20261009.log) and
+all 52 core tests pass in 46.72 seconds (build/ai-scratchpad-core-20261009.log).
+Latest minimap ZIP below predates it. Original Seasons/Secrets storage/lookup
+inventory rerun completes at build/tng-ai-scratchpad-lookups-20261009.json:
+Seasons loose acceptance 317 -> 319 (130 refused), Secrets 316 -> 317
+(132 refused), each parked WAD 303 -> 305 (93 refused). All source hashes and
+namespace-plan input hashes equal the previous light-legacy packet. Remaining
+opaque/malformed inputs still refuse; neither source is generally admitted.
+
+Broad test triage continues: original Seasons and Secrets acceptance is the
+documented October 5 contract, not a missing rejection guard. Updated GB-pack
+fixtures independently compare all original bank rows and text ID/type/header/
+payloads after composition, and preserve input inventories. Content-only WAD
+stress checks remain distinct. Rerun: build/gb-compatible-rerun-20261009.log,
+packet build/gb-content-hd_80_wc: both individual full-source bank/text audits
+pass (Seasons 15196 game rows/29085 text entries, Secrets 15368/29161).
+Combined content-only composition exceeds its 300-second limit; WAD payload
+preservation remains unverified in this rerun. Do not repeat it unchanged or
+describe these individual audits as complete joint-source support.
+Initial stale expectations are retained
+in broad log and gb-content-q9b8inxt / gb-content-r7or06fo. The same broad run
+also exposes Dragon Cliff's baseline using live modified definitions rather
+than pristine backups (OBJECT_FORGE_PROBE_CUBE at slot 14761); investigate the
+fixture before altering production namespace guards. Full gate is not green.
+Dragon Cliff now passes with pristine backups and the missing text.big baseline:
+build/dragoncliff-complete-baseline-rerun-20261009.log verifies 16 appended
+root levels byte-for-byte, two replacements, and zero direct missing meshes.
+The intermediate pristine-only rerun correctly refused its absent English
+text bank. Lost Content and Expanded Chapters use the same corrected baseline
+selection/text copy; their content-only scope and incompatible full-source
+refusal assertions remain unchanged. Focused reruns are pending.
+Lost Content's complete-baseline rerun then refuses changed type-1 language
+entry TEXT_GUI_TLC_CRE_1; production language guards remain intact. The
+content-only helper now explicitly excludes both definitions and language
+text.big banks, while separate complete Seasons/Secrets checks retain exact
+text metadata/payload audits. Narrowed level/asset reruns:
+build/lost-content-level-asset-rerun-20261009.log (lost_content_9sqhoknh) and
+build/expanded-chapters-level-asset-rerun-20261009.log
+(expanded_chapters_a10gsyb2), pending. These cannot certify full mod installs.
+
+Final build/package checkpoint for the minimap writer increment: all Release
+targets now build successfully (`build/minimap-writer-all-targets-20261009.log`),
+after the owned new-level child released the CLI output. New development ZIP
+`dist/development/20261009-minimap-complete/FableForge-0.18.1-rc.1-win64.zip`,
+SHA256 `43cf7a9ed892df74a47d913d5ac90e02df9f7a32dbcc3e8bdaba855153c133a4`.
+Extracted packet `build/package-smoke-9n5thok6` passes 109 identities, 127 links,
+retail exports and GUI smoke: two workflows run, 88 not run, zero skips.
+Actual extracted CLI additionally passes all region-text/Restore checks at
+`build/region-text-inputs-24zwvju1` and region rollback/mirror checks at
+`build/region-recovery-si92n0m9`. This archive supersedes the earlier two local
+development checkpoints below. No publication or version change. The broad
+run is still incomplete; new-level CLI/GUI workflows passed in 483.6s and it
+has moved on to overworld checks. Its original three failures remain recorded,
+with corrected focused reruns elsewhere in this section.
+
+Updated local development archive:
+`dist/development/20261009-minimap-writer/FableForge-0.18.1-rc.1-win64.zip`,
+SHA256 `7865f6220db2de9aa38eef76affda18dc94f7e0cc72b4d9c54ab60ea7cc3cf8e`.
+`build/package-smoke-wg6g5c7_` passes 109 identities, 127 documentation links,
+retail exports and GUI smoke; two workflows run, 88 not run, zero skips.
+Additional tests invoke the actually extracted `forge.exe`: all 16 region
+input refusals, valid values and exact Restore pass at
+`build/region-text-inputs-lox632mb`; rollback, optional mirrors, unrelated WLD
+bytes and exact Restore pass at `build/region-recovery-3008kvxv`. The packaged
+editor guide now explains identifier syntax. No publication/version change.
+
+Build follow-through: `build/minimap-writer-gui-tools-build-20261009.log`
+confirms ordinary GUI, tools and main core-test target relink success. The
+second all-target attempt compiled changed dependents but the broad new-level
+child held `forge.exe`; its link refused with Permission denied. That existing
+CLI had already been built and passed the final writer tests before the
+documentation-only header change. The full all-target gate subsequently passed
+as recorded above. Package validation tests
+actual copied identities and behavior, not a full release acceptance claim.
+
+Region writer follow-through: nonempty `MiniMapGraphic` setter values now use
+the same native ReadAsString identifier rule as storage review. Numeric,
+leading-digit and punctuation tokens refuse before mutating source lines or
+region metadata. Valid underscore identifiers, case-insensitive keys and the
+existing core empty clear-field semantics remain covered. No new asset lookup
+or runtime acceptance is claimed. The public region-properties path skips empty
+values as before.
+
+Before fix, the extended core test fails with "invalid bare minimap token
+modified the world"; the old public CLI accepts `--minimap 15360` and changes
+the scratch WLD (`build/region-text-inputs-nwby8vsu`). After rebuilding the core
+worldinstall test and `forge`, CTest worldinstall passes; all 16 CLI refusal
+cases preserve every scratch file, and valid punctuation/standard minimap plus
+exact Restore pass at `build/region-text-inputs-n_xliccj`. Evidence uses the
+native string consumer already traced below. The focused
+CLI recovery now passes at `build/region-recovery-n2tbdm6t`, preserving unrelated
+WLD bytes, optional BWD mirrors, rollback and exact Restore. All 52 core groups
+pass in 29.36s (`build/minimap-writer-core-20261009.log`). The full-build attempt
+relinked CLI/tools/tests but the owned broad GUI child held `FableForge.exe`;
+the linker safely refused that output. GUI relink subsequently completed as
+recorded above; this setter's
+public editor interface is currently the CLI, with no GUI property form found.
+The running broad checkpoint began before this writer change and does not validate the
+new GUI binary. The earlier development ZIP also predates this increment.
+
+Core minimap clearing now removes the optional directive instead of emitting
+`MiniMapGraphic ;`, which cannot satisfy ReadAsString. Fifty of 145 original
+retail region blocks omit this directive. The new test first reproduced the
+empty native directive, then verifies the complete expected region text,
+unchanged unrelated bytes and a byte-identical second clear. This preserves
+the in-memory empty-name behavior; the public CLI's empty-option handling is
+unchanged. CTest worldinstall passes with the final complete-text assertion.
+All 52 core groups pass in 31.26s after the clear implementation, before that
+additional assertion (`build/minimap-clear-core-build-20261009.log` and
+`build/minimap-clear-core-20261009.log`). Both focused CLI suites pass again at
+`build/region-text-inputs-lb2_e7t4` and `build/region-recovery-07zi6ung`.
+
+To validate the GUI without replacing the broad runner's locked executable,
+linked the existing Release target command against the updated libraries under
+`build/FableForge-minimap-writer-20261009.exe` (separate output/import-library
+names). SHA256 `436e0b21711e3ec85ab95f73f2adfcc074ff719ab09635dd2df7dc5c56c4fff1`.
+Fresh isolated smoke script/output live in
+`build/minimap-writer-preview-20261009`; Python waits for confirmed exit 0 and
+the fresh automation log's RESULT PASS. Map loading, view modes, textured GLB
+export and Setup opening/closing pass. The ordinary target filename and updated
+development ZIP subsequently completed as recorded above. The first PowerShell GUI
+launch was not used as exit-status evidence; the waited isolated run is final.
+
+Broad check checkpoint: `build/forge-full-check-20261009.log` remains an
+incomplete run with failures, not an all-green acceptance. Two full-retail-bank
+texture failure fixtures timed out in their second `texture-add` setup at 90s.
+A direct scratch serialization isolated the cause: serialization 0.523676s,
+output write 80.3387s on this workspace volume. A single-backing-handle experiment
+did not materially improve total time (76.375s baseline, 74.931s experiment),
+and was removed from production. Both serialized files share SHA256
+`f2ff810b071857a6ee73f8e631ca7cc322fa3b449124d4c3b90465d46e446eb7`.
+New BIG tests compare complete lazy/eager no-op and edited output bytes and
+refuse missing/truncated backing payloads; the scratch CLI reports separate
+serialization/write times. Existing BIG production edits remain intact.
+
+The broad runner now explicitly uses the existing `--small-bank` retail-derived
+fixture for texture image failure/retry UI cases. Full-bank preservation is a
+separate check, not implied by these bounded UI cases. Locked-image replacement
+passes both layouts at `build/texture-replace-failure-cvrhcgrt`; invalid-image
+replacement passes both at `build/texture-replace-failure-09mktkni`. Exact bank
+preservation, persistent errors, retry pixels and Restore remain asserted.
+
+The FMP audit had stale assertions rejecting all unnamed edits. The current
+composer already supports verified stable whole-bank slots. Updated fixtures
+require complete row/payload preservation for changed, appended and swapped
+payloads, and separately swap actual identity-table rows to prove refusal and
+prior-output preservation. Original divergent Aeon merge/build refusals remain.
+All three baseline audits check 14 references without mismatch; conflict/field
+choices and selected/unused missing-target checks pass at
+`build/fmp-links-5s76o208`; final explicit `payload-swapped` fixture naming
+passes at `build/fmp-links-h3ya9p61`. The earlier failed scratch merged output was used for
+one direct acceptance reproduction; it is not a clean final preservation packet.
+
+Local development archive (no publication/version change):
+`dist/development/20261009-forge-continuation/FableForge-0.18.1-rc.1-win64.zip`,
+SHA256 `bb4cf582668565766e706abb22dad78dc17d1c72d0bf5841a492464fdcafd454`.
+Extracted-package check `build/package-smoke-2584c3r9` passes 109 file identities,
+127 documentation links, retail export, GUI smoke and both Setup asset-restore
+layouts from an unrelated cwd. Exactly three workflows ran; 87 were not run,
+zero skipped. This archive predates the subsequent regression-harness changes;
+no complete package/release acceptance is claimed.
+
+The full original-bank Unicode PNG workflow also passes at
+`build/texture-unicode-ybyhweos` (425.7s): CLI Unicode add/export, invalid and
+locked input preservation, both GUI replacement/export sizes, exact Restore,
+unchanged image inputs and source bank hashes. This exercises full-bank editing
+separately from the bounded failure/retry fixtures.
+
+Resumed in `D:/Code/FableForge`, branch `feat/editor-ui-shell`. Completed
+validation of the pending post-import texture-list refresh in `pollMeshImport`:
+the model's material link opens its newly appended texture. The UI regression
+now explicitly loads/selects the old texture before every import, clicks the
+new material link, and exports its image. Every pixel must match the source
+within four channel values for DXT1 quantization; the old red fixture cannot
+satisfy this check. An initial exact-pixel assertion failed on ordinary DXT
+rounding (139/90/43 becomes 140/89/41), and was corrected.
+
+All five workflows pass at both 1440x900/100% and 1280x720/125%:
+`build/mesh-format-ui-s2qm6on7` and `build/mesh-format-ui-tupbqish`.
+The latter's SPARSE-LINK screenshot was visually inspected. Sparse/strip and
+clipped imports retain correct geometry, collision and texture IDs; malformed
+imports preserve banks and the prior preview. All five model name/ID/material
+ambiguity workflows also pass at `build/model-names-ui-li6ul1xz`. Release build
+is current. Core and broader checks follow below when completed. Only scratch
+installs were exercised; no live-game result is claimed.
+
+Triangle-index accessor bases now refuse any `bufferView.byteStride`, including
+an explicit stride equal to the element size. Khronos glTF 2.0 sections 3.6.1.1
+and 3.6.2.1 reserve stride for vertex attributes and require indices to be tightly
+packed: https://registry.khronos.org/glTF/specs/2.0/glTF-2.0.html.
+Sparse indices/values retain their existing separate layout checks; valid
+interleaved vertex attributes and packed uint8/16/32 indices remain supported.
+The before-fix test fails with "accepted triangle index buffer view defines
+byteStride"; the corrected loader passes all 617 mesh-input checks.
+
+All 78 geometry/URI CLI checks pass at `build/mesh-invalid-geometry-qe7vwyq1`.
+Three new cases use genuinely padded uint16 indices in list, strip and fan
+topologies, request a texture import, and verify unchanged banks, recovery files
+and source hashes with no staging directory. The editor's sixth workflow uses
+an explicit uint32 index stride, reports the contextual refusal and retains the
+previous model preview and bank bytes. Six workflows pass at 1280x720/125%:
+`build/mesh-format-ui-1p2ckmf6`. All affected targets build. The first core run
+overlapped the intentional before-fix test build and therefore records that
+known regression failure; it is not the final acceptance gate. Final rebuilt
+core status will be recorded after completion.
+
+Final sequential Release rebuild succeeds, and all 52/52 core groups pass
+(26.01s). The intervening all-target relink hit a Windows executable lock on the
+still-running sprite-frame test; rebuilding after that run finished succeeds.
+All six cached Khronos sample models pass with expected geometry, collision
+and unchanged input hashes at `build/mesh-cached-corpus-ph_0z9ux`. The new six-
+workflow editor suite also passes at 1440x900/100%:
+`build/mesh-format-ui-o1_t8aea`. No broad `check_all` acceptance is claimed:
+its duplicate core run was explicitly stopped before proceeding.
+
+Dense vertex attributes now also check four-byte element alignment inside their
+buffer view. Normalized uint8/16 UV bases with a two-byte accessor offset refuse;
+tightly packed multi-vertex uint8 VEC2 data must carry the required padding.
+Valid padded/interleaved attributes, tightly packed triangle indices and existing
+sparse layouts remain supported. The first fixture accidentally used an unaligned
+GLB BIN chunk; after padding the container independently of the logical buffer,
+the before-fix test reproduces "accepted vertex attribute offset is not four-byte
+aligned". No whole-file format-validity claim is added.
+
+All Release targets build; all 52/52 core groups pass (23.81s), including 620
+mesh-input checks. All 81 geometry/URI checks pass with bank/source preservation
+at `build/mesh-invalid-geometry-6_ex2h52`. Six cached Khronos models pass at
+`build/mesh-cached-corpus-2jam_klj`; ten sparse and sixteen topology checks pass
+at `build/mesh-sparse-iqxqu0da` and `build/mesh-topology-t4hbosq6`.
+
+WLD MiniMapGraphic now uses the native unquoted-identifier check. The original
+FableWin instructions decoded from CWorldMap::LoadFromFile 01C79720 show its
+field comparison at 01C7B423 and ReadAsString 03057BD0 call at 01C7B447, followed
+by SetMiniMapGraphic 01C7CFE0. The existing parser exports prove item type 2 is
+required; leading numbers and quoted symbols have other types. Saved hash-pinned
+packet: `build/namespace-wld-name-token-native-20261009.txt`. The attempted
+read-only Ghidra export stalled opening the project and was cancelled; no output
+from that unfinished export is used as evidence. Initial quest-name validation
+was not changed without a traced consumer.
+
+Before-fix core and public CLI regressions both admit MiniMapGraphic 15360.
+After-fix all 57 public storage checks and all 52/52 core groups pass (49.88s);
+all Release targets build. Numeric and leading-digit minimap names now refuse
+at the field's line, quoted names retain refusal, and underscore names remain
+accepted. Failed review collects no region-reference inventory. The original
+four WLD paths still pass, and both packs' WLD/BWD region inventories and both
+namespace-plan results are identical to the previous audit; source hashes remain
+unchanged in `build/world-minimap-name-token-lookups-20261009.json`.
+
+The existing Setup asset-restore workflow passes at both 1440x900/100% and
+800x600/150%, using copied installed banks. Imported model/texture views retire
+on Restore; original banks and backups recover exactly, source installation
+hashes stay unchanged, and the retail barrel preview reloads. The normal-size
+retail-model screenshot was visually inspected. Evidence:
+`build/setup-asset-restore-yzf2j3ex`. Broader `check_all.py --no-build` is currently
+running, with output at `build/forge-full-check-20261009.log`; only its completed
+rows are evidence until it exits and the final status is recorded.
+
+## 2026-10-08 continuous Forge continuation
+
+User resumed Forge work until asked to stop. Same checkout and branch; the
+pre-existing `tests/test_dialogueaudio.cpp` edit remains untouched.
+
+The direct model-import card now shows model conversion notes below its success
+message, including texture-coordinate clipping and ignored optional features.
+ImportResult retains these separately from the existing bank-write activity log;
+routine file paths and append messages stay out of the card. Notes clear on a
+new import/pack attempt and destination reset. CLI and pack deployment retain
+their existing full log. The existing five editor workflows now assert ordinary
+imports have no card notes, clipped geometry has one visible note, and a failed
+retry clears the previous note. This does not add conversion notes to an
+undeployed pack recipe.
+
+The before-fix editor test cannot find mesh_import_notes. The first implementation
+exposed all three routine bank messages; that check caught the category mismatch,
+and the final UI uses modelNotes only. Five UI workflows pass at
+`build/mesh-format-ui-peodv5jj`; CLIPPED.png was visually inspected and shows the
+complete note. All Release targets build and 52/52 core groups pass (28.15s).
+Logs: `build/mesh-import-notes-{before-ui,build,ui,full-build,final-ui,core}-20261008.log`.
+The screenshot also exposed a separate stale texture-list link after model import;
+that is the next UI follow-up, not part of this completed note change.
+
+Switch.EnvironmentDef and TriggeredByThing now share the native unquoted-
+identifier check with creature brain names. Loader 027F9220 calls ReadAsString
+at 027F935C/027F948B; the existing parser evidence applies to both fields.
+Original-byte packet: `build/namespace-switch-name-token-native-20261008.txt`.
+Numbers and leading-digit names refuse before definition-reference collection;
+NULL and underscore-prefixed names remain supported. TriggeredByThing still is
+not inventoried as a definition query. The initial test mutation also matched
+the suffix of TimeToChangeEnvironmentDef; the corrected line-anchored regression
+independently reproduces the actual name-field acceptance before the fix.
+
+Focused tests, all 53 public world-review checks and 52/52 core groups pass
+(26.57s); all Release targets build. Both original packs retain their previous
+coverage, collected queries, namespace-plan results and hashes:
+`build/tng-switch-name-token-lookups-20261008.json`. Logs:
+`build/switch-name-token-{before-build,before,before-corrected-build,before-corrected,build,tests,cli,full-build,core,audit}-20261008.log`.
+
+AICreature.OverridingBrainName now rejects leading-digit tokens and reports its
+native unquoted-identifier requirement. Previously `15360` and `1BRAIN` passed
+storage review as names. Loader 01D6E630 calls ReadAsString 03057BD0, which requires
+parsed-item type 2. ReadNextItem 03056AF0 sends leading digits to number parsing,
+letters/underscore to ReadNextString 03058970, and quotes to ReadNextSymbol
+03058AC0. InitAsSymbol 03059310 sets type 1; InitAsString 03059710 sets type 2.
+Thus quoted "NULL" is not an alternate valid spelling here. Its refusal remains;
+the separate ReadNextItemAsQuotedString routine is not this field's consumer.
+The existing unquoted NULL-to-empty query behavior and underscore-prefixed names
+remain supported. This change does not edit source maps or reinterpret numbers
+as definition IDs.
+
+Evidence: `build/namespace-brain-{quoted-string,string-items,quoted-symbol}-20261008.c`,
+`build/namespace-brain-name-token-native-20261008.txt` (original PE hash/bytes),
+and `build/namespace-brain-quoted-source-20261008.json`. The source inventory finds
+221/258 quoted overrides in Seasons/Secrets, all "NULL"; these are observed data,
+not evidence of native acceptance. Before-fix regression accepts the non-string
+brain token; after-fix tests reject it without collecting definition references.
+All 48 public storage checks, focused domain tests and 52/52 core groups pass
+(27.91s); all Release targets build. Original coverage, collected queries, both
+namespace plans and source hashes remain unchanged from the light-default batch:
+`build/tng-brain-name-token-lookups-20261008.json`. Logs:
+`build/brain-name-token-{before-build,before,build,tests,cli,full-build,core,audit}-20261008.log`.
+
+The reviewed TNG subset now preserves `CTCLight.Interted FALSE` as an inert
+legacy annotation. It is never renamed or treated as `Inverted`; TRUE, malformed
+values, duplicate occurrences and placement outside CTCLight still refuse.
+Native CTCLight::OnSerialise 02228D20 transfers only the correctly spelled name,
+using exact whole-string lookup in TransferObjectLoadText 02FEBDC0. Component
+load contexts enable defaults (02191274 -> Init 02FE9DE0); missing bool fields
+receive FALSE from CPersistTraits<bool> 01874AC0 via 0189C330/018951A0/01874340.
+The decompiler obscured this initialization; original bytes show the zero store.
+EndSerialising 021913B0 performs no load-side unknown-symbol check, and the local
+context destructor 01872810 is a no-op. Existing component-local parser evidence
+also applies. No writer or lighting algorithm changed.
+
+Evidence: `build/namespace-light-legacy-{transfer,lookup,unknowns,end}-20261008.c`
+and original-PE-hash packet `build/namespace-light-legacy-native-20261008.txt`.
+Read-only source inventory finds 457 such light blocks in 37 Seasons files and
+575 in 47 Secrets files; every legacy value is FALSE. Both packs contain 39
+overridden blocks without canonical Inverted and others with both spellings.
+Inventory: `build/namespace-light-legacy-source-20261008.json`.
+
+Before-fix regression reports "inert legacy light default refused". Focused
+review tests and all 43 public world-review checks pass with source preservation.
+All Release targets build; 52/52 core groups pass (27.41s). Original coverage is
+now Seasons 317/449 and Secrets 316/449 loose text files, with 303/398 WAD TNGs
+each. Secrets' DemonDoor_DarkwoodSporeSwamp.tng newly passes; its collected
+definition references raise the loose totals to 971 top-level / 68 component.
+Both namespace plans keep every nonempty query unique and unchanged, and all
+source hashes remain unchanged: `build/tng-light-legacy-default-lookups-20261008.json`.
+Other files advance to separate refusals, including quoted OverridingBrainName
+"NULL". Source admission remains refused. Logs:
+`build/light-legacy-default-{before-build,before,build,tests,cli,full-build,core,audit}-20261008.log`.
+
+Model imports now report texture-coordinate clipping per imported part and
+affected vertex count. The diagnostic uses the static writer's signed packing
+range after ordinary 1/2048 quantization, including stored V=1-v; it does not
+flag routine rounding near an endpoint. Both axes count as one affected vertex.
+The coordinate packer and serialized model behavior are unchanged. The message
+appears in CLI output and the existing editor import log, with advice to reduce
+texture tiling. This is a diagnosis of existing saturation, not support for a
+new vertex format or a live-game rendering claim.
+
+Before-fix regression fails with "UV clipping was not reported per affected
+vertex". All 616 model-input checks, 75 geometry/URI CLI checks and five editor
+format workflows pass: `build/mesh-invalid-geometry-ocorv8sl` and
+`build/mesh-format-ui-fvwl8tk2`. The editor case confirms the four-vertex message,
+successful model preview/collision, retained donor records and unchanged source
+hashes. All Release targets build; 52/52 core groups pass. Logs:
+`build/mesh-uv-clipping-{before-build,before,build,tests,full-build,core,cli,ui}-20261008.log`.
+
+Consumed glTF attributes now enforce core component encodings: POSITION/NORMAL
+require unnormalized FLOAT, and TEXCOORD_0 additionally permits normalized
+UNSIGNED_BYTE/UNSIGNED_SHORT. Accessors no longer infer missing componentType or
+type. The rules follow the [Khronos glTF 2.0 specification](https://registry.khronos.org/glTF/specs/2.0/glTF-2.0.html);
+required extensions remain unsupported. This validates consumed encodings, not
+every glTF schema constraint. Before-fix regression fails with "accepted non-core
+POSITION component encoding". Dense 8/16-bit normalized UV endpoint assertions
+and the existing sparse normalized UV test both pass.
+
+All 612 mesh-input checks, 74 geometry/URI CLI checks, and six cached Khronos
+samples pass. Rejected imports with a requested texture preserve banks/recovery
+files and source hashes and leave no staging directory:
+`build/mesh-invalid-geometry-z17y280v`. Cached sample geometry/collision and hashes
+remain correct (`build/mesh-cached-corpus-udo8a8c7`). All Release targets build;
+52/52 core groups pass (21.65s). Logs:
+`build/mesh-attribute-encoding-{before-build,before,build,tests,full-build,core,cli,corpus}-20261008.log`.
+
+OBJ required coordinate scalars now require a whitespace/end-of-token boundary.
+Previously the final position, normal or UV scalar could silently accept a prefix
+such as 1.0 from 1.0junk, 1.0.5 or 1.0/2. The parser now rejects all nine cases
+before model/texture bank staging, while preserving signed/scientific scalars,
+optional UV/vertex components, comments and relative indices. This is a required-
+coordinate token fix, not a claim to validate every optional OBJ extension.
+
+The focused before-fix test fails with "accepted OBJ partial position scalar".
+All 582 mesh-input checks and 66 geometry/URI CLI checks now pass, including
+requested-texture imports that preserve every bank/recovery file and clean up
+staging on refusal, plus successful signed-coordinate OBJ serialization:
+`build/mesh-invalid-geometry-c6qo7m6o`. All Release targets build and 52/52 core
+groups pass (18.95s). Logs:
+`build/mesh-obj-scalars-{before-build,before,build,tests,cli,full-build,core}-20261008.log`.
+
+Texture mip generation now stops at the shorter side: four pixels for DXT1/3,
+one pixel for ARGB. Before-fix 1024x512 DXT1 generates nine levels down to 4x2;
+the native default count is eight, ending at 8x4. Native CTexture::CalcDefaultMipMapCount
+030DA750 loops only while both dimensions are >=8. Positive compressed base
+sizes must also be divisible by four and powers of two in CanCompressSurfaceOfSize
+031200D0. Original-byte/PE-hash packet:
+`build/texture-mip-boundary-original-bytes-20261008.txt`; read-only exports:
+`texture-mip-{writer,dimensions,count}-native-20261008.c`. Reused 2026-10-06 loader/
+surface exports show shifted dimensions and quarter-size progression. ARGB's
+existing one-pixel endpoint remains supported, but an already-one-pixel axis no
+longer receives extra writer-generated levels; the downsample utility's corrected
+long-axis averaging remains independently tested. The earlier thin-mip test's
+multi-level raw serialization expectation is superseded by this writer boundary.
+
+All 6,242 original single-frame/depth-zero DXT1/3 headers end at dimensions >=4;
+END_SCREEN has eight levels. Read-only metadata inventory:
+`build/texture-compressed-mip-dimensions-20261008.json`, with original bank hash.
+New tiny DXT images automatically allocate at least 4x4 while keeping authored
+frame dimensions; explicit undersized allocations and compressed replacement
+slots below 4x4 refuse before writing. buildEntry also rejects explicit excessive
+mip counts. Raw ARGB dimensions remain unchanged. Writer tests cover rectangular,
+square, thin-axis and invalid explicit-count boundaries. Conversion fixtures now
+use a valid 4x4 slot; 2x2-to-DXT conversion is an explicit refusal case.
+
+All 416 focused texture checks and 45 dimension/alpha/import checks pass:
+`build/texture-dimensions-vkkxv319`. Original END_SCREEN replacement now matches
+its original dimensions, format, transparency and mip count, exports green pixels,
+and restores exactly (`build/texture-original-mip-boundary-ojczl29s`). Both original
+cutout examples also pass again (`build/texture-original-cutout-63w74zr9`), with
+unchanged original-bank hashes. All Release targets build; 52/52 core groups pass
+(26.31s). All 30 synthetic CLI suites pass after the complete texture batch:
+`build/forge-cli-integration-drdw4z5j/result.json` and
+`build/forge-texture-mip-integration-cli-20261008.log`. This remains the first CLI
+loop of check_all, not full check_all or in-game validation. Scoped logs:
+`build/texture-mip-boundary-{before-build,before,build,tests,cli,cutout,types,full-build,core}-20261008.log`.
+
+New image imports now write archive entry type 0, independently of the last
+entry used for other donor metadata. Native CGraphicDataBank::PrepareDataForInclusion
+03118180 dispatches type 0 to AppendGraphicFromFile (0311857F call), while type 4
+uses AppendVolumeGraphicFromTGA (03118BEF). Before-fix synthetic fixtures show new
+flat images inheriting animated type 1 (`texture-entry-type-before-20261008.log`).
+Both animated and volume donor regressions now pass; independent directory reads
+check type-table counts, new type 0/marker 42/default DXT1, and exact donor/source
+preservation (`build/texture-entry-types-jhop3uk4`). New suite is in check_all.py.
+
+Replacement now refuses archive type 4 regardless of depth, plus any nonzero
+header depth. CGraphicInfo::IsVolumeTexture 02D136E0 compares GetEntryDataType to 4
+at 02D136FB; it does not classify by depth >1. Before-fix one-slice type-4 fixture
+was rewritten as depth 0 (`build/texture-layout-refusal-mwd1ugzr`). Eight CLI/public
+replacement/editor refusal cases now pass, including one-slice volume, type-4
+zero-depth and type-0 nonzero-depth counterexamples:
+`build/texture-layout-refusal-vtcuixfq`. Storage validation of these fixtures is
+not a claim that inconsistent type/depth combinations are valid native resources.
+
+Read-only original type/header inventory correlates all four original volumes
+with type 4 and depths 8/64. The GUI bank's final donor is animated type 1; the
+main bank's final donor is type 0. Original hash remains unchanged:
+`build/texture-volume-entry-types-20261008.json`. Read-only exports are
+`texture-volume-{classification,loading}-native-20261008.c` and
+`texture-entry-type-writer-native-20261008.c`; original-byte/PE-hash packet:
+`build/texture-entry-type-original-bytes-20261008.txt`. The broad enum query found
+an unrelated engine enum, which was not used to infer bank entry types.
+
+All Release targets build and 52/52 core groups pass (23.67s). Two cutout workflows,
+19 mesh texture-ID checks, and four FMP/native marker insertion checks also pass:
+`texture-cutout-j6xth96l`, `mesh-texture-ids-op7bi4ac`, `big-entry-markers-k1fwapmg`.
+Logs: `build/texture-entry-type-{before,build,cli,full-build,core,cutout,mesh,markers}-20261008.log`
+and `build/texture-volume-kind-{before,build,ui}-20261008.log`. No original/live
+install writes; this remains offline/native-evidence coverage.
+
+Cutout replacement support now supersedes the interim refusal below for reviewed
+DXT1 mode 2 and DXT3 mode 4 slots. DXT1 uses three colours plus transparent index
+3 for blocks containing alpha <128, preserves the existing four-colour encoder
+byte-for-byte for opaque blocks, and handles fully transparent blocks explicitly.
+Transparent RGB is excluded from endpoint fitting. The same path encodes all
+mips; metadata retains native class 2. DXT3 retains its four-bit alpha and native
+class 4. Native IsBooleanAlpha evidence below justifies preserving both classes.
+Other unimplemented format/class combinations still refuse, as do requested
+format conversions of cutout slots. Newly added opaque DXT1 behavior is unchanged.
+The 128 threshold is the writer's documented image-to-one-bit conversion policy;
+no alpha-coverage-preserving mip algorithm or in-game render parity is claimed.
+
+Before implementation the positive replacement regression hits the prior explicit
+refusal (`build/texture-cutout-before-20261008.log`). All 404 focused texture
+checks now pass, including alpha boundary values, fully opaque/transparent
+blocks, opaque-byte equivalence, independent BC1 alpha decode, multiple mips and
+invalid cutout-format refusal. Both public CLI and hidden editor cutout replacement
+workflows pass, with exported pixels, native-mode/header retention, entry identity,
+conversion refusal and exact Restore (`build/texture-cutout-bgr23e5d`,
+`build/texture-cutout-f7tbacwa`). Five unsupported layout/class cases still pass
+through the editor (`build/texture-layout-refusal-w4tikw_t`). The new cutout CLI/UI
+suite is wired into check_all.py.
+
+Extracted original CHICKEN_ALPHA_32.TGA and GC_IVY.TGA entries now pass replacement,
+alpha export, metadata/identity preservation and exact Restore:
+`build/texture-original-cutout-dmr49flr`. The original full texture-bank SHA256
+remains unchanged. Earlier original refusal evidence remains historical.
+All Release targets build and 52/52 core groups pass (20.60s). All 29 synthetic
+CLI suites from check_all's first loop pass after this texture batch, including
+the 37 dimension/alpha import checks and existing mesh/world/namespace checks:
+`build/forge-cli-integration-k53dop79/result.json`, logs alongside it and
+`build/forge-texture-cutout-integration-cli-20261008.log`. This is not a full
+check_all, source-admission or live-game claim. Scoped logs:
+`build/texture-cutout-{build,tests-build,tests,cli,ui,refusal-ui,full-build,core}-20261008.log`.
+
+DXT3 alpha quantization now rounds to the actual decoded grid (multiples of
+17), instead of rounding input bytes in steps of 16 and clamping. The old encoder
+could choose a more opaque value than the closest representable alpha. A focused
+regression fails before the fix and checks all 256 input alphas after it: every
+decoded nibble is within eight of its input, including exact endpoints. The
+public import/export round-trip repeats this with a 4x64 gradient image and
+checks donor preservation. All 317 texture checks and 37 dimension/import checks
+pass (`build/texture-dimensions-0k5o29r5`). All Release targets build; 52/52 core
+groups pass (26.47 sec). Logs:
+`build/texture-dxt3-alpha-{before-build,before,build,tests,cli,full-build,core}-20261008.log`.
+BC2 expansion is independently established by terrainexport::decodeBc2ToRgba;
+this changes new encoded pixels only, not original bank data. No in-game trial.
+
+Same-format texture replacement now preserves the accepted original transparency
+byte (0/1). Native IsAlpha proves that resetting opaque ARGB's 0 to the writer's
+usual 1 changes engine classification. The new raw-header regression reproduced
+that change before the fix (`texture-transparency-preserve-before-20261008.log`).
+The expanded matrix also exposed lower-level texture import defaulting a format-
+omitted replacement to DXT1 (`build/texture-dimensions-19vegkl5`). The CLI now
+passes an empty format for replacements, preserving their existing format;
+additions still default to DXT1. Explicit format conversions keep their requested
+format and its default transparency class. Unsupported classes still refuse.
+
+All 36 dimension/transparency/import checks pass, including implicit and explicit
+same-format replacements for mode 0/1 and requested DXT3 conversion:
+`build/texture-dimensions-roi1wcnd`. Both desktop/compact editor locked-write,
+retry, exported-pixel and exact Restore workflows pass on isolated small banks:
+`build/texture-replace-failure-ggz0m52b`. The 16 option checks and five unsupported
+layout/transparency refusal cases also pass (`texture-import-options-vzokqzt2`,
+`texture-layout-refusal-z6m40884`). All Release targets build; 52/52 core groups
+pass (34.12s). Logs:
+`build/texture-transparency-preserve-{before,build,cli-build,cli,ui,full-build,core,options,refusal}-20261008.log`.
+No live game or original install files were changed.
+
+Texture replacement now refuses unimplemented transparency classes before any
+output write: transparency >1 and nonzero transparency on DXT1. The existing
+DXT1 encoder emits opaque four-colour blocks; resetting retail mode 2 to 0 loses
+cutout behavior, and resetting DXT3 mode 4 to 1 is not established as equivalent.
+Before-fix `build/texture-layout-refusal-ttdkij76` accepts a valid mode-2 BC1
+fixture and rewrites its header to mode 0. The expanded five-case layout suite
+now checks both these classes plus atlas/array/volume refusal through core CLI,
+public texture-replace and hidden editor UI, retaining bank and recovery bytes:
+`build/texture-layout-refusal-d1xgemeu`. Ordinary replacement remains supported;
+this change does not add cutout encoding or establish mode-4 runtime semantics.
+EDITOR documents the supported boundary.
+
+Read-only original header inventory finds 6,248 single-frame 2D entries in writer
+pixel formats, including 213 mode-2 DXT1 and 11 mode-4 DXT3 entries. All have zero
+flags/padding and no high format bits. Evidence:
+`build/texture-replacement-flags-inventory-20261008.json`, pinned to the original
+textures.big hash. Extracted original CHICKEN_ALPHA_32.TGA and GC_IVY.TGA entries
+pass storage validation and correctly refuse replacement with scratch bank and
+recovery state unchanged (`build/texture-original-transparency-336nhj42`).
+The initial scratch extractor selected a GUI bank that its fixture builder did
+not allocate Info bytes for; that malformed fixture was rejected before writes.
+The corrected run uses original main-bank entries without modifying the helper.
+The original full bank hash remains unchanged.
+All Release targets build, 52/52 core groups pass (22.31s), and 19 ordinary texture
+lookup/import checks pass (`build/texture-lookup-mn13tdo2`). Logs:
+`build/texture-transparency-refusal-{before,build,ui,full-build,core,lookup}-20261008.log`.
+
+Follow-up native evidence resolves the transparency class distinction:
+ETransparencyType names 0 NONE, 1 ALPHA, 2 BOOLEAN_ALPHA, 3 INTERPOLATED_ALPHA,
+4 NON_DXT1_BOOLEAN_ALPHA (`build/texture-transparency-enum-20261008.tsv`).
+CGraphicInfo::GetTransparencyType 03138490 returns byte +0x10. Frame IsAlpha
+0263DC90 tests that byte nonzero; IsBooleanAlpha 0263DE40 compares it to 2 or 4.
+Original instructions at 0263DDCA/0263DF7A and executable SHA256 are retained in
+`build/texture-transparency-original-bytes-20261008.txt`; read-only exports:
+`texture-transparency-{native,frame-native,mesh-native}-20261008.c`.
+PrepareRenderMeshDataForInclusion 03135870 also counts classes 1/3/4 separately
+from 2; that path alone is statistics evidence, not a render-state contract.
+The frame predicates prove that resetting 4 to 1 loses boolean classification,
+and resetting 0 to 1 enables the alpha classification. Full render-state/threshold
+recovery and cutout encoding remain separate work.
+
+Texture mip generation now averages the remaining long axis when the other
+axis has reached one pixel. Previously downsample's two-axis condition selected
+nearest sampling for 1xN/Nx1 images, discarding alternating rows/columns, including
+alpha. The ordinary even 2D box filter retains its rounding; odd dimensions keep
+the existing nearest behavior. Regression uses alternating RGBA samples in both
+orientations, checks their expected average through the 1x1 tail and exact raw
+ARGB mip bytes, validates the generated entry, and checks source preservation.
+Before-fix focused test fails at the first average; all 45 texture checks now
+pass. All Release targets build, 52/52 core groups pass (25.76s), and all 30
+texture-dimension/import checks pass (`build/texture-dimensions-_dxcthxv`). Logs:
+`build/texture-thin-mips-{before-build,before,build,tests,full-build,core,cli}-20261008.log`.
+This is writer/pixel coverage, not an in-game visual trial.
+
+Base Thing now storage-reviews only the observed inert Health/ObjectScale
+value 1 defaults. Nondefault/nonfinite/malformed values, duplicate fields,
+component-local Health and unrelated physical fields still refuse. The earlier
+indirect-component uncertainty is resolved by CTCBase::BeginSerialising 02190FD0:
+after finding Start<class>; it extracts text through End<class>; (02191219),
+reinitializes the component parser from that extracted string (02191259), and
+initializes its CPersistContext from that parser with null parent (0219127F).
+SerialiseLevelState 02190ED0 passes that local context to the component virtual
+serializer (02190F59). Common SerialiseThingInfo 01CF2E30 only transfers Player,
+UID and DefinitionType; base CThing's reviewed scanner handles the script fields
+and skips other top-level text through semicolons. Physical semantics are not
+assigned to the newly accepted defaults. Reused decomp exports plus original
+instruction/string packet `build/namespace-base-thing-component-scope-20261008.txt`
+pin the existing executable hash and Start/End delimiters.
+
+Before-fix focused fixture refused the default Health; focused domain tests now
+pass, as do 38 public storage CLI checks with unchanged fixture bytes. All Release
+targets build and 52/52 core groups pass (39.69s). Logs:
+`build/base-thing-defaults-{before-build,before,build,tests,cli,full-build,core,audit}-20261008.log`.
+The original-source audit with both namespace orders preserves all accepted
+inventories, candidate comparisons and source hashes exactly relative to
+`tng-hook-default-lookups-20261008.json`. Complete coverage remains Seasons
+317/449, Secrets 315/449 loose and 303/398 WAD each. Former Health refusals now
+reach doubled StartStartCTCCameraPointScripted or
+StartStartCTCCameraPointScriptedSpline blocks (5/8 loose files),
+which remain unsupported. No additional complete source files or sources were
+admitted. Current report: `build/tng-base-thing-default-lookups-20261008.json`.
+
+Doubled camera prefixes remain refused after targeted native review. Class-name
+getters return CTCCameraPointScripted and CTCCameraPointScriptedSpline, without
+Start (01BA47F3/01BA48A1; literal pointers 0409799C/040979B8). CTCBase adds one
+Start prefix. SkipPastWholeString 03058020 uses SkipUntilWholeString 03057EC0,
+which checks both substring boundaries; CharSeperatesString 030592C0 rejects
+letters, digits and underscore as boundaries. Thus the normal Start<class>;
+inside StartStart<class>; fails at its preceding 't'. This is evidence against
+automatically stripping the extra prefix, not permission to accept arbitrary
+unknown blocks. The end search is a separate non-whole-string operation.
+Original instructions and PE hash are in
+`build/namespace-camera-whole-string-bytes-20261008.txt`; read-only exports are
+`namespace-camera-{block-matching,whole-string,word-separators}-20261008.c`,
+with class-name evidence in `namespace-camera-block-names-20261008.txt`.
+
+Read-only loose-file inventory finds 294 doubled blocks in 12 Seasons files and
+589 in 18 Secrets files; every doubled block has a normal same-class start later
+in the same Thing. emitest3.tng illustrates differing FOV/SelfTerminate values
+between these blocks. These totals include files refused earlier for other
+reasons, so differ from the audit's first-refusal counts above. Source paths,
+line numbers and hashes are retained in
+`build/namespace-camera-double-prefix-source-20261008.json`. No parser behavior
+or source file was changed; no runtime/retail equivalence is claimed.
+
+Original-bank recipe/theme integration passes after the complete texture/model
+batch. Both package load orders retain correct model/OBJECT links and themes;
+deploy/undeploy restores all scratch banks exactly. Custom base/cliff theme import
+passes, with malformed-image and late locked-game.bin failures preserving every
+scratch file. Four baseline bank hashes are unchanged. Isolated profile and
+verified scratch paths; no live game. Evidence:
+`build/forge-recipe-theme-_42rpg1b/{result.json,test_recipe_packs.py.log,test_custom_theme.py.log}`
+and `build/forge-asset-integration-recipe-20261008.log`.
+
+The expanded synthetic CLI integration sweep passes all 28 suites after the
+texture/model changes, including dimension/options/layout refusal and both
+unsigned texture/collision references. Existing world storage, namespace, BIN,
+names, BIG, text, music, particle and thing bindings also pass. Isolated profile,
+no configured install, no GUI/live game. Evidence:
+`build/forge-cli-integration-vkt8qcud/{result.json,*.log}` and
+`build/forge-asset-integration-cli-20261008.log`. This remains the first synthetic
+CLI loop from check_all, not a full check_all/retail execution claim.
+
+Mesh collision references now retain unsigned type through the composer and
+mesh-info JSON/text diagnostics. Before-fix `build/mesh-id-exhaustion-sqjs_gb3`
+reports saved ID 4294967294 as -2. Composer refuses UINT32_MAX, the native
+no-hull sentinel; zero remains the serialized no-reference value. All 80
+mesh-bounds checks and seven import ID-boundary cases pass, including both sides
+of the signed boundary and 4294967294 (`build/mesh-id-exhaustion-2cnaleua`).
+Initial full Release/core gate: 52/52 groups, 27.44s.
+
+Native CMeshDataBank::InitialiseEntry 03134750 calls ReadULONG at 03134932,
+checks nonzero at 03134958 and passes the unchanged value to SetPhysicsMeshIndex
+at 03134965. C3DMeshInfo constructor sets +0x40 to FFFFFFFF at 0313BF49;
+HasPhysicsMesh 0313D620 compares that field to -1, and setter 0313E720 writes all
+32 bits. These observations distinguish serialized zero from the reserved runtime
+sentinel. Read-only exports: `build/mesh-physics-reference-{native,load}-20261008.c`,
+caller evidence `mesh-physics-reference-callers-20261008.log`; original-byte
+packet `mesh-physics-reference-bytes-20261008.txt` pins the established FableWin
+SHA256. Earlier format notes calling PhysicsIndex i32 are superseded by this
+native unsigned-read evidence. The original executable and Ghidra project were read-only.
+
+Navigation HullCache now also treats FFFFFFFF as absent for render-mesh
+references. A new composed/archive-read regression reproduced it loading a hull
+for that sentinel; it now rejects both absence values while resolving
+7FFFFFFF/80000000/FFFFFFFE to decoded hulls. Explicit door override handling is
+unchanged. Focused export tests pass; all Release targets rebuild and final
+52/52 core gate passes (26.40s). Logs:
+`build/mesh-physics-reference-{before,build,full-build,core}-20261008.log` and
+`build/mesh-physics-nav-{before-build,before,build,tests,full-build,core}-20261008.log`.
+This is serialized/reference/diagnostic coverage, not an in-game high-ID trial.
+
+Direct model/texture imports now use marker 42 for newly appended BIGB rows,
+matching the earlier text/resource/FMP insertion fix. Before-fix fixture
+`build/mesh-texture-ids-dzeye97j` showed both new texture ID 8 and all new render/
+collision rows inheriting donor marker 0. Existing rows keep their markers;
+non-BIGB package convention remains separate. The native requirement is the
+already-retained ReadEntryList 02F9A180 evidence, not a new interpretation.
+All 19 texture-ID, 19 lookup and four package insertion cases pass
+(`mesh-texture-ids-4dy8inso`, `texture-lookup-zwdpdaa5`,
+`big-entry-markers-tn5x9w26`). Four GUI model import/refusal workflows now also
+independently check new mesh/collision/texture markers and donor preservation
+(`build/mesh-format-ui-v1tyoonf`). All Release targets build and 52/52 core groups
+pass (28.12s). Logs:
+`build/direct-import-markers-{before,build,full-build,core,ui}-20261008.log`.
+This does not repair or admit the original marker-zero source banks.
+
+An original END_SCREEN entry was copied into a synthetic scratch bank to check
+replacement with unequal allocation/frame dimensions. A 64x64 image replaces it
+successfully while retaining ID 529, 1024x512 allocation, 640x480 frame, depth/
+frame count and DXT1 format (first 16 header bytes independently compared).
+PNG export confirms the full allocation and expected green pixels; Restore is
+byte-exact for the complete scratch install. Image and original textures.big
+hashes remain unchanged. Evidence: `build/texture-original-slot-8kvxbvig/result.json`;
+reusable scratch runner `build/texture-original-slot-check.py`.
+
+Texture import rejects an explicit unknown pixel format instead of silently
+falling back to the existing slot. The legacy texture-import CLI also requires
+nonempty values for --dims/--format/--bank/--tools/--python and rejects a following
+option as a value. Before-fix `build/texture-import-options-0z0v6eqv` accepted
+`--format not-a-format` and overwrote the output. All 16 option/refusal checks
+pass (`build/texture-import-options-xtbzv4nm`), preserving source/image/output
+bytes. All 30 dimension and 19 lookup checks pass
+(`texture-dimensions-thupe14i`, `texture-lookup-_cfytx2r`). All Release targets
+build and 52/52 core groups pass (28.14s). Logs:
+`build/texture-import-options-{before,build,cli,full-build,core}-20261008.log`.
+
+Read-only original texture-header inventory covers 6,325 entries: 68 multi-frame,
+four volume, 24 non-power-of-two allocations, 32 differing frame/allocation sizes
+and five unsupported writer formats (categories overlap). This is metadata
+inventory, not payload admission. Original EDITORGUI_HEIGHT_TOOLBAR_ICON and
+WEATHER_RAIN_PC both refuse replacement before changing an existing scratch
+output. Original textures.big SHA256 remains
+7923ca9f84216b2a88a8835971be89fd65ad238a432b4715c1f7cd83c63f21dc.
+Evidence: `build/texture-replacement-layout-inventory-20261008.json` and
+`build/texture-original-layout-refusal-n7vu3ja7/result.json`.
+
+Image replacement now refuses multi-frame and multi-slice texture entries;
+the current writer only produces one 2D frame. Before-fix atlas fixture
+`build/texture-layout-refusal-1mpzfx3d` was accepted but changed FrameCount 2 to
+1. Three validated input layouts (single-chain atlas, repeated raw frame array,
+volume) now refuse before writes. Lower-level existing output and high-level
+scratch bank/recovery files remain exact. All three visible GUI refusal flows
+pass (`build/texture-layout-refusal-himga00h`); the initial GUI harness needed
+the existing second-reveal settling convention (`texture-layout-refusal-9pia3_a8`),
+not a product change. Both CLI and Windows GUI checks are wired into check_all.
+The 30 dimension checks still pass (`build/texture-dimensions-nh0c3r42`). All
+Release targets build and 52/52 core groups pass (25.23s). Logs:
+`build/texture-layout-refusal-{before,build,full-build,core,ui}-20261008.log`.
+The editor guide states the replacement limitation; preview/read support for
+these layouts remains separate.
+
+Base Thing.Health follow-up reuses existing loader/save/type-registration
+exports instead of repeating decompilation. Original-byte confirmation pins
+CThing constructor 01CEDE10's vtable store at 01CEDE4D to 040C7944. Slot 4 thunk
+0183238B resolves to base ConstructFromLevelScript 01CEEC80; slot 2 thunk
+017F8EC9 resolves to base Save 01CF0E60. Alloc 01CEFFD0 calls that constructor.
+The full base-loader instruction range 01CEEC80..01CEFC00 is retained, including
+ScriptName/ScriptData/EndThing comparisons and semicolon skip. It has no direct
+Health transfer; this is not proof that every indirect component path ignores
+that field. The physical loader remains a distinct path. Evidence:
+`build/namespace-base-thing-health-native-20261008.txt`, pinned to the previously
+recorded FableWin SHA256. Read-only loose-source inventory finds 1,073 base Thing
+records in 26 files across the two packs, all with Health and ObjectScale equal
+to 1.00000. Exact field lines, identities and source-file hashes are retained in
+`build/namespace-base-thing-health-source-20261008.json`. This is an inventory
+of refused content, not accepted-reference extraction. No storage rule,
+source-admission status or coverage count changed.
+
+Texture replacement checks existing slot dimensions before resampling: zero
+allocation/frame dimensions and frame extents outside the allocation refuse.
+Code review found zero-sized allocations reaching pixel processing; that
+potential invalid-memory path was not executed before the fix. Six malformed
+header fixtures now refuse with unchanged source/output bytes, and all 30 texture
+dimension checks pass (`build/texture-dimensions-xht39lz3`). All Release targets
+build and 52/52 core groups pass (23.82s). Logs:
+`build/texture-slot-preflight-{build,full-build,core}-20261008.log`.
+
+Texture replacement now retains the existing slot's frame dimensions as well
+as its allocation. Before-fix `build/texture-resize-before-0qienwxj` reproduces
+4x4-to-2x2 replacement failing after pixel resampling because the header still
+claimed 4x4. Smaller replacements also previously changed the logical size.
+All 24 dimension cases pass (`build/texture-dimensions-0mesfai5`), including
+larger/smaller images and a wide source resized to the existing 2x2 slot; add
+operations still reject unrepresentable source dimensions. Independent PNG
+exports retain the slot size and expected pixels. All Release targets build and
+52/52 core groups pass (23.49s). The GUI recovery suite now uses 128x128 and
+32x32 replacements for 64x64 slots at its two display scales: both pass visible
+error, refusal preservation, retry/pixel readback and exact Restore
+(`build/texture-replace-failure-qo5123wv`). Original source hashes unchanged.
+Logs: `build/texture-replace-size-{build,full-build,core,ui}-20261008.log`.
+
+Texture import now parses complete positive WxH dimensions, refuses allocated
+sizes outside the 16-bit header or non-power-of-two writer contract, and checks
+source/header overflow before resampling. The generated texture is validated
+before opening the output archive. Before-fix evidence
+`build/texture-dims-before-d0tac1g5` shows `2x2junk` accepted and `65536x2`
+truncated to zero in the header after overwriting an existing output. All 21
+new checks pass (`build/texture-dimensions-8y9y71n4`), including invalid-output
+preservation, source hashes, rounded/source overflow, and valid 32768x2 pixel
+readback; wired into check_all. The 19 lookup and 19 mesh texture-ID checks pass
+(`build/texture-lookup-tpd5pihx`, `build/mesh-texture-ids-g5_r8icw`). All Release
+targets build and 52/52 core groups pass (23.89s). Two original-record GUI
+replacement workflows pass at desktop/compact scales, with visible error,
+unchanged scratch banks on failure, retry pixels and exact Restore. Original
+bank/image hashes remain unchanged (`build/texture-replace-failure-_1ktsm1s`).
+Logs: `build/texture-dimensions-{build,full-build,core,ui}-20261008.log`.
+This is pre-write content validation, not atomic I/O on filesystem failure.
+
+Texture post-write validation now chooses a unique exact name before a unique
+case-insensitive fallback. A scratch case reproduced a newly appended texture
+with actual ID 8 incorrectly reported as ID 7 because an older case-alias name
+matched first. Ambiguous exact/folded names now refuse verification. All 19
+texture lookup checks pass (`build/texture-lookup-dow5_kqm`), including correct
+ID/pixel readback and preservation of the old texture. All 19 mesh texture-ID
+checks pass (`build/mesh-texture-ids-inzycjfy`): the material links the new ID
+when an older lowercase alias exists. Four editor import workflows also pass
+with independent texture-reference checks and preservation of the original
+texture (`build/mesh-format-ui-g9t4zgg_`). All Release targets build and all
+52 core groups pass (25.00s). Logs:
+`build/texture-validation-identity-{before,build,cli,full-build,core,ui}-20261008.log`.
+
+glTF loading no longer silently drops triangle primitives without POSITION.
+A two-part fixture reproduced the old partial-model acceptance. Mesh/primitive
+arrays and attributes objects are checked; missing resource tables use checked
+JSON lookup. Per-primitive failures now include zero-based mesh and primitive
+indices, so a damaged part is identifiable without admitting a partial import.
+Point/line skip behavior is unchanged. All 572 mesh-input checks pass, covering
+missing part/resource tables, malformed arrays/attributes and error location.
+All 56 geometry/URI CLI cases pass (`build/mesh-invalid-geometry-dura25wp`), with
+unchanged scratch/source hashes on refusal. The GUI suite now has four passing
+workflows: the new missing-part error is visible while both the existing preview
+and all scratch bank files remain unchanged (`build/mesh-format-ui-xs4k2xrx`).
+All Release targets build and 52/52 core groups pass (22.64s). Evidence:
+`build/mesh-part-context-{before-build,before-tests,build,tests,cli,full-build,core,ui}-20261008.log`.
+
+The editor now has dedicated sparse/strip import workflow coverage in
+`tools/test_mesh_format_ui.py`, wired into the Windows check_all suite. Three
+workflows pass on synthetic banks with an isolated hidden GUI profile: sparse
+and strip imports finish, refresh the Models browser and load the new preview;
+independent bank decoding confirms geometry/bounds plus collision. A required
+extension failure shows the import error and preserves the selected working
+preview and every scratch install file. Source model/image hashes are unchanged.
+Evidence: `build/mesh-format-ui-tu5usrot/{result.json,*.txt.log,*-mesh.json}` and
+`build/mesh-format-ui-20261008.log`. This exercises editor import/preview state;
+there was no in-game or new-format map-placement run.
+
+Index-count preflight now shares the preview decoder's existing 30,000,000-index
+resource guard through meshpreview::maxPrimitiveIndices. glTF checks topology
+counts before attribute/index allocation, accounting for strip/fan expansion to
+three indices per triangle. OBJ checks cumulative triangulated faces per material
+part. This moves an existing mandatory readback limit earlier; it is not a native
+format/runtime capacity claim. Review found the implicit-zero index allocation
+path; the old trillion-element case was intentionally not executed. Six focused
+large-count cases now return the explicit limit error before allocation, and all
+558 mesh-input checks pass. All 53 geometry/URI CLI cases pass, including counts
+just over the list and expanded strip/fan limits preserving banks/sources
+(`build/mesh-invalid-geometry-5vwo4f04`). All 16 topology imports/refusals still
+pass (`build/mesh-topology-43_mekba`). All Release targets build and 52/52 core
+groups pass (28.79s). Logs:
+`build/mesh-index-preflight-{build,tests,cli,topology,full-build,core}-20261008.log`.
+The editor guide now describes sparse/strip/fan support, extension handling and
+vertex/collision limits, and corrects the generated hull name to `[PHYSICS]`.
+Documentation command validation passes (32 forge, 37 forge-tools commands).
+
+Original-bank recipe/theme integration passes after the importer changes.
+Recipe packs build both load orders with assigned mesh IDs matching OBJECT
+references and the custom ENGINE_THEME present; deploy/undeploy restores all
+scratch banks byte-for-byte. Custom base/cliff theme import passes, and malformed
+PNG plus late locked-game.bin failures preserve every scratch file. Four original
+baseline bank hashes remain unchanged. Evidence:
+`build/forge-recipe-theme-whgjamws/{result.json,test_recipe_packs.py.log,test_custom_theme.py.log}`,
+`build/forge-recipe-theme-20261008.log`; isolated profile and verified scratch
+paths in `build/forge-recipe-theme-check.py`. No live game was run.
+
+The first 25 synthetic CLI integration suites in check_all.py all pass against
+the current binaries, covering storage/namespace review, BIN/names/BIG writers,
+text/texture/model preservation, music/faction/particle bindings and world/thing
+symbol inventories. Isolated profile, no configured install, no GUI/live game.
+Per-suite output and exact commands are retained in
+`build/forge-cli-integration-igx7ydx1/{result.json,*.log}`;
+runner `build/forge-cli-integration-check.py`, summary
+`build/forge-cli-integration-20261008.log`. This is the synthetic CLI subset,
+not a claim that the entire check_all GUI/retail suite ran.
+
+DoorTriggerType runtime/property follow-up narrows the evidence without relaxing
+storage refusal. CTCDoor::UpdateOpenStatus 0257DF60 resolves its CDoorDef pointer
+at component +0x20, then branches on definition +0x28: 0 calls the person-trigger
+path, 1 calls the script/manual path. Original instructions at 0257DF81/84/89
+and 0257DF9F/A2/A7 confirm pointer selection and comparisons. The constructor
+0257CF70 initializes that definition pointer; OnCreate 0257D580 copies Open to
+local status bytes. Editor GetPropertiesStruct 0257FC70 and SetFromPropertiesStruct
+0257FDB0 expose only "Start open" at component +0x10. This does not establish a
+consumer for authored CTCDoor.DoorTriggerType, and the earlier +0x1c SetTriggerType
+setter alone still does not classify that serialized field. No parser acceptance,
+source coverage or source-admission rule changed. Read-only exports:
+`build/namespace-door-runtime-properties-20261008.{c,log}`,
+`build/namespace-door-trigger-consumer-20261008.{c,log}`. Original-byte packet:
+`build/namespace-door-runtime-native-20261008.json`, same pinned FableWin SHA256
+`a9d6d0977d9d7fc8242da4292ae7ed92e926ca80364a95c003d9b9f689e41845`.
+
+glTF node transforms now reject non-affine matrix rows and invalid rotation
+quaternions. The matrix row is checked before float conversion, so tiny nonzero
+perspective terms cannot silently disappear. Rotation components must lie within
+[-1,1], with length within 0.00769 of one, matching Khronos glTF-Validator's
+quantization tolerance; accepted rounded rotations are normalized before matrix
+construction. The source is pinned at
+[602c54043ba66856b2e68c40fdf2bced975cdb8a](https://github.com/KhronosGroup/glTF-Validator/blob/602c54043ba66856b2e68c40fdf2bced975cdb8a/lib/src/errors.dart);
+threshold evidence is `build/mesh-transform-validator-threshold-20261008.txt`.
+This is not a full TRS-decomposition validator: finite affine shear/singular
+matrices keep the existing importer behavior. The initial test reproduced silent
+acceptance of a perspective row. All 552 input checks pass, including rounded
+sign-equivalent rotations with unchanged lengths and inherited transforms. All
+50 geometry/URI CLI cases pass with preservation on refusal
+(`build/mesh-invalid-geometry-mrqkpyxv`). Six cached Khronos models pass geometry,
+bounds, collision and source-hash checks (`build/mesh-cached-corpus-rtkbby02`),
+including the sparse sample. All Release targets build and 52/52 core groups pass
+(121.92s). Evidence:
+`build/mesh-transform-domain-{before-build,before-tests,build,tests,cli,full-build,core,corpus}-20261008.log`.
+
+Static glTF import now lowers triangle strips and fans to ordinary triangle
+lists instead of skipping them. Indexed/non-indexed order, alternating strip
+winding and mirrored-instance reversal follow the
+[Khronos topology rules](https://registry.khronos.org/glTF/specs/2.0/glTF-2.0.html#meshes-overview).
+Short strips/fans, missing vertices and restart indices refuse; point/line modes
+retain the existing skip note. The first fixture reproduced skipped geometry.
+All 541 mesh-input checks pass, including exact faces before and after compiled
+payload decoding. `tools/test_mesh_topology.py` is wired into check_all: all 16
+cases pass (eight valid mode/index/mirror combinations with geometry/bounds and
+collision readback; eight short-count refusals preserving banks and sources),
+artifact `build/mesh-topology-_tsawj2l`. All 43 geometry/URI regressions and all 11
+sparse checks pass (`build/mesh-invalid-geometry-absne1fx`,
+`build/mesh-sparse-n2noax5f`). All Release targets build and 52/52 core groups pass
+(23.13s). Evidence:
+`build/mesh-topology-{before-build,before-tests,build,tests,expanded-build,expanded-tests,cli,full-build,core,regression-cli,sparse}-20261008.log`.
+This uses the existing static mesh/collision writers; no in-game run was performed.
+The subsequent original-bank OBJ/GLB/editor import-and-place workflow also passes,
+including malformed-bank refusal and late-lock rollback preserving every scratch
+file. All four baseline bank hashes remain unchanged; evidence
+`build/mesh-original-format-2fb4fcwm/{result.json,output.log}` and
+`build/mesh-topology-original-20261008.log`.
+
+
+glTF import now refuses unsupported required extensions before loading buffers,
+naming the extension in the error. Previously it silently accepted such assets,
+reproduced by the new required-Draco fixture. Optional extensions retain core
+fallback import and produce a note visible through the existing CLI/UI result
+flow. Extension lists require unique nonempty strings; required names must be
+listed as used. This follows the
+[Khronos extension contract](https://registry.khronos.org/glTF/specs/2.0/glTF-2.0.html#specifying-extensions);
+no extension decoder support is claimed. All 521 mesh-input checks pass. All 43
+geometry/URI CLI checks pass, including required Draco/meshopt/unknown refusals
+with unchanged scratch/source hashes, and optional fallback with a visible note
+plus independent 24-vertex/12-triangle readback (`build/mesh-invalid-geometry-knxn2bcp`).
+All Release targets build and 52/52 core groups pass (17.44s). Evidence:
+`build/mesh-required-extension-{before-build,before-tests,build,tests,cli,full-build,core}-20261008.log`.
+
+Mesh loading now preflights the existing static writer capacity of 65,535 vertices
+per primitive, shared through meshcompose::maxPrimitiveVertices. glTF checks
+POSITION count and NORMAL/TEXCOORD_0 shapes/counts before decoding arrays; OBJ
+checks each newly deduplicated vertex. A 65,538-vertex fixture reproduced the
+old late acceptance. Boundary glTF/OBJ models still load, while trillion-element
+implicit-zero accessors return precise metadata errors without allocation.
+All 503 mesh-input checks and all 52 core groups pass (23.32s); all Release
+targets build. The 39 geometry/URI CLI cases preserve scratch banks/source files
+on refusal (`build/mesh-invalid-geometry-dzpdpm08`), and all 11 sparse CLI cases
+still pass (`build/mesh-sparse-8m4iv06b`). Evidence:
+`build/mesh-count-preflight-{before-build,before-tests,build,tests,full-build,core,cli,sparse}-20261008.log`.
+This moves the existing writer limit earlier; it does not assert a new runtime
+capacity or impose a combined render-model vertex limit.
+
+Static glTF import now supports sparse scalar/vector accessors. It decodes an
+ordinary/interleaved base or starts from implicit zeros, then applies tightly
+packed replacements. Sparse slot indices must be unsigned, strictly increasing
+and inside the accessor count; counts, offsets, source windows, forbidden view
+stride/target fields and finite values are checked before use. Normalization also
+applies to sparse replacement values. Primitive triangle-index restrictions are
+checked after replacement; sparse slot 255 is valid for an unsigned-byte slot
+list and is not a triangle restart sentinel. This follows the
+[Khronos sparse accessor contract](https://registry.khronos.org/glTF/specs/2.0/glTF-2.0.html#sparse-accessors).
+
+The initial valid sparse fixture reproduced the previous blanket refusal. All
+496 input checks now pass, covering base/zero/interleaved sources, 8/16/32-bit
+slot indices, normalized UVs, sparse triangle indices and malformed data.
+`tools/test_mesh_sparse.py` is wired into check_all; eight malformed imports
+preserve every scratch file and two valid imports have independently decoded
+geometry/bounds plus collision. Its optional cached Khronos sample also passes:
+SimpleSparseAccessor imports 14 vertices/12 triangles with bounds [0,0,0] to
+[600,0,400], confirming the sparse displacement, with source glTF/BIN hashes
+unchanged. All 11 sparse CLI cases pass in `build/mesh-sparse-yefnpx6x`.
+All 36 existing geometry/URI CLI cases pass (`build/mesh-invalid-geometry-flgvcxzq`).
+All Release targets build and 52/52 core tests pass (31.81s). Evidence:
+`build/mesh-sparse-{before-build,before-tests,build,tests,expanded-build,expanded-tests,cli-build,final-input,cli,full-build,regression-cli,core}-20261008.log`.
+This adds sparse geometry storage support, not animation/skinning or morph-target playback.
+
+Independent geometry compatibility check: Khronos glTF-Sample-Assets commit
+`edc7c9e67c639d230715049ee31f9a96a6babbbe` supplies Box, BoxInterleaved,
+Triangle, TriangleWithoutIndices and SimpleMeshes. All five import into synthetic
+banks with collision and independently decoded counts matching their selected
+scene accessors (24/12, 24/12, 3/1, 3/1, 6/2 vertices/triangles). The separate
+SimpleSparseAccessor sample was explicitly refused at that initial gate, with the
+scratch install unchanged; the sparse follow-up above supersedes that refusal.
+Source URLs/hashes, per-model README/license notes and CLI readback are
+retained at `build/mesh-khronos-7hfoa2zu`; probe `build/mesh-khronos-samples.py`.
+This checks static geometry/counts and preservation, not imported PBR materials,
+animation, a full glTF conformance suite or in-game rendering.
+
+Only buffer 0 may obtain bytes from a GLB BIN chunk. The loader previously reused
+that chunk for later URI-less buffers, silently supplying data they did not own.
+It now refuses those unsupported sources and still accepts an independent explicit
+second buffer (verified with a zero-filled BIN and nonzero second-buffer triangle).
+This is a supported-source boundary, not a claim that future extension-defined
+URI-less buffers are universally invalid; see [Khronos GLB-stored buffers](https://registry.khronos.org/glTF/specs/2.0/glTF-2.0.html#glb-stored-buffer).
+The initial acceptance regression now passes; 464 focused input checks and all
+36 geometry/URI CLI checks pass (`build/mesh-invalid-geometry-txk8icai`). All Release
+targets build and 52/52 core tests pass (21.67s). Logs:
+`build/mesh-bin-owner-{before-build,before-tests,build,tests,cli,full-build,core}-20261008.log`.
+
+An explicitly reused nonzero mesh texture ID must now resolve exactly once in
+the selected input's GBANK_MAIN_PC. Missing IDs, duplicate IDs and the wrong bank
+refuse before committing any files. A reproduced missing-ID import previously
+reported success with a broken link. Zero remains the intentional untextured
+choice; appended-image behavior is unchanged. Numeric-ID and Models fixtures now
+provide real texture entries before import instead of relying on unchecked links.
+All 18 ID/reference checks, 35 geometry/URI checks and five Models UI flows pass:
+`build/mesh-texture-ids-e4jappxg`, `mesh-invalid-geometry-g3njurei`,
+`model-names-ui-2jpdkvo0`. All Release targets build and 52/52 core tests pass
+(19.28s), including audio. Logs:
+`build/mesh-texture-reference-{before-cli,full-build,cli,geometry,ui,core}-20261008.log`.
+
+Mesh material texture IDs now retain the full unsigned 32-bit domain through
+composition, dependency metadata, decoding, Models links, budget collection,
+CLI diagnostics and effect-mesh rendering. Signed storage previously dropped
+map flags/dependencies and skipped high IDs; six focused failures reproduced it.
+Only the four material map IDs changed signedness; signed sprite sentinels and
+the separate decal field retain their prior behavior. The renderer uses zero for
+an untextured mesh part while sprite sentinel handling remains signed.
+
+Native debug evidence: C3DMeshMaterial::LoadBinary 0349b0b0 reads these four fields
+as ULONG into +0x14..+0x20; GetDiffuseMapBankIndex 02dbf2d0 returns +0x14;
+HasValidDiffuseMap 02eb8560 compares that word against zero with setne. Ghidra has
+an unrelated library-match name at the last address; the PDB name and original
+instruction bytes establish the relevant identity/condition. Read-only decompile
+`build/mesh-material-id-native-20261008.{c,log}`, instruction/PE-hash evidence
+`build/mesh-material-id-native-bytes.json` (SHA a9d6d097...e41845, original debug PE).
+No native source/project mutation or in-game high-ID capacity claim.
+
+All 75 bounds/composition checks pass; 15 CLI ID checks now inspect material and
+descriptor readback at 0x7fffffff/0x80000000/0xffffffff (`build/mesh-texture-ids-a9tlz6ru`).
+Five model UI flows pass, including following ID 0xffffffff despite a different
+texture whose raw name is "4294967295" (`build/model-names-ui-mha_1qx_`). New WARP
+pixel checks render green texture samples at 0x80000000/0xffffffff. All eight
+normal/compact Effects flows pass (`build/effect-workspace-kuwdm25g`); original
+mesh/texture bank hashes unchanged (`build/mesh-unsigned-effects-pzd1qgjy/result.json`).
+All Release targets build. The initial core gate passed 51/52, with the pre-existing
+audio transport test timing out at 30s; its isolated rerun passed in 0.19s and the
+expanded WARP test passed in 0.16s. No audio source/test edits were made.
+Logs: `build/mesh-unsigned-textures-{before-build,before-tests,build,tests,full-build,cli,ui,core,warp-build,focused}-20261008.log`.
+
+glTF primitive material references now use checked nonnegative indices and require
+the referenced material array entry. Negative/fractional/oversized values previously
+fell back or narrowed to another slot. Primitive mode uses the same numeric guard
+and refuses values outside 0..6 before dispatch; supported triangle mode remains 4,
+and known non-triangle modes retain their explicit skip note. Initial acceptance
+of an invalid material reference was reproduced. All 462 input checks and 35 public
+CLI scenarios pass (including eight new mode/material refusals with complete
+scratch/source preservation): `build/mesh-invalid-geometry-a_hunet_`.
+All Release targets build and 52/52 core tests pass (27.35s). Evidence:
+`build/mesh-material-mode-{before-build,before-tests,build,tests,cli,full-build,core}-20261008.log`.
+
+glTF imports now check the JSON asset version separately from the GLB wrapper:
+an asset object and numeric major.minor string are required; major version 2 is
+supported, and an explicit minVersion must be 2.0. Compatible 2.x declarations
+without a newer minimum remain accepted. Initial tests reproduced acceptance of
+missing version metadata; 13 refusals and three compatible-version cases now pass.
+Three CLI version refusals preserve inputs and every destination file. Logs:
+`build/mesh-asset-version-{before-build,before-tests,build,tests,cli}-20261008.log`;
+CLI fixture `build/mesh-invalid-geometry-sj7eyaqr` (25 checks).
+
+Whole-valued decimal/exponent JSON numbers now work for integer fields, as allowed
+by [Khronos JSON encoding](https://registry.khronos.org/glTF/specs/2.0/glTF-2.0.html#json-encoding).
+The previous type-only check rejected valid 36.0 buffer lengths. The numeric path
+checks finite, nonnegative, integral values below 2^size_t_bits before conversion,
+avoiding the rounded-up double(SIZE_MAX) boundary. Fractional/negative/oversized
+values still refuse. All 451 input checks and 27 public CLI checks pass, including
+decimal scene/accessor references and real decimal/scientific imports decoded as
+24 vertices/12 triangles. Logs `build/mesh-json-integer-{before-build,before-tests,build,tests,cli}-20261008.log`;
+fixture `build/mesh-invalid-geometry-r8393fm_`.
+
+All Release targets build; 52/52 core tests pass (17.03s):
+`build/mesh-version-integer-{full-build,core}-20261008.log`. Original-bank scratch
+OBJ/GLB imports, collision/definition/texture readback, GUI Import model and both
+malformed-input/late-commit-lock preservation checks pass. Four original bank hashes
+are unchanged: `build/mesh-original-format-lsv96khv/{result.json,output.log}`.
+The wrapper validates the fixed mesh_root deletion target and isolates the GUI
+profile; no live game/install write was performed. Version policy follows the
+[asset compatibility rules](https://registry.khronos.org/glTF/specs/2.0/glTF-2.0.html#asset).
+
+The static composer now refuses more than 65535 primitives: its one-block-per-part
+strategy stores TotalStaticBlocks as u16. The 65535 boundary retains 0xffff;
+65536 previously serialized zero and now refuses. This is the core writer's field
+limit; the public importer's independent preview already has a lower count guard.
+Evidence: FableTLC `docs/formats/MESH.md` section 3.1 and
+`build/mesh-block-limit-{before-build,before-tests,build,tests}-20261008.log`.
+All 54 focused bounds/composition checks pass.
+
+glTF NORMAL and TEXCOORD_0 must now have VEC3/VEC2 shape respectively and the same
+count as POSITION. Previously mismatches silently discarded the authored channel.
+An initial focused failure reproduced that loss; four new shape/count cases now
+pass, alongside existing valid/missing-channel behavior (429 input checks total).
+The [Khronos primitive rules](https://registry.khronos.org/glTF/specs/2.0/glTF-2.0.html#meshes)
+specify these shapes and matching counts. Four public CLI refusals preserve the
+complete scratch install and input files. All 22 geometry/name/URI checks pass in
+`build/mesh-invalid-geometry-__28frfg`; logs
+`build/mesh-attribute-shape-{before-build,before-tests,build,tests,cli}-20261008.log`.
+Both changes pass the full Release build and 52/52 core tests (22.93s):
+`build/mesh-block-attribute-{full-build,core}-20261008.log`.
+
+Mesh composition now refuses embedded NUL in serialized render-mesh, material and
+collision-submesh names. Previously all three accepted the byte even though names
+are NUL-terminated, shifting the interpretation of following fields. The shared
+string writer rejects before returning any payload. Three initial core failures
+now pass; a glTF material-name case refuses after texture preparation and preserves
+the entire scratch install plus its source model. All 18 geometry/name/URI CLI
+checks pass (`build/mesh-invalid-geometry-ckvsdbn8`). All Release targets build;
+52/52 core tests pass (24.55s). Evidence:
+`build/mesh-name-nul-{before-build,before-tests,build,tests,cli,full-build,core}-20261008.log`.
+
+Collision unique-position numbering now uses an ordered lookup instead of scanning
+all previously seen vertices. First-encounter IDs and signed-zero equality are
+preserved; non-finite positions refuse before lookup. Preserved old/new uncompressed
+outputs are byte-identical for 8192, 16384 and 32768 distinct vertices. The largest
+fixture fell from 0.286s to 0.0048s in the same Release probe (about 60x).
+Evidence: `build/physics-unique-{before,after}-20261008.log` and
+`physics-unique-compare.cpp/.exe`; repeated-position IDs have a core regression.
+This preserves the existing UNIV writer behavior without asserting new native semantics.
+
+Generated face normals now use double differences, cross products and accumulation;
+authored normal packing uses double-length normalization and refuses non-finite input.
+Five initial failures reproduced lost normal directions on large finite coordinates.
+Existing small/degenerate thresholds remain unchanged. All 49 bounds checks and 425
+mesh-input checks pass: `build/mesh-normal-range-{before-build,before-tests,build,tests,input}-20261008.log`.
+All Release targets build; 52/52 core tests pass (23.16s), plus all 3 collision-limit
+and 17 geometry/URI CLI checks. Final logs:
+`build/physics-unique-normal-{full-build,collision,cli,core}-20261008.log`;
+scratch results `mesh-collision-limit-l2ykaa_l` and `mesh-invalid-geometry-8y8srt8v`.
+These are composition/math checks, not in-game validation of extreme coordinates.
+
+Collision composition now preflights the combined hull's uint16 index domain
+and each primitive's local indices. It previously silently clamped global indices
+above 65535, changing triangle references. The current single-hull strategy
+supports at most 65536 total vertices; this is its serialized representation limit,
+not a new in-game capacity claim. Core regressions preserve the exact 65535 index
+at the boundary and refuse one extra vertex plus an out-of-range local face.
+`tools/test_mesh_collision_limit.py` checks successful 65536-vertex collision,
+unchanged scratch files after 65537-vertex refusal following texture preparation,
+and successful 65537-vertex render-only import across two primitives. It is wired
+into check_all; artifact `build/mesh-collision-limit-p75xf7y7`.
+
+The first end-to-end boundary check timed out after 60s in repetitive compression
+(`build/mesh-collision-limit-cli-20261008.log`, retained `mesh-collision-limit-lh2qngb6`).
+The LZO match finder rescanned long equal suffixes at every input position. It now
+caches each distance's previously verified match endpoint and reuses only the
+proven prefix; candidate search/order and token parsing are unchanged. A separately
+compiled preserved old encoder and the new encoder produced byte-identical output
+for all 258 synthetic comparisons. Same-compiler scratch timings: 64-KiB zeros
+0.882s -> 0.031s; 128-KiB zeros 2.732s -> 0.040s. New 2-MiB zeros compress in 0.685s
+with an exact round trip. Evidence: `build/lzo-cache-compare-20261008.log`,
+`lzo-before-cache.cpp/.o`, `lzo-cache-compare.cpp/.exe`. No fixed timing threshold
+was added to the unit suite; a 1-MiB repetitive round trip exercises the case.
+The collision CLI retry now completes successfully instead of timing out.
+
+The LZO test accepts an optional explicit read-only install path, bypassing persisted
+install detection, and its missing-corpus message accurately distinguishes synthetic
+checks. Original baseline validation compares 2138 terrain frames and 6162 texture
+chunks (6278 entries), with 2238 encoder round trips and zero failures through both
+clean-room and test-only minilzo decoders. All 301 range VB blocks are byte-exact.
+2133/2138 re-encoded frames fit their original slots; no claim that all retail slots
+fit. `build/lzo-match-cache-retail-20261008.log`. All Release targets build and
+52/52 core tests pass (21.91s): `build/mesh-collision-lzo-{full-build,core}-20261008.log`.
+Other logs: `build/mesh-collision-limit-{before-build,before-tests,build,tests,cli-build,final-cli}-20261008.log`
+and `build/lzo-match-cache-build-20261008.log`.
+
+New mesh bounds now initialize from the representable float range rather than
+arbitrary +/-1e9 sentinels. Seven initial focused failures showed oversized
+boxes/spheres for distant positive and negative coordinates, plus accepted NaN
+geometry. Midpoints and distances use double intermediates so finite distant
+geometry keeps finite local bounds. Non-finite positions and spheres that cannot
+fit the serialized float domain refuse composition. Existing authored bounds
+read/preview behavior is unchanged; only new composition uses this calculation.
+
+Focused bounds checks pass, including +/-2e9 offsets, a 2e38 origin and explicit
+finite-position sphere overflow. The public CLI overflow case refuses after
+texture preparation with the complete scratch install unchanged; the fixture
+was recentered on Y after its first version hit the earlier position-overflow
+guard. All 17 geometry/URI CLI checks pass (`build/mesh-invalid-geometry-x08jv3ju`).
+All Release targets build and 52/52 core tests pass (31.59s). Logs:
+`build/mesh-composed-bounds-{before-build,before-tests,build,tests,full-build,cli,final-cli,core}-20261008.log`.
+These are storage/math checks, not an in-game claim for extreme coordinates.
+
+glTF buffer URI handling now distinguishes the two supported binary media types
+and requires base64 encoding for embedded buffers. It validates alphabet, length,
+padding placement/bits and percent escapes instead of silently skipping garbage
+or stopping at the first equals sign. Valid percent-escaped base64, both media
+types, padded payloads, case-insensitive scheme/media spelling and media parameters
+remain supported. Accumulation uses explicit unsigned wrapping; no separate
+wrong-decoding claim is made for the preceding signed accumulator alone.
+External local buffer filenames now percent-decode and use UTF-8 filesystem
+conversion. The initial test could not open an existing `mesh ? #.bin` because it
+looked for literal `%20%C3%A9%20%23`; the corrected test passes. NUL/unrepresentable
+paths and malformed escapes refuse. This is local buffer handling, not a general
+network URI loader.
+
+All 425 mesh-input checks and 16 public CLI geometry/URI checks pass. CLI positives
+import embedded and escaped-Unicode external buffers into real mesh/physics/OBJECT
+entries and independently inspect 24 vertices/12 triangles; model/buffer source
+hashes stay unchanged. CLI negatives preserve all scratch-install files. Artifact:
+`build/mesh-invalid-geometry-_bz499yq`. All Release targets build and 52/52 core
+tests pass (28.96s). Logs: `build/mesh-base64-{build,tests}-20261008.log`,
+`build/mesh-data-uri-{before-build,before-tests,build,tests,expanded-build,expanded-tests,cli}-20261008.log`,
+`build/mesh-uri-path-{before-build,before-tests,build,tests,final-build,final-tests}-20261008.log`,
+and `build/mesh-uri-{full-build,cli,core}-20261008.log`. The first successful external
+load exposed a test cleanup omission (new fixture not removed), corrected before
+the final gate. References: [glTF buffers](https://registry.khronos.org/glTF/specs/2.0/glTF-2.0.html#buffers-and-buffer-views),
+[RFC 2397](https://www.rfc-editor.org/info/rfc2397/),
+[RFC 4648](https://www.rfc-editor.org/info/rfc4648/). Canonical padding-bit refusal
+is Forge's strict decoder policy.
+
+glTF accessors now reject NaN/infinity, and positions must remain finite after
+node transformation and metre-to-mesh conversion. The initial regression accepted
+a NaN position; seven new position/UV cases now refuse. Texture-coordinate packing
+also saturates in double precision before integer conversion: very large positive
+finite values previously reached the negative endpoint after lround overflow.
+Non-finite direct compressUv input now throws. Ordinary UV checks still pass;
+this affects newly composed meshes, not existing archive payloads.
+
+All 401 mesh-input checks and focused export tests pass. Ten CLI GLB cases cover
+NaN/positive/negative infinity in positions, normals and UVs plus conversion
+overflow, with a requested texture import and exact preservation of every scratch
+file/no staging leftovers. Artifact: `build/mesh-invalid-geometry-s1m2xnkt`;
+`tools/test_mesh_invalid_geometry.py` is registered in check_all. All Release
+targets build and 52/52 core tests pass (26.62s). Evidence logs:
+`build/mesh-finite-{before-build,before-tests,build,tests,cli,full-build,core}-20261008.log`,
+`build/mesh-uv-{before-build,before-tests}-20261008.log`, and
+`build/mesh-finite-uv-{build,tests,input}-20261008.log`.
+
+glTF authored normals now use the inverse transpose of the complete inherited
+node transform instead of multiplying by the position matrix. The initial
+slanted-face regression demonstrated a normal that was no longer perpendicular
+to its own surface after nonuniform scaling. Double-precision cofactors plus
+normalization avoid division by a tiny determinant; determinant sign also drives
+mirrored winding. Singular transforms request the existing geometric-normal
+reconstruction and emit a note; valid authored smoothing is preserved elsewhere.
+Zero/nonfinite transformed authored normals refuse. This is static import
+behavior, not animation/skinning support.
+
+Expanded input tests cover identity, rotation, unequal scale, reflection,
+inherited rotation under unequal parent scale, tiny mirrored scale, flattened
+surfaces, authored smoothing and invalid normals. They check perpendicularity
+and orientation both before composition and after decoding the packed compiled
+mesh (with quantization tolerance). All 394 input checks and all 52 core tests
+pass (20.51s); all Release targets build. Logs:
+`build/mesh-normals-{before-build,before-tests,build,tests,expanded-build,expanded-tests,full-build,core}-20261008.log`.
+No new in-game claim. The [Khronos transformation specification](https://registry.khronos.org/glTF/specs/2.0/glTF-2.0.html#transformations)
+permits singular transforms and notes possible lighting artifacts; the geometric
+fallback is Forge's import policy, not a mandated glTF algorithm.
+
+Mesh import now preflights both generated render and collision-hull names and
+requires a unique exact donor definition. The previous name guard covered only
+the render entry; a synthetic import reproduced a successful append of a second
+MESH_IDENTITY[PHYSICS] name. `tools/test_mesh_identity_refusal.py` adds five CLI
+cases, including an unused pre-existing hull with collision disabled, successful
+unique-donor collision import, duplicate-donor refusal, and unchanged complete
+scratch snapshots after refusing a hull name following texture preparation.
+Windows check_all includes the test. Final artifact: `build/mesh-identity-foj4k7la`.
+All Release targets build and 52/52 core tests pass (32.52s); logs are
+`build/mesh-identity-{before,build,tests,final-tests,full-build,core}-20261008.log`.
+
+The original-bank OBJ/GLB/GUI import check passes, including generated geometry,
+physics, definition fields, texture append and backups. Malformed-source and
+late commit-lock failures preserve every scratch file. It used an isolated GUI
+profile, verified the resolved build/mesh_root deletion target, retained scratch
+outputs, and confirmed all four original source bank hashes unchanged:
+`build/mesh-original-identity-9mgmqun6/result.json` and `output.log`.
+Fourteen related CLI checks also pass; per-script results/logs are in
+`build/continuation-regressions-20261008.json` and
+`build/continuation-regression-*-20261008.log`.
+
+Additional bounded Hook research leaves nonzero ReplacementObject unresolved.
+Read-only native GetPropertiesStruct 0253E6A0, SetFromPropertiesStruct 0253EFE0
+and OnInitialActivate 0253CC30 exports do not identify its reference domain.
+The property UI exposes confirmation/teleport/minimap flags and camera-track
+selection, not a replacement definition selector. Original-byte decoding covers
+all 2,368/656/1,888 bytes in the three bounded function spans and finds no direct
++0x50 memory operand; this is not proof that indirect consumers do not exist.
+Evidence: `build/namespace-hook-editor-properties-20261008.{c,log}` and
+`build/namespace-hook-editor-properties-bytes-20261008.json`, pinned FableWin
+SHA a9d6d0977d9d7fc8242da4292ae7ed92e926ca80364a95c003d9b9f689e41845.
+No parser acceptance changes. The original 2856 example also contains overflowing
+UIDs, so resolving this field alone would not admit that file. Do not repeat these
+property/activation queries as a new investigation.
+
+Texture context lookups now refuse ambiguous IDs instead of silently retaining
+the last entry. Ambiguous IDs remain unavailable through both image and metadata
+lookups; unrelated IDs in the same bank still work. A three-duplicate regression
+first reproduced the wrong decoded result. Explicit GUI texture references now
+share a bank/ID resolver in Effects sprites, effect mesh materials and model
+material links; numeric raw names and other banks cannot shadow the reference.
+Ambiguous links are disabled with a diagnostic, while exact-name browsing remains
+available for individually named entries. The synthetic model UI test now also
+checks successful material navigation and refusal of a duplicate-ID material,
+with unchanged graphics/textures hashes: `build/model-names-ui-6hfbqlt0`.
+
+All Release targets build and 52/52 core tests pass (24.39s). Original Effects
+flows pass at both sizes (`build/effect-workspace-2re9thro`), and four original
+map exports pass structural plus independent trimesh checks, including Arena
+objects/foliage. Logs: `build/texture-cache-id-{before-build,before-tests,build,tests}-20261008.log`
+and `build/texture-bank-id-{build,tests,ui,full-build,core,effects,retail}-20261008.log`.
+
+Model identity checks now refuse duplicate mesh IDs in the shared export cache
+and direct LOD preview reader. The browser counts all bank entries, including
+hidden physics entries, before resolving a selection; ambiguous names/IDs leave
+the existing preview intact. Exact raw names take precedence over numeric text
+shortcuts. Row clicks and Effects > Open model now use a typed ID path, so a raw
+name such as "7" cannot redirect an explicit reference to ID 7. Initial focused
+regressions reproduced duplicate acceptance, numeric-name misselection and a
+hidden-physics duplicate clearing the current preview. The synthetic UI check
+also exercises an actual model-row click and the maximum uint32 ID.
+
+Focused export checks and all 52 core tests pass (34.67s); all Release targets
+build. Evidence: `build/model-identity-{full-build,final-ui,core}-20261008.log`,
+`build/model-names-ui-3v_6i1me`. The subsequent typed-ID GUI build and row-click
+check pass: `build/model-row-id-{build,ui}-20261008.log`,
+`build/model-names-ui-l88hsbe0`. All eight original Effects workspace flows pass
+at normal/compact sizes, including model navigation and pixel checks:
+`build/effect-workspace-6mgzw6k0`, `build/model-row-id-effects-20261008.log`.
+Reusable `tools/test_model_names_ui.py` is included in Windows check_all.
+Synthetic source graphics hashes remain unchanged. No live game writes.
+
+Texture browser selection now shares the exact-name/unique-shortcut resolver
+with archive decoding/export/replacement. Its separate GUI selector still chose
+the first matching label; a hidden UI regression reproduced wrong exported pixels
+for an exact symbol shadowed by a label. The shared selector now preserves the
+old selection on ambiguous label/ID requests and accepts full uint32 IDs (the old
+GUI length check excluded ten-digit IDs). Three hidden UI flows pass with source
+bank hash unchanged: `build/texture-names-ui-ayonv9ch/result.json`; reusable check
+`tools/test_texture_names_ui.py` is included in Windows check_all. Focused sprite
+checks pass; all Release targets build, 52/52 core tests pass (31.83s), and all
+12 CLI checks pass. Logs: `build/texture-names-ui-{full-build,core,cli}-20261008.log`.
+
+BIN save now refuses aliased names/game outputs before either file is opened.
+The initial loaded-bank regression reproduced successful save to one shared
+pathname, overwriting names bytes with game bytes. Focused checks now preserve
+existing outputs for identical, normalized parent-traversal and hard-link aliases;
+identical missing output paths refuse without creating a file. Resolution uses
+weakly_canonical plus existing-file equivalence. This is a destination-identity
+preflight, not a new two-file transaction or a concurrent-filesystem guarantee.
+All Release targets build and 52/52 core tests pass (30.18s). Logs:
+`build/bin-output-alias-{before-build,before-tests,build,tests,full-build,core}-20261008.log`.
+
+BIN save now explicitly refuses default-constructed planning banks that have
+no loaded 9-byte game/20-byte names headers. Code inspection found that the old
+writer copied into the empty names-header vector; this undefined memory access
+was not deliberately executed. Focused tests cover empty and populated planning
+banks, unchanged existing outputs and no creation of missing outputs, alongside
+all existing chunk-boundary/oversized/NUL preservation cases. All Release targets
+build and 52/52 core tests pass (25.34s). Logs:
+`build/bin-empty-save-{build,tests,full-build,core}-20261008.log`.
+
+Texture cache payload-read failures now follow the existing missing-texture
+fallback instead of escaping as exceptions. The focused regression reproduced
+big: short read after truncating an already-indexed scratch archive. Truncation
+and deletion now return no image with the texture name/ID and read cause in the
+first warning; repeated failures stay cached, already-decoded images remain
+valid, and reloading a restored archive decodes normally. The focused sprite-
+frame/texture test passes; all Release targets build and 52/52 core tests pass
+(30.79s). Full build/core validation logs:
+`build/texture-read-failure-{full-build,core}-20261008.log`.
+
+The mesh-import CLI now parses --texture-id as a complete unsigned decimal
+uint32 value. Its old stoul path accepted 1junk and wrote a new model; the
+regression reproduced that install mutation. Thirteen CLI cases now cover
+trailing junk, fractions, signs, whitespace, overflow, empty/missing values,
+and valid 0/7/UINT32_MAX. Refusals return usage status 2 before any install or
+staging changes. `tools/test_mesh_texture_ids.py` is in check_all; final evidence
+`build/mesh-texture-ids-1oeosg48/result.json`. Only the forge CLI target changed
+and was rebuilt; the prior 52-test core gate remains applicable to unchanged
+libraries. No repeated core gate for this argument-only change.
+
+Mesh import now reserves one render ID or two collision/render IDs without
+uint32 wraparound. The initial public regression successfully wrote mesh ID 0
+and OBJECT.Graphic.modelId 0 from an exhausted bank. It now refuses before
+writing graphics/defs; failure after preparing an added texture also removes
+owned staging and preserves every original file. Five synthetic-schema CLI
+cases cover both exhausted forms, insufficient room for a hull/model pair,
+and the final legal one-/two-ID allocations. These test writer allocation,
+not engine behavior of extreme IDs. `tools/test_mesh_id_exhaustion.py` is in
+check_all. Evidence: `build/mesh-id-exhaustion-ht_db6e8/result.json`; all Release
+targets build and 52/52 core tests pass (30.58s), logs
+`build/mesh-id-exhaustion-{full-build,core}-20261008.log`.
+
+Texture append now refuses an exhausted UINT32 ID range before image encoding
+or output writes. The public regression first produced a successful ID-0 append
+from a UINT32_MAX donor; core and install routes now refuse it and preserve all
+source/prior-output bytes. The adjacent boundary still appends UINT32_MAX.
+Four new CLI checks pass: `tools/test_texture_id_exhaustion.py` (check_all hook),
+`build/texture-id-exhaustion-s89y39hk/result.json`. All Release targets build,
+52/52 core tests pass (29.29s), and all 12 lookup checks still pass. Full logs:
+`build/texture-id-exhaustion-{full-build,core}-20261008.log`.
+
+Texture selection now gives unique exact symbols priority over shortened
+labels and numeric IDs. Ambiguous exact names or fallback candidates refuse;
+oversized numeric queries no longer saturate to UINT32_MAX. The initial fixture
+reproduced an earlier display label shadowing an exact symbol. The shared helper
+covers image preview/export, sprite loading and GUI/CLI replacement preflight.
+The core texture importer separately rejects duplicate exact symbols before
+writing its output; the public CLI regression first reproduced it replacing the
+first duplicate and overwriting an existing output. CLI import failures now
+print their validation cause. Twelve scratch CLI checks and focused sprite-frame
+checks pass, including correct-row replacement and prior-output/source preservation.
+New reusable check: `tools/test_texture_lookup.py`, included in check_all.
+All Release targets build and 52/52 core tests pass (27.07s). Final CLI evidence:
+`build/texture-lookup-wm1lr_an/result.json`; build/core logs use
+`build/texture-lookup-{full-build,core}-20261008.log`. The original-bank scratch
+texture UI also passes browse/export/replace/add and exact Restore; name/ID exports
+match and the DXT round-trip mean pixel error is 0.02. Evidence:
+`build/textures-ui-3poz92d7/report.json`, `build/texture-lookup-original-ui-20261008.log`.
+
+Mesh workers now retain an explicit MeshBankHandle instead of consulting the
+process-wide active bank for each later lookup. A deterministic async interleave
+first reproduced an export taking height-9 geometry from another install after
+opening its own height-2 bank. Things, foliage, model names/overrides, thumbnails
+and budget surveys now use retained handles. Scenes retain the same handle for
+deferred authored LOD reads. Opening another bank or closing the shared cache
+drops only default ownership; workers keep their source and release it when done.
+Lazy payload reads still require the source archive to remain unchanged on disk.
+
+The interleave and lifetime regressions pass, all Release targets build, and all
+52 core tests pass (24.78s): `build/mesh-worker-bank-{full-build,core}-20261008.log`.
+Budget area UI tests pass at both normal/compact sizes, and the world scenery
+handoff passes with graphics.big hash unchanged. Evidence:
+`build/mesh-worker-ui-261gliws/result.json`, `build/budget-areas-tfx61u01`.
+The additional two-LOD regression also passes: after switching installs and
+closing the default cache, deferred LODs still come from the scene's original
+bank. Focused logs: `build/mesh-worker-lods-{build,tests}-20261008.log`.
+
+The Effects workspace passes all eight original-bank UI flows at 1440x900 and
+800x600: transport, grid pixel change/reset, current-frame fitting and browser
+texture/model links plus refresh. Evidence: `build/effect-workspace-aqe_1udi`,
+`build/particle-original-workspace-20261008.log`.
+
+The particle-name audit now recognizes accepted tab/space separators and spaces
+before semicolons. A real TNG fixture first passed core storage review while the
+audit silently omitted its tab-separated ParticleTypeName; the regression now
+requires its reference. Five audit tests pass, including nine whitespace forms,
+refused-file exclusion and stale-report preservation. The first fixture lacked
+required Player identity and was corrected before reproducing the audit failure.
+Fresh original review retains all 19 references, identical candidates/findings and
+coverage: `build/particle-whitespace-bindings-20261008.json`. No new source admission.
+
+Mesh-bank opens now recheck source size and modification time before reusing
+an index or decoded geometry. The old path-only shortcut returned success after
+same-path replacement, deletion and corruption; the new scratch regression first
+reproduced seven failed assertions. Reload failures clear the active lazy index
+and lookup tables, while shared geometry already held by callers remains valid.
+A successful reopen clears stale error text. All Release targets build and 52/52 core tests pass (23.31s). Four baseline
+map exports also pass structural checks and the independent trimesh loader,
+including Arena with objects and foliage. Full build/core and retail logs:
+`build/mesh-cache-reload-{full-build,core,retail}-20261008.log`.
+Same-size, same-timestamp changes
+still require explicit closeMeshBank invalidation; this is metadata freshness,
+not an immutable archive snapshot or protection against concurrent disk writes.
+Logs: `build/mesh-cache-reload-{before-build,before-tests,build,tests}-20261008.log`.
+
+Particle export now respects effects-bank reload failure before looking up any
+emitter. Previously a corrupt or missing replacement bank could export lights
+from the retained old cache. The scratch regression reproduced that stale light,
+then verifies corrupt/missing banks emit no lights, count unavailable particles,
+and recover after restoration while held effect snapshots stay valid. Duplicate
+names now report "no unique match" instead of incorrectly claiming absence.
+All Release targets build; 52/52 core tests pass (40.47s). Logs:
+`build/particle-export-reload-{full-build,core}-20261008.log`.
+
+Text decoding now rejects unterminated final tag names and explicitly checks
+UTF-16 content termination. Previously rdAsciiz could hit EOF on the last tag and
+return a successful decoded entry; the all-prefix tagged-payload regression first
+reproduced that loss of the terminator. Complete strings remain accepted. Zero-
+length counted strings now form their pointer with data()+offset instead of an
+out-of-range vector subscript. Public read-only `tools/test_text_decode_boundaries.py`
+adds four CLI checks and a check_all hook, preserving source bytes on refusal.
+Original type-0 strings all still decode: baseline 26,807, Seasons 26,979, Secrets
+27,055, source hashes unchanged: `build/text-tag-truncation-original-20261008.json`.
+
+Both 48-case text composition refusal/recovery suites pass (normal and complete-
+data modes): `build/mod-text-codec-refusal-q3ieoljo` and `-bjzdsy68`. The first rerun
+caught the expected error-message change for truncated tags; that assertion now
+requires the specific `textbig: unterminated tag name` cause while retaining source,
+symbol, output-preservation and alternate-winner checks. No composer acceptance
+was relaxed; opaque tails and counted-string normalization retain their existing
+refusals. All Release targets build and 52/52 core tests pass (26.65s).
+Full build/core logs: `build/text-tag-truncation-{full-build,core}-20261008.log`.
+
+CTCAIScratchpad follow-up preserves refusal. Constructor 01E80EF0 installs
+vtable 04117F5C; slot 1 resolves through 017EBE9A to its dedicated OnSerialise
+01E81B80, not a base no-op. It conditionally transfers shared gossip maps/vectors
+when the parent HasTC(4). Original StatGetInterfaceType 01900370 identifies 4 as
+CTCHeroStats (CTCHero itself is 41; CTCGamePlayer is 208). The exposed source
+blocks are empty, but text-only absence of a component does not prove the parent
+definition/runtime component set. Therefore an unconditional empty-block rule
+would be unsupported. Evidence: `namespace-tng-ai-scratchpad-20261008.c`,
+`namespace-tng-ai-scratchpad-serialise-20261008.c` and hash-pinned original-byte
+`namespace-tng-ai-scratchpad-vtable-20261008.txt`. No acceptance change here.
+
+TNG Hook support is now deliberately default-only for opaque fields. Serializer
+0253D390 requires VersionNumber 1, transfers known booleans and remaps
+EntranceConnectedToUID / CameraTrackUID as uint64 thing identities. Constructor
+0253C860 initializes ReplacementObject +0x50 to zero and constructs empty strings
+at +0x40/+0x48. The new subset permits only literal 0 for ReplacementObject and
+empty quoted SoundName / AnimationName; nonzero replacements remain unclassified
+and refused, including original 2856. This does not infer that ReplacementObject
+is a game-definition index or add relocation for it. Original instruction evidence
+`build/namespace-hook-default-native-20261008.txt` confirms the default store at
+0253C927; existing `namespace-tng-numeric-links-20261008.c` / `-native-20261008.txt`
+supply serializer/version/UID evidence. The previously blocked investigation of
+nonzero meaning remains blocked, not overridden by this bounded default case.
+
+Core regression first reproduced the default-only refusal and now rejects missing
+or unsupported versions, nondefault opaque fields, UID overflow/negative values,
+noncanonical zero, unknown properties and malformed booleans. Public storage CLI
+has 35 checks. All Release targets build; 52/52 core tests pass (29.56s):
+`build/tng-hook-default-{full-build,core}-20261008.log`.
+Original report `build/tng-hook-default-lookups-20261008.json` accepts Seasons
+317/449 loose text files, Secrets 315/449, and 303/398 WAD TNGs each. GTGs still
+refuse. Sources remain byte-identical. Top-level reference occurrences rise to
+1,103 / 938 loose and 1,415 per WAD; component references to 73 / 67 loose and 76
+per WAD. All nonempty collected queries remain unique and unchanged in both plans.
+The particle metadata audit against this new coverage still finds 12 / 7 fields,
+all uniquely matched: `build/particle-hook-default-bindings-20261008.json`.
+Next first refusals include empty CTCAIScratchpad blocks in three/two loose files
+and three WAD TNGs; their dedicated serializer is under investigation. Opaque
+ScriptData and the other previously documented refusals persist. No source admitted.
+
+Effect bank selection now indexes exactly one PARTICLE_MAIN_PC bank. Previously
+entries from every contained bank were folded into the same lookup, so a frontend
+entry could shadow or make a main entry ambiguous. A core regression reproduced
+the interference; a fresh-file test fixture initially needed its payload bytes
+materialized before serialization, then passed missing-main refusal. Missing or
+duplicate main banks now produce explicit open errors. Public `forge effects`
+walks only the selected main bank, matching the native startup alias evidence.
+The GUI/CLI scratch suite now includes a frontend collision from the first open,
+plus missing/duplicate main-bank CLI refusal. All pass with bank bytes unchanged:
+`build/effect-names-ca7zl6kr/result.json`. All Release targets build and 52/52 core
+tests pass (22.93s); `build/particle-bank-selection-{full-build,core}-20261008.log`.
+Diff check passes. Source admission and strict particle payload review remain
+unchanged; retained previously acquired effect handles keep their snapshot.
+
+Effect lookup now preserves original entry-name casing and resolves exact names
+before a unique case-insensitive convenience match. The old uppercase-key map
+silently collapsed Mixed / MIXED and selected the last row. A regression reproduced
+all three failures (wrong exact row, ambiguous query accepted, lost displayed name)
+before the fix. Duplicate exact names now return no unique entry; case-insensitive
+aliases share the exact-name cache, and retained effect snapshots survive refresh.
+This is editor lookup convenience, not a claim of native case-insensitive symbols.
+The browser selection path uses exact names first and refuses ambiguous name/ID
+fallback without changing selection. `forge effects` now counts unresolved rows as
+partial/failure instead of silently skipping them and reporting success.
+
+`tools/test_effect_names.py` (Windows check_all hook) uses only an isolated profile
+and small scratch install. GUI checks cover both case variants, numeric IDs,
+unique lowercase fallback and ambiguous-query selection preservation. CLI checks
+cover all rows and duplicate exact-name refusal, preserving bank bytes.
+Evidence: `build/effect-names-9_n4jd1l/result.json` and GUI traces. All 52 core tests
+pass (41.67s); all Release targets build; diff check passes. Original baseline
+lookup through the public CLI still reports 1,165 fully / 0 partially decoded,
+3,220 sprite systems / 150 lights / 1,189 mesh systems, input hash unchanged:
+`build/particle-name-lookup-original-20261008.json`. Build/core logs:
+`build/particle-names-{full-build,core}-20261008.log`.
+
+Component metadata follow-up: CParticleSystem::ReadBinary 02F179E0 reads class
+name, ULONG, enabled flag, then invokes AddComponent 02F16CE0; the ULONG is stored
+in CComponentInstance, not compared as a format version. Exports
+`namespace-particle-system-read-20261008.c` / `-component-id-20261008.c` agree with
+the existing independent parser's InstanceID field. No component-version check
+was invented and no broader particle value/storage acceptance was added.
+
+The preview effect decoder now requires emitter payload version 100 and exact
+payload consumption before setting parsedFully. Regressions first reproduced
+false completion for version 101 and an appended zero byte. Trailing-byte refusal
+retains decoded preview data and adds its existing incomplete-decode warning;
+unsupported versions stop before interpreting fields. Native ReadBinary 02F0D3A0
+checks the leading ULONG against BINARY_FORMAT_VERSION=100; targeted export
+`build/namespace-particle-emitter-read-20261008.c` and hash-pinned instruction
+excerpt `namespace-particle-version-native-20261008.txt` record the evidence.
+BuildEmitterTemplate 02F03670 constructs a memory stream from the entry length
+and calls ReadBinary (`namespace-particle-template-load-20261008.c`). Exact EOF
+is Forge's completeness requirement, not a claim that native loading rejects all
+trailers. `fableforge_tests --effects-bank <effects.big>` now reviews original
+payload walks without writing the bank. All 1,165 baseline entries remain fully
+decoded, source hash unchanged: `build/particle-decode-original-20261008.json`.
+All Release targets build and 52/52 core tests pass (20.33s), with logs
+`build/particle-decode-{full-build,core}-20261008.log`; diff check passes.
+This remains preview decode evidence, not strict payload value/dependency review.
+
+BIG envelope coverage now includes PARTICLE_MAIN_PC version 111, supported by
+CParticleDataBank::GetDataFormatVersion and the shared CBankFile open/table path
+above. The same corruption/truncation suite now runs against graphics and main
+particle bank fixtures; the new case first reproduced the prior unsupported-bank
+refusal. `world review-storage` keeps particle payloads refused after accepting
+the container, exercised by an opaque-payload public CLI fixture. No particle
+payload or cross-asset acceptance was added.
+`build/particle-envelope-original-20261008.json`: nominated original baseline
+effects.big passes one-bank/1,165-entry framing, 2,262,411 payload bytes and
+1,167,973 zero padding bytes; all 1,165 payload units remain unsupported, command
+exit 1, source admission false. Source bytes unchanged. All Release targets build,
+52/52 core tests pass (25.47s), 32 storage CLI checks and four particle-binding
+regressions pass. Logs: `build/particle-envelope-{full-build,core}-20261008.log`.
+The separate particle-binding report below remains metadata-only; this new report
+supplies independently scoped archive-envelope evidence.
+
+Particle references now have a bounded, hash-pinned metadata audit in
+`tools/audit_particlebindings.py`. It scans only previously accepted loose TNG
+files and refuses stale hashes or changed file sets before replacing a report.
+`build/particle-baseline-bindings-20261008.json` finds 12 references / 5 names in
+Seasons and 7 / 3 in Secrets, all uniquely matched against the explicitly nominated
+baseline `data/Misc/pc/effects.big`. Refused TNG files, WAD and GTG bodies are not
+included. Original inputs remain unchanged. Four regressions cover literal names
+versus CRC collisions, public filtering, duplicates, incomplete CLI listings,
+accepted/refused file separation and stale-report preservation (check_all hook).
+
+Native evidence: CTCDParticleEmitter::OnSerialise 01D64C00 loads ParticleTypeName
+and calls CSymbolMap::FindSymbol 03093BC0 through GetParticleSymbols 01D65210.
+OpenBank 02EFAF30 creates a CParticleDataBank and calls CreateSymbolMap; its 0x48
+argument is open flags, not version. GetDataFormatVersion 02F02210 returns 111.
+CreateSymbolMap 02F9C130 excludes names containing '[' via IsSymbolPublic
+02F9C100. AddSymbolDirty 030936C0 inserts the unprefixed entry name as key; its
+group argument is symbol information, not a key prefix. String comparison goes
+through 03096580 / FastCompare 0309C8A0 to BasicString::FastLessThan 0309C900,
+which compares length and data words rather than CRC. Targeted read-only exports
+are `build/namespace-particle-*.c`; original FableWin executable identity remains
+A9D6D0977D9D7FC8242DA4292AE7ED92E926CA80364A95C003D9B9F689E41845.
+The nominated bank has 1,165 entries and footer version 111. Complete archive
+storage, payloads, dependent assets, active runtime bank selection/inheritance and
+playback remain unchecked; neither source is admitted. No storage parser widened.
+
+Particle startup routing follow-up: original instructions at 018A9979 pass
+`PARTICLE_MAIN` to OpenBank. GFMain at 0186DDA4..0186DDE1 constructs the logical
+and PC names and calls SetBankAlias 02FCEC40, whose map assignment establishes
+PARTICLE_MAIN -> PARTICLE_MAIN_PC. Hash-pinned original instruction excerpts:
+`build/namespace-particle-startup-native-20261008.txt` and
+`build/namespace-particle-alias-native-20261008.txt`. LookupBankAlias 02FCEC70 is
+a single exact map lookup, returning the input unchanged when absent.
+FindContainedBank 02FCF760 applies that alias then scans opened retail banks in
+list order, returning the first matching contained bank. CBankFile::OpenReadOnly
+02F8FD40 uses retail lookup unless retail mode is off or open flag 4 is set;
+particle flags 0x48 do not set flag 4. It checks GetDataFormatVersion before loading
+the entry table. Exports `namespace-particle-open-routing`, `-contained-bank` and
+`-bank-alias` capture these bodies. This identifies the native contained-bank
+name, but not the actual opened archive list/configuration of a target install.
+The CLI rebuilt successfully; all four particle regressions passed with the new
+binary, original report refreshed with current tool hashes, and diff check passed.
+Latest core gate remains 52/52 (unchanged C++ behavior; only help text changed).
+
+The first particle report was invalid because `big list`'s advertised bank filter
+actually filters entry names. Audit invocation now requests the whole listing,
+selects the named bank in JSON, and checks returned length against bank count.
+The CLI help now calls that argument `name-filter`. The corrected report replaces
+the earlier zero-symbol result; that earlier missing-name result is not evidence.
+
+Faction audit now accepts hash-pinned namespace plans and compares existing
+registry/relationship queries in the narrower FACTION-only registry. Positive
+class-ordinal movement alone is not a key change; ordinal-zero exclusion and all
+CRC candidates remain explicit. Three faction regressions pass, including added
+same-name faction candidates versus unrelated OBJECT rows, source-map validation
+and positive ordinal movement. The nine general lookup tests now also exercise
+faction stale-plan refusal with previous-report preservation. Both original pack
+orders retain 116 unique query results with zero changes/findings:
+`build/faction-registry-plans-20261008.json`. Original hashes remain unchanged;
+relation execution, symmetry, runtime state and source admission remain unchecked.
+
+Faction registry follow-up: CFactionManager 02442B40 enumerates FACTION class
+ordinals 1..count-1, registers instance-name CRCs, then resolves EnemyFactions /
+AlliedFactions through its own CRC map. GetPFaction 02443DF0 hashes its string;
+02443E20 finds in that map. This excludes unrelated definition classes and the
+null class ordinal, unlike global name lookup. CTCEnemy::OnSerialise 02605760
+separately skips empty authored FactionName (original string at 04279E1F is empty).
+Both loose packs contain 875 literal FactionName fields, all empty; this lexical
+count includes refused files and does not widen their storage acceptance.
+Native exports `namespace-faction-registry-20261008.c` and
+`namespace-faction-string-storage-20261008.c`: CFactionDef Transfer 01938ACC labels
+EnemyFactions +0x44 / AlliedFactions +0x58; CCharString TransferBinaryOut 0189CA30
+writes NUL-terminated strings. Source-local `tools/audit_factionregistry.py` reuses
+public namespace validation, reconstructs raw fields against the independent BIN
+reader, parses bounded literal string arrays and preserves every CRC candidate.
+It does not inventory TNG consumers or certify composed/runtime faction selection.
+Report `build/faction-registry-relationships-20261008.json`: each pack has 29
+registered entries and 98 unique-resolving relationships, zero findings; all input
+hashes unchanged. Two new regressions (check_all hook) cover truncations/trailing
+bytes, class/ordinal exclusion and empty/CRC-zero collisions without treating an
+empty relation string as an automatic lookup bypass. Latest C++ core gate remains
+52/52; this addition is Python-only.
+
+Named text donors must now resolve uniquely when adding a string. A core
+regression first reproduced last-match selection of duplicate donor names across
+banks, then verifies refusal with exact archive preservation. Automatic first-type-0
+donor selection and replacement of an existing unique string remain unchanged;
+replacement does not require donor metadata. Three public import checks in
+`build/text-donor-refusal-ogqngrae/result.json` confirm output/in-place preservation
+on ambiguity and successful replacement despite an irrelevant ambiguous donor.
+All Release targets build and all 52 core tests pass (24.06s):
+`build/text-donor-{full-build,core}-20261008.log`.
+
+Text import preflight now rejects unrepresentable strings before file writes.
+Scratch reproduction `build/text-import-validation-ew_vgm7r/reproduction.json`
+confirmed content containing embedded NUL previously overwrote an existing output
+then returned failure on reopen (`textbig: truncated string`). The encoder now
+refuses embedded NUL in content, metadata and tag names, and upsert rejects NUL
+entry names. Core tests preserve exact bank serialization on every failed replace.
+Manifest IDs must also be integer JSON values in 1..UINT32_MAX; floats, booleans,
+strings, null, negative/zero and overflowing values cannot narrow silently.
+New `test_text_import_validation.py` (check_all hook) passes 25 cases, including
+both output and in-place preservation with a valid first row before an invalid
+second row, plus a valid maximum ID with accented/supplementary Unicode content.
+The 13 text-ID checks still pass. All Release targets build and all 52 core tests
+pass (35.76s), logs `build/text-import-{full-build,core}-20261008.log`.
+Existing selected-text codec refusal/recovery regressions pass all 48 checks in
+each mode: `mod-text-codec-refusal-tk89jygs` and complete-data
+`mod-text-codec-refusal-mi5fkpq_`. Original game/source files remain untouched.
+
+Text insertion now honors a valid caller-specified free ID even when an existing
+record has UINT32_MAX; exhaustion refuses only automatic max+1 allocation.
+The core regression first reproduced the erroneous refusal, then checks explicit
+ID 7 succeeds, the max-ID donor remains intact, and automatic/zero/colliding-ID
+failures preserve exact serialization. All Release targets build and 52 core tests
+pass (25.17s), logs `build/text-explicit-id-{full-build,core}-20261008.log`.
+The public `text set --id` parser also now consumes the complete unsigned decimal
+argument and checks range 1..4294967295 before reading/writing an archive. Regression
+first reproduced `7junk` successfully writing ID 7. New
+`tools/test_text_entry_ids.py` (check_all hook) passes 13 cases: explicit free ID,
+trailing junk/fractions/whitespace/signs/overflow/empty/zero/collision refusal and
+automatic exhaustion; source and prior output bytes remain exact on every refusal.
+Final CLI-only rebuild: `build/text-id-cli-build-20261008.log`.
+
+AICreature.OverridingBrainName is also inventoried as a conditional name query.
+Loader 01D6E630 stores +0x1f8 and converts NULL to empty; InitialiseFromDef 01D75CE0
+uses the nonempty value through GetDef<Brain>(name) 01D7D9A0, which delegates to
+GetPDefFromInstantiationName. Debug global 04ABD0B5 can replace the value with
+BRAIN_STAND_AROUND_LIKE_A_MORON. Empty override follows numeric default BrainDef.
+Evidence: `namespace-creature-brain-{consumer,initialise}-20261008.c` and original
+hash-pinned offset/sentinel instructions `namespace-creature-brain-native-20261008.txt`.
+Runtime branch, active debug configuration and class/fallback behavior remain separate.
+Composed lookup reports preserve top-level field domains and conditional flags;
+a regression distinguishes primary DefinitionType and override even with the same
+query string. Nine lookup tests, 31 public storage CLI checks, and all 52 core tests
+pass (27.75s), logs `build/creature-brain-{full-build,core}-20261008.log`.
+Refreshed `build/tng-creature-brain-lookups-20261008.json` adds 15 empty overrides
+per loose pack and 36 per WAD, no nonempty queries: total primary/other top-level
+references 699 Seasons, 534 Secrets, 991 each WAD. Existing nonempty candidates,
+file coverage and refusals unchanged in both namespace orders; original hashes
+unchanged. No inventory extracted from refused files and no source admission.
+
+TNG/GTG name inventory now includes conditional Switch.EnvironmentDef. Native
+loader 027F9220 stores it at object +0x11c and converts literal NULL to empty;
+TriggerSetEnvironment 027FAD80 queries GetDefGlobalIndexFromName then passes the
+result to TransitionToTheme 02450F30. Original executable hash, relevant storage/
+consumer instructions and exact sentinel strings are pinned in
+`build/namespace-switch-environment-native-20261008.txt`; decomp exports
+`namespace-switch-environment-{consumer,transition}-20261008.c`. Trigger execution,
+expected class/fallback and world runtime remain unchecked. TriggeredByThing is
+not included as a definition query. Core inventory and public JSON preserve field
+identity, normalized empty names, source lines, GTG map slots and conditional=true.
+All 52 core tests pass (29.66s), all 30 storage CLI checks and eight lookup tests
+pass. Logs `build/switch-environment-{full-build,core}-20261008.log`.
+Original audits in both namespace orders retain existing counts (no newly covered
+switch query in fully accepted original files), refusals and input hashes:
+`build/tng-switch-environment-lookups-20261008.json`. No refused-file partial
+inventory or admission; base Thing.Health remains outside the physical loader.
+
+Strict single-stream Ogg envelope review is now reusable `oggstorage` core code
+and public `world review-storage .ogg`. It checks every page CRC, capture/version,
+sequence/serial, BOS/EOS, packet continuation/completion, granule sentinel and exact
+EOF. Chained/multiplexed streams, empty pages and negative non-sentinel granules
+are outside this subset; codec packets and codec-specific granule semantics remain
+unchecked, explicitly in JSON and text. Basis: Xiph Ogg framing specification
+https://www.xiph.org/ogg/doc/framing.html (reviewed 2026-10-08).
+The independent bitwise-CRC fixture checks every truncation, continued zero-length
+termination, nil packets, checksum/header failures and trailing bytes. One initial
+test incorrectly treated a valid large positive granule as malformed; corrected
+without narrowing the parser. All Release targets build and 52/52 core tests pass
+(26.00s), logs `build/ogg-envelope-{full-build,core}-20261008.log`. Final text-scope
+follow-up builds and all 27 storage CLI checks pass.
+All eight original Ogg paths pass with unchanged hashes; report
+`build/ogg-envelope-original-20261008.json` pins the pre-text-follow-up binary.
+The loose-media audit now records envelope and decoder results separately:
+`build/loose-media-envelope-decode-20261008.json` accepts all nine original media
+files under both checks (eight Ogg + one TGA). Scratch regression
+`build/loose-envelope-refusals-yvz2blwy.json` demonstrates why both are necessary:
+ffmpeg successfully decodes an Ogg with one trailing zero and one with its final
+byte removed; the envelope checker refuses both and the audit returns 1.
+No source admission, music-path inheritance or runtime playback claim.
+
+Music ID storage and registration keys now remain distinct in the audit:
+CMusicEntry TransferBinaryOut/In 019D7BA4/019D7D05 use ULONG, while RegisterMusic
+02461DD0 copies those bits into CVectorMap<long,...>. CacheMusicSet arguments are
+signed, so the audit now compares signed registration keys while retaining the
+unsigned stored ID. A new regression first reproduced false missing matches for
+0xffffffff, then passes for -1/INT_MIN/INT_MAX keys. All four music tests pass.
+`build/music-signed-key-bindings-20261008.json` retains the original 140 findings;
+all source hashes unchanged. Native export `namespace-music-key-signed-20261008.c`.
+Sound-theme follow-up confirms MusicSet transfer at FableWin object +0x4c and the
+script CacheMusicSet forwarding call, but does not prove region-to-music selection.
+Exports `namespace-sound-theme-{music,overlay}-20261008.c` and consumer xref logs;
+no sound-theme reference/storage rule was widened. BIG metadata review found no
+new demonstrated bypass; no speculative parser change was made.
+
+Public `defs review-namespace` now compares fixed startup class-ordinal 1
+selections for GLOBAL/ENGINE/ENVIRONMENT/HERO_STATS after validating source maps.
+JSON includes source rows mapped into planned slots, selected plan rows and
+unchanged/changed/missing statuses; text identifies changed rows. Existing source
+selections that change affect exit status independently of CRC ambiguities.
+Missing source selections are explicitly coverage gaps, not merge-change findings.
+This remains read-only diagnostic policy, with no source admission or relocation.
+All 27 CLI checks pass, including both source orders, a shorter source, and
+identical anonymous names with different selected row identities. Original packs
+in both orders agree exactly with the independent startup audit: all 16 selections
+unchanged (`build/startup-namespace-cli-original-20261008.json`, hash pins the
+binary before the final text-only diagnostic enhancement).
+
+EgoCore resource insertion now refuses an exhausted uint32 entry-ID range before
+maxId+1 could wrap to zero. The regression uses a valid prior BIGB output with a
+UINT32_MAX entry, checks the precise refusal and exact source/output preservation,
+then verifies replacement of that existing ID still succeeds. All Release targets
+build and all 51 core tests pass (25.79s):
+`build/resource-id-overflow-{full-build,core}-20261008.log`.
+
+Music-set membership is now explicit in the binding audit. CacheMusicSet
+02462310 accepts set IDs 2..76 as array positions and passes members +4 and +0
+to CacheMusic; TransferBinaryOut 019D7E11 confirms three signed 32-bit words.
+Exports `build/namespace-music-set-{consumer,fields}-20261008.c`. CacheMusic and
+PlayMusic are stubs in this debug executable, so missing-key fallback/playback
+and the third word remain unreviewed. No relocation/storage rule was widened.
+Each source has all 77 set slots, but row 2's first member references unregistered
+music key 59 and row 4's references 63. Report:
+`build/music-source-and-set-bindings-20261008.json` (140 findings: 136 source-local
+missing filenames plus four set-key findings). Three music regressions pass,
+including duplicate candidates, array-index scope, framing and unreviewed +8.
+
+Music binding follow-up: CMusicManager's constructor 02461C70 looks up
+MAIN_SOUND_SETUP by instance name, and GetDef<CSoundDef> 02464100 delegates to
+GetPDefFromInstantiationName. Exports:
+`build/namespace-music-definition-{selection,lookup}-20261008.c`. RegisterMusic
+02461DD0 uses each MusicEntries ID as a local map key, combines the filename with
+Data/Sound and replaces .wma with .ogg (prior external-media export). The reviewed
+13-byte serialized row is u32 ID / names offset / float volume / byte cache flag;
+the existing relocation handler already covers filename offsets separately.
+
+`defs decode --json` now exposes prefix_hex and raw_hex per field, matching the
+existing FMP diagnostic convention. Two selector-based independent reconstructions
+pass without input changes; 23 storage-CLI and four retail insertion checks pass
+after this CLI-only build (`build/defs-raw-fields-build-20261008.log`).
+`tools/audit_musicbindings.py` uses those canonical field bytes and independently
+reconstructs each source record before resolving names. Both sources uniquely
+select SOUND_SETUP slot 7284, have 72 music entries, and bind all four loose Oggs:
+Bandit_Camp=69, Hook_Coast=83, Gibbet_Woods=86, Kraken_Chamber=87. No local Ogg is
+unregistered; the other 68 filenames per source remain missing_source_file,
+without automatic baseline inheritance. Report:
+`build/music-source-bindings-20261008.json` (expected findings/exit 1). Two framing,
+offset/CRC, path and local-ID regressions pass; both new test scripts are hooked
+into check_all. This is filename/key evidence, not codec or source admission.
+
+New BIGB entries now use native marker 42 in text insertion, EgoCore resource
+insertion (including empty banks), and FMP texture/mesh insertion. Previously
+these routes could inherit a community donor's zero marker. Focused fixtures
+reproduced text/resource failures and standalone FMP texture {old:0,new:0}; the
+fix preserves existing donor rows and FMP's own header/record convention.
+`tools/test_big_entry_markers.py` independently checks both asset kinds through
+standalone application and composition; all four cases pass with unchanged
+inputs (`build/big-entry-markers-nasc4aau`), and it is hooked into check_all.
+The 22 FMP record refusal cases pass (`build/fmp-record-refusal-z_b_mtww`). All
+Release targets build and all **51 core tests pass (23.93s)**, including text
+donor/FMP compatibility and empty resource-bank coverage:
+`build/big-entry-marker-{full-build,core}-20261008.log`. This only fixes creation
+of new rows; original source archives and existing record markers are preserved.
+
+Strict BIGB envelope review now reuses the canonical big::File entry reader in
+`bigstorage::validateEnvelope`. It bounds metadata, checks observed bank versions,
+directory/table extents and ordering, exact type histograms, unique IDs/names,
+aligned nonoverlapping payload spans and every unowned zero byte. Entry info and
+payload semantics remain separate. The fixture covers each truncated prefix,
+malformed headers/counts/histograms, duplicate identities, overlap and padding.
+`world review-storage` now reviews BIG envelopes and continues through individual
+payload refusals; 23 CLI checks pass. All Release targets build and all 51 core
+tests pass (26.14s): `build/big-envelope-{full-build,core}-20261008.log`.
+
+`tools/audit_bigstorage.py` pins all inputs and preserves refusals. Each original
+frontend.big passes its envelope plus all 394 payloads. The other three BIGs in
+each source refuse nonstandard entry marker 0, with exact bank/name/ID reported:
+`build/big-envelope-original-20261008.json`. This is additional evidence beyond
+the earlier entry-payload checks. Secrets has 133 marker-zero mesh records, 150
+texture records and 248 text records. Their names and IDs are unique; the marker
+is the refusal. Native ReadEntryList 02F9A180 explicitly reports "Bad resource
+file" for a marker other than 42 (`build/namespace-big-entry-marker-20261008.c`).
+It can continue after that debug diagnostic; this is not a claim that retail
+necessarily aborts. The strict supported subset remains unchanged, and original
+records are neither normalized nor repaired.
+
+The existing scratch baseline's graphics (8,113 entries) and text (28,913) pass
+both envelope and payload checks; effects is outside supported bank/version scope.
+Its textures were packed by the old writer and violate recorded alignment:
+`build/big-envelope-baseline-20261008.json`. A new scratch serialization at
+`build/big-writer-original-w4hrmxp3/baseline-textures.big` passes the envelope
+(6,325 entries; 525,369,029 payload bytes; 6,771,202 zero padding bytes); original
+baseline hash remains unchanged. Full source admission/composition remains closed.
+
+BIGB writer correction: the fourth header word is the directory byte length,
+not FMP's content kind. OpenRetailBank 02FD0530 reads exactly that many bytes;
+FinishRetailBanks 02FD1A70 emits the memory-stream length. Native export:
+`build/namespace-big-directory-native-20261008.c`; corroborating EgoCore
+BigBankCompiler.h recalculates fSize and applies each bank's alignment.
+The old serializer retained the stale header word and packed payloads without
+the recorded alignment. A new independent fixture reproduced the stale length.
+BIGB serialization now rebuilds that length and zero-pads every payload to the
+bank alignment, including empty entries; FMP content kind 510 remains unchanged.
+Entry metadata, payload bytes and ordering are preserved; archive padding and
+offsets may change. No original archive is rewritten in place.
+
+All eight original source BIGs independently retain every entry's metadata and
+payload hash after scratch serialization, with exact directory/table extents,
+zero unowned output padding and aligned payloads. Both text.big outputs are
+byte-identical; graphics/frontend/textures differ only in container layout.
+Report `build/big-writer-original-20261008.json`, script
+`build/check_big_writer_original_20261008.py`, outputs
+`build/big-writer-original-w4hrmxp3`. All Release targets build and **51/51 core
+tests pass (26.17s)** in `build/big-writer-{full-build,core}-20261008.log`.
+The 22 FMP record and 27 bank refusal/carry checks pass again in
+`build/fmp-record-refusal-wa8ufy40` and `build/mod-bank-refusal-kup_vdkt`.
+No runtime-playback or source-admission claim.
+
+Additional offline BIN-writer regression coverage passed before the BIG change:
+41 label/refusal cases (`mod-label-refusal-rq1j0fpg`), 12 exact float choices
+(`mod-float-values-an65yrb9`), both 55-case Unicode modes
+(`mod-unicode-file-identity-vw8n71d5`, `mod-unicode-file-identity-g5qcuejc`), and
+both 58-case output-ownership/rollback modes (`mod-build-ownership-wb10cwwe`,
+`mod-build-ownership-n6rgan3f`). All evidence is beneath build; no GUI/live tests.
+
+Startup selection is now separately audited as class ordinal 1 of GLOBAL,
+ENGINE, ENVIRONMENT and HERO_STATS. InitAndCompile 01913D9D requests these
+ordinals; the environment call at 019180FF passes 1 and stores the pointer at
+manager +0x120, which PeekEnvironmentDef 02455340 dereferences. GetDef 0199E1AB
+uses GetPDefFromClassIndex 03061E20, then the class-to-global mapping. Evidence:
+`build/namespace-environment-{selection,class-selection,class-index}-20261008.c`
+and original-hash-pinned `build/namespace-environment-selection-native-20261008.txt`.
+`tools/audit_startupdefs.py` compares selected row identities, preserving source
+order separately from planned order. Both original namespace orders preserve
+all four selections for both sources; environment remains slot 2345. Report:
+`build/startup-class-selections-20261008.json`. Eight lookup regressions pass,
+including changed class-ordinal selection behind identical instance names.
+This establishes startup selection only, not later pointer changes, payload
+behavior or source admission. GetHDMusicDir 01913300 and GetDVDMusicDir 01913340
+both return Data/Sound in the same debug executable (selection export).
+
+Lighting storage now has a strict core `reviewLightingTga` check for the observed
+uncompressed 24-bit BGR layout: complete pixels, zero ID/map/origin/descriptor,
+and the exact standard footer without extension/developer data. Prefix truncation,
+unsupported headers, footer mutations and trailing bytes refuse; ID-like pixel
+values remain colours. The original Secrets image passes without changing bytes.
+`world review-storage` exposes this check and dimensions; its 21 CLI checks pass.
+The lighting-coordinate audit now obtains dimensions only after core storage
+acceptance, and reports image refusal separately. Original reports:
+`build/lighting-storage-coordinates-{secrets,seasons}-20261008.json`.
+Secrets passes all 48 day-theme arrays and environment rows; Seasons explicitly
+reports the source-local image missing, leaving possible baseline inheritance
+unresolved. All Release targets build and all 50 core tests pass (25.82s), logs
+`build/lighting-storage-{build,core}-20261008.log`. No source admission or writes
+to original packs/game installs.
+
+Loose-media coverage discovery: Seasons has 915 files and Secrets 916. Beyond
+the already inventoried banks/world formats, each has userst.ini plus four Ogg
+files; Secrets also has data/LightingTable/lighting_colours.tga. The existing
+composer explicitly skips userst.ini/usersettings.ini (main.cpp settingsSkipped).
+New optional `tools/audit_loosemedia.py --source <root> [--source <root>] --out <json>`
+uses installed ffprobe/ffmpeg, pins executables/script/inputs and checks full
+decoding without playback. All eight original audio files decode as stereo
+48-kHz Vorbis; the 198x21 TGA decodes as bgr24. Report:
+`build/loose-media-decode-20261008.json`. Scratch corrupt-media continuation and
+source/tool output-overwrite refusals pass in `build/loose-media-refusals-8u2f4mum`.
+Decoder success explicitly does not certify complete storage or source admission;
+this optional external-codec audit is not made a mandatory check_all dependency.
+
+Native CEnvironment::BuildThemes 0244D7E0 resolves ColourLookupTexture beneath
+data/LightingTable. CEnvironmentLookupTexture 02A4A830 reads dimensions from the
+18-byte image header, loads a preallocated 32-bit surface and copies pixels;
+LookupFloatColour 02A4AB20 converts pixel channels to float colours. Day Build
+02A4CC40 uses ColourLookupColumn (+0x70) plus the Time-array index as x, while
+BuildFromSource 02A4C140 uses CEnvironmentDef's LookupRow fields as y. These are
+pixel coordinates, not day-theme class ordinals. Exports:
+`build/namespace-lighting-table-{load,colours}-20261008.c`.
+`tools/audit_lightingtable.py` inventories all environment candidates and checks
+these coordinates against a source-local TGA header, without selecting the active
+environment or certifying image storage. Secrets' ENVIRONMENT references
+lighting_colours.tga; all row fields and all 48 day-theme arrays fit its 198x21
+bounds. NULLDEF_ENVIRONMENT has an empty texture name. Report:
+`build/lighting-table-coordinates-20261008.json`. Native CMusicManager::RegisterMusic
+02461DD0 builds .ogg filenames from CSoundDef music entries; that path and lighting
+reload evidence are in `build/namespace-external-media-loaders-20261008.c`.
+
+Sound palette indices have a separate signed-byte limit. LoadFromFile 02233370
+converts the global lookup to its SOUND_THEME class ordinal, 02233CD9 takes its
+low byte, and SetSoundTheme 02234960 stores that byte. GetSoundAt 02238DD5
+uses movsx eax,al: indices >=128 no longer survive as positive integers.
+Evidence: `build/namespace-lev-sound-{indices,consumer}-20261008.c` and original
+hash-pinned instructions `build/namespace-lev-sound-native-20261008.txt`.
+The permanent plan audit emits sound_indices alongside atmosphere_indices and
+checks positive signed-byte representability separately. Seven lookup tests pass,
+including an unchanged candidate moving from ordinal 1 to 128, valid 127, zero
+and missing candidates. Four thing-symbol and three world-asset regressions pass.
+All eight original source/plan reviews have zero atmosphere/sound index findings
+and unchanged CRC candidates: `build/lev-theme-capacity-lookups-20261008.json`.
+Matched source/planned sound ordinals are 1..62; the two missing sound names
+remain explicit missing findings. No fallback selection or source admission.
+
+The permanent LEV plan audit now emits atmosphere_indices for every CRC
+candidate, with source and planned class ordinals, expected-class checks and
+nonzero-byte representability. Original source order is preserved separately
+from planned slot order. Name-candidate status remains separate: a unique,
+unchanged candidate can still acquire ordinal 256 and be truncated by the loader.
+The regression exercises precisely that transition, plus ordinals 0/255 and a
+wrong class. Six lookup tests, three LEV symbol tests, four thing-symbol tests
+and three world-asset tests pass. Both original plan orders have zero new index
+findings and unchanged candidate sets/input hashes:
+`build/lev-atmos-capacity-lookups-20261008.json`. Missing/ambiguous lookups retain
+their own findings; no winner or fallback is selected and sources remain unadmitted.
+
+LEV atmosphere expected class is now checked as ENVIRONMENT_THEME_DAY in the
+independent symbol inventory. Native loader 0223393B converts the resolved global
+index to its class ordinal; 02233B93 reads its low byte into the cell. Consumers
+UpdateEnvironmentCameraPos 01B50A70 and GetEnvironmentFishWeightMult 01B52120
+route nonzero cell values through CEnvironment 0244FBE0, which resolves that
+ordinal explicitly in ENVIRONMENT_THEME_DAY. Editor overlay 02971D80 likewise
+uses CEnvironmentThemeDaySetDef. Evidence exports:
+`build/namespace-lev-atmos-{consumers,ordinal}-20261008.c`, thunk caller logs,
+and the existing hash-pinned `build/namespace-lev-native-20261008.txt`.
+Three symbol tests pass, including a wrong-class atmosphere candidate. The
+refreshed original inventory `build/lev-atmos-class-inventory-20261008.json`
+retains the same findings: per source, four missing/one wrong-class loose
+domain/name pairs and three missing WAD pairs. No atmosphere class mismatch.
+`build/lev-atmos-byte-indices-20261008.json` independently checks all 16 collected
+atmosphere names across both original sources and both namespace orders: each
+has one candidate of the expected class and a nonzero ordinal <=255; each table
+contains 48 day themes. This is bounded candidate/index evidence, not fallback,
+duplicate-selection or runtime certification. Refreshed candidate comparisons:
+`build/lev-atmos-class-lookups-20261008.json`; all collected sets remain unchanged.
+
+LevelScriptName follow-up: GetLevelScriptName 01C95AA0's thunk 017C660E is
+used by script-facing GetCurrentMapName 02B00220 and the level-loaded callback
+02ACB8D0, which returns/appends the map's name. InitCachedVolumes 022397B0
+uses it in a diagnostic message. These consumers do not query script info or
+game definitions; do not resolve LevelScriptName as an initial quest/script
+class solely because of its spelling. Evidence:
+`build/namespace-world-level-script-{callers,thunk-callers}-20261008.log` and
+`build/namespace-world-level-name-consumers-20261008.c`. No acceptance changed.
+
+World review JSON now exposes WLD `unresolved_initial_quests` separately from
+region definition symbols. Native InitQuests 01B47560 calls ActivateMultipleQuests
+01C49AF0, which checks quest registration and calls GetPScriptInfo 03585320's
+CVectorMap<CCharString,CScriptInfo>. Editor SaveInitialActiveQuests 0207ED60
+emits START_INITIAL_QUESTS/END_INITIAL_QUESTS and queries script info. This is
+not a game.bin definition lookup. Exports:
+`build/namespace-world-quest-{dispatch,registry,init}-20261008.c`; QST registration
+loader evidence also in `build/namespace-world-initial-quests-20261008.c`.
+The diagnostic explicitly leaves registration and script availability unchecked.
+All 18 world CLI checks pass after rebuilding forge-tools. Four original WLDs
+each expose the same six quests with unchanged input hashes, recorded in
+`build/world-initial-quests-original-20261008.json`. No BWD quest field is invented,
+no script recovery is performed, and no storage acceptance is widened.
+
+BIN save preflight also rejects embedded NULs in definition/name strings before
+opening outputs. The writer boundary test verifies both class and instance
+names preserve prior files on refusal. Public FMP regressions now cover these
+names and oversized records through standalone apply and composed mods: all
+22 cases pass in `build/fmp-record-refusal-c9ailcg9`. The 27 sibling-bank
+refusal/carry checks pass in `build/mod-bank-refusal-n94e192w`. All Release
+targets build and all 50 core tests pass (33.27s), with 17 whole-bank checks in
+`build/mod-whole-bank-layout-02sf1qzl`; logs are
+`build/bin-writer-nul-{build,core,whole-bank}-20261008.log`.
+Four names-writer native-framing checks also pass. The unrelated dialogue test
+edit still has its original 11-line addition; diff whitespace checks pass.
+
+Negative name references now recognize only -1 as the unnamed sentinel. Native
+GetStringAsCharArray 02FCD2C0 and GetStringCRC 02FCD610 special-case exactly -1;
+other values take the table access path. Export:
+`build/namespace-negative-name-references-20261008.c`. Independent scan of all
+nine original banks found only -1 negatives:
+`build/bin-negative-reference-original-20261008.json`. CLI checks now total 22,
+including -2, INT_MIN and a negative class reference. All 50 core tests pass
+(31.23s), all Release targets build, and 17 whole-bank checks pass in
+`build/mod-whole-bank-layout-5k_jldb_`. Logs:
+`build/bin-negative-refs-{final-build,core,whole-bank}-20261008.log`.
+Four names-writer and 24 chunk-framing checks also pass. Secrets-first original
+namespace audit passes with 13 independently verified rewrites and unchanged
+input hashes: `build/defnamespace-bin-negative-secrets-seasons-20261008.json`.
+
+BIN writer capacity now refuses a payload larger than 65534 bytes before opening
+either output: one record needs its u16 offset within the 64-KiB decoded chunk.
+New `fableforge_binwrite_tests` covers 32-KiB split boundaries, an exact 64-KiB
+chunk, many empty records forcing an offset-table-only split, dense record order
+and byte-identical prior outputs after oversized-record refusal. All 50 core
+tests pass (39.48s), all Release targets build, and all 17 whole-bank scratch
+checks pass in `build/mod-whole-bank-layout-j8zhvyg5`. Logs:
+`build/bin-writer-capacity-{build,core,whole-bank}-20261008.log`.
+The 19 namespace CLI, 24 chunk framing and four names writer checks pass.
+Latest Seasons-first original namespace audit:
+`build/defnamespace-bin-final-seasons-secrets-20261008.json` (241 rewrites,
+no unresolved BIN candidates; independent identities/lookups and input hashes
+unchanged). Divergent sources still lack full admission.
+
+Names loading also refuses trailing bytes after the declared record count, which
+were previously dropped by a later save. The namespace CLI now passes 19 checks,
+including a hidden undeclared record and one trailing byte. The four names-writer
+checks and 24 BIN framing checks pass. All 49 core tests pass (31.33s), with the
+17 whole-bank checks in `build/mod-whole-bank-layout-ue6vms7r`; logs are
+`build/names-table-final-{build,core,whole-bank}-20261008.log`.
+
+Native names-table framing exposed and fixed a writer bug: size at +12 counts
+from +16, including the four-byte prefix, rather than only CRC/string bytes at
++20. File::save now emits nextOffset (previously nextOffset-4). ReadTable
+02FCDEA0 copies exactly the declared length starting after its fourth u32;
+WriteTable 02FCE0C0 emits the memory-stream length; AddString 02FCD960 writes the
+four-byte prefix before its first CRC/name. Export:
+`build/namespace-names-table-framing-20261008.c`. Original baseline and both
+pack names tables all declare file size minus 16. An undersized header can
+otherwise leave the last four bytes outside the engine's copied table.
+`tools/test_nameswriter.py` independently bounds decoding by that declared
+length and checks exact no-op names bytes, appended pools and normalization of
+legacy undersized headers (only the size word changes). It is in check_all.
+The namespace CLI fixture now emits the canonical size. Production loading
+continues to accept historical size headers; this is not strict source admission.
+All nine original-bank scratch saves preserve names.bin exactly and leave inputs
+unchanged: `build/names-writer-original-20261008.json`, scratch
+`build/names-writer-original-1hnapf3p`. All Release targets built, all 49 core
+tests passed (28.01s), and 17 whole-bank scratch checks passed in
+`build/mod-whole-bank-layout-k0j4dqkw`; logs are
+`build/names-writer-length-{build,core,whole-bank}-20261008.log`.
+
+BIN chunk framing now requires a complete main table, a contiguous chunk directory
+starting at (0,0), an exact end sentinel/total/EOF extent, strictly increasing
+record and compressed ranges, and complete zlib consumption within 64 KiB.
+Decoded offset tables must cover every declared record with ordered in-bounds
+payload spans and no leading gap. Invalid spans no longer silently skip records
+or turn their payloads into empty vectors. Empty payloads and empty banks remain
+valid. The independent nine-bank original profile is
+`build/bin-chunk-framing-original-20261008.json`; every bank satisfies these bounds.
+`tools/test_binboundaries.py` adds 24 passing CLI checks, including a full 64-KiB
+decode, truncated tables/streams, hidden compressed bytes, and unchanged inputs;
+it is registered in check_all. Namespace CLI retains all 17 passing checks.
+Both original audit orders pass with unchanged input hashes and independent
+lookup/relocation agreement in `build/defnamespace-chunk-framing-*-20261008.json`.
+All Release targets build, all 49 core tests pass (25.09s), and the 17 whole-bank
+scratch checks pass in `build/mod-whole-bank-layout-fdih0h84`. Logs:
+`build/bin-chunk-framing-{build,core,whole-bank}-20261008.log`.
+This hardens input parsing; source admission and divergent-bank composition
+remain unresolved. No live install or gameplay changes.
+
+
+BIN reader boundary fix: loadNames now rejects a declared string without its
+terminating NUL. A nonnegative game/script/frontend name reference must identify
+an exact name-table string start; an unknown positive reference no longer turns
+silently into an empty identity. Negative-reference behavior is unchanged.
+Evidence: FableTLC docs/formats/DEFS.md describes ASCIIZ names, exact text offsets
+and the -1 no-name sentinel. An independent scan of all six original pack banks
+found no invalid nonnegative offset; game.bin uses -1 for unnamed rows.
+
+The namespace CLI now has 17 passing checks, adding truncated names, zero,
+interior-string and oversized references, invalid class-name references, valid
+empty-name references and the -1 sentinel. Every scratch input remains unchanged.
+Both original namespace/relocation audits pass with independent core lookup
+agreement: `build/defnamespace-bin-boundaries-{seasons-secrets,secrets-seasons}-20261008.json`.
+The existing whole-bank scratch regression passes 17 layout/granular-choice
+checks in `build/mod-whole-bank-layout-6vaiw2lu`; its log is
+`build/bin-name-boundaries-whole-bank-20261008.log`. GUI options were not invoked.
+All Release targets build and all 49 core tests pass (26.93s), logged in
+`build/bin-name-boundaries-full-build-20261008.log` and
+`build/bin-name-boundaries-core-20261008.log`. No live install writes or broader
+BIN storage-admission claim; the pre-existing dialogue audio test edit remains
+its original 11-line addition.
+
+
+Asset symbol boundary follow-up: CBankFile::InitEntry 02F9C380 asserts that
+its symbol is nonempty, then inserts GetCRC(symbol) with the entry ID when
+BANK_SEARCHABLE_SYMBOL_CRCS is enabled. ReadEntryList 02F9A180 passes the stored
+symbol; FindIndexBySymbolCRC 02F978C0 consults the CRC vector map. This is a
+separate contract from anonymous game definitions. Exports:
+`build/namespace-bank-symbol-{lookup,load,initialise}-20261008.c` and pinned
+original instructions in `build/namespace-bank-symbol-native-20261008.txt`.
+The original text bank has 29085 entries, all with nonempty symbols/nonzero IDs.
+
+The region asset audit now refuses empty/embedded-NUL or unsupported non-ASCII
+text symbols instead of silently dropping them. It retains distinct-name CRC
+collisions and treats a nonempty CRC-zero name as a real query. Region display
+01F6F280 checks returned ID zero before entry type (instructions 01F6F2EE/F2),
+so that case reports literal_fallback while retaining candidate metadata.
+Three asset regressions pass, including duplicate CRCs, zero CRC vs empty query,
+ID-zero fallback, unsupported types and the bounded minimap parser.
+
+`build/world-region-bank-symbols-20261008.json` and
+`build/world-region-bank-symbol-assets-20261008.json` pin the current CLI/core
+namespace reports. Both originals preserve the earlier display/minimap counts
+and all input hashes; no asset source is admitted and no game files are written.
+
+
+Public namespace diagnostic: `build/forge-tools.exe defs review-namespace
+<baseline-root> <source-root>... [--json]` exposes allocation and core CRC candidate
+analysis without invoking composition. JSON carries source ID/name-offset maps,
+planned counts, candidate ambiguities and per-source candidate changes. It
+explicitly sets source_admitted and relocation_checked false. Full storage,
+runtime class registration and external references remain outside this review.
+Each input bank has a 128 MiB diagnostic read limit. No files are written.
+
+Exit 0 means completed analysis without named ambiguity/candidate-change
+findings; exit 1 means findings or an analysis refusal; exit 2 means invalid
+arguments. JSON analysis_complete separates valid findings from refusals.
+The README and command usage describe the scope. Divergent-bank composer policy
+and its refusal are unchanged.
+
+`python tools/test_namespacereview_cli.py` passes 11 end-to-end checks, including
+real name CRCs, Unicode roots, opaque payloads left unreviewed, ID remapping,
+anonymous CRC-zero candidates, duplicate growth, invalid CRCs, missing sources,
+invalid arguments and input byte preservation. It now runs in check_all.py.
+The existing world CLI's 18 checks also pass with the rebuilt executable.
+`build/namespace-review-cli-original-20261008.json` records both original mod
+orders: each completes with 15386 slots / 14206 names, one ambiguous named CRC
+group and two changed source candidate groups, returning exit 1 as documented.
+All input/tool hashes remain unchanged. Build log:
+`build/namespace-review-cli-build-20261008.log`. No new core semantic change
+followed the previous full 49-test pass; no live install/gameplay checks ran.
+
+
+Core lookup analysis is now reusable through `defnamespace::analyzeNameLookups`.
+It verifies literal/stored CRC agreement, name-pool identity presence, source/map
+counts, target identity and per-source injectivity before constructing compiled
+CRC candidate sets. It retains anonymous zero-CRC rows, exposes nonempty query
+candidates, reports named ambiguities and existing-source candidate changes, and
+counts newly available named groups. Candidate slot ordering is diagnostic only;
+no tie winner, runtime class registration, external query completeness, payload
+validity, source admission or serialization safety is implied. Allocation and
+preparation retain their existing contracts and do not silently apply this gate.
+
+The canonical `bin::nameCrc(std::string_view)` is now public; existing BIN name
+serialization uses the same implementation. Core regressions include original
+known CRCs, a nonempty zero-CRC name, distinct-name collisions, empty/missing
+queries, anonymous candidate growth, bad stored CRCs and inconsistent mappings.
+The namespace test diagnostic emits the core findings. The independent Python
+audit reconstructs all groups and changes and requires exact agreement.
+
+Both original orders pass in
+`build/defnamespace-core-lookups-{seasons-secrets,secrets-seasons}-20261008.json`:
+15386 planned slots / 14206 names, 241/13 verified payload rewrites and zero
+unresolved BIN candidates. Every original bank hash is unchanged. The duplicate
+chest-name expansion remains reported; no duplicate winner is selected.
+All Release targets build and all 49 core tests pass (25.66s):
+`build/defnamespace-core-lookups-full-build-20261008.log` and
+`build/defnamespace-core-lookups-core-20261008.log`. The rebuilt world CLI
+passes 18 checks and the thing-symbol diagnostics pass four regressions.
+
+
+Native duplicate-name sorting follow-up: pinned FableWin CVectorMap::Sort
+03068A50 calls std::sort 03071BB0, which passes raw pair pointers and their count
+to fastcall _Sort 03076310. CKeyPairCompareLess 03068E90 compares unsigned CRCs
+only; LowerBound 03068AF0 searches the first equal key, and Find 03064CD0 checks
+it for equality. No stable secondary ordering by game slot is imposed.
+Read-only exports: `build/namespace-definition-native-sort-20261008.c`,
+`build/namespace-definition-sort-kernel-20261008.c`,
+`build/namespace-definition-lower-bound-20261008.c`; instruction/ABI evidence:
+`build/namespace-definition-sort-abi-20261008.txt`.
+
+`python build/inspect_definition_sort_20261008.py` executes original _Sort
+instructions in Unicorn with a 50-million-instruction / 10-second limit per
+case, read-only native image, private array/stack/SEH memory, and no substituted
+comparison or allocator. Six bounded fixtures cover empty/singleton, insertion
+and partition paths, duplicates and unsigned ordering. Each result must return
+to the sentinel with the expected stack, retain the exact input multiset and
+sort unsigned CRCs. All four original/planned tables complete in under one
+second each. Inputs, executable, script and dependencies are hash-recorded in
+`build/namespace-definition-native-sort-results-20261008.json`.
+
+Modeled duplicate order for CRC 0x45AA7442 / OBJECT_OBJECT_SILVERKEY_CHEST_35:
+
+| Table | Equal-CRC slots after native sort |
+|---|---|
+| Seasons source (15196 rows) | 14796, 14795 |
+| Secrets source (15368 rows) | 14795, 14796 |
+| Seasons-first plan (15386 rows) | 14795, 15196, 15197, 14796 |
+| Secrets-first plan (15386 rows) | 14795, 14796, 15368, 15369 |
+
+These are conditional debug-build results: every row is assumed registered and
+inserted once in ascending slot order, including anonymous rows. The complete
+loader/lookup, retail runtime and gameplay were not executed. The first sorted
+row follows from the separately reviewed lower-bound code. Both source chest
+rows contain the same 485-byte payload (SHA-256
+b7adf593b4e84fa68115d6c15382f5f5f02ddc31795b3ffcb22adf2607ab7195), which does not
+establish interchangeable numeric identity. Candidate sets still refuse
+ambiguity; production code does not select a duplicate winner from this probe.
+
+The loader inserts anonymous entries under CRC zero too. Fixed Python candidate
+inventory to retain those rows for nonempty zero-CRC queries. The printable
+regression name `LOOKUP_ZERO_SY2CT3I` has CRC zero and can match anonymous rows
+even when no named row exists. Empty queries remain a separate no-table case.
+Global summaries enumerate groups reachable by existing nonempty names, while
+preserving every candidate within each group. Five lookup regressions pass.
+
+Refreshed, hash-preserving original reports after this correction:
+`build/defnamespace-zero-crc-{seasons-secrets,secrets-seasons}-20261008.json`,
+`build/lev-zero-crc-lookups-20261008.json`,
+`build/tng-gtg-zero-crc-lookups-20261008.json`,
+`build/world-region-zero-crc-lookups-20261008.json`, and
+`build/world-region-assets-current-20261008.json`. Original candidate/count
+findings are unchanged: no collected nonempty query hashes to zero. The updated
+world/asset reports also pin the current CLI executable. The native experiment
+and Python correction do not relax source admission or the composer refusal.
+
+
+GTG definition-field extraction now uses the same supported TNG fields, with
+positive `world_map_slot` and enclosing-file line numbers on each reference.
+`inventoryGtgDefinitionFields` reviews the complete GTG first: a later refused
+body, duplicate map slot or truncated wrapper suppresses all fields, including
+those in earlier good bodies. The CLI and source audit retain map-slot identity;
+resolving those slots against the active world is still separate. Empty bodies
+have no definition fields. Four Python regressions and the 18 CLI checks pass,
+including CRLF/blank lines and references from two maps with the same name.
+
+`build/tng-gtg-symbol-lookups-20261008.json` supersedes the earlier component
+inventory checkpoint for the updated tool. Original GTGs still refuse their
+unsupported content, so all reference counts, storage counts and unchanged
+lookup candidate sets are preserved. Every original input hash is unchanged.
+All Release targets build and all 49 core tests pass (24.81s), logged in
+`build/gtg-symbols-full-build-20261008.log` and `build/gtg-symbols-core-20261008.log`.
+
+Further ScriptData investigation keeps the non-NULL refusal. Read-only xrefs to
+FableWin thunk 017FB4DF identify CGameScriptThing::InitFromThing 02AFE9F0,
+CTCOwnedEntity::SetPOwner 0258A350, CThingFilter_HasScriptData 01F94230,
+CTCActionUseScriptedHook::OnActionUse 0253CB10 and house dressing 024B1D00.
+The wrapper copies the string into its script object; equality filtering,
+subtitle rendering and Dress-prefixed decoration-level behavior are consumers,
+but do not prove all downstream script interpretations. Exports are
+`build/namespace-tng-scriptdata-callers-20261008.log` and
+`build/namespace-tng-scriptdata-consumers-20261008.c`, using the pinned original
+FableWin executable. ParticleTypeName independently resolves through the particle
+emitter database's CSymbolMap in 01D64C00, not the game-definition lookup; it is
+intentionally absent from the game-name inventory. No storage acceptance was
+relaxed based on either investigation.
+
+
+Component definition inventory now shares a core `inventoryTngDefinitionFields`
+API between the public CLI and corpus diagnostic. It refuses the complete file
+before exposing any references, preserves one-based property lines and indexed
+field spelling, and explicitly limits coverage to DefinitionType plus AtmosName,
+CreatureFamilies, hero_title_object_def_name and ContainerContents in the three
+reviewed container components. Conditional augmentation lookups, other component
+names, GTG bodies and source admission remain excluded.
+
+Native FableWin evidence uses the previously recorded executable SHA-256.
+Container OnSerialise 02AE5910 transfers a vector of strings on load and applies
+CCreateIndicesFromItemNames::operator() 02AE65A0; the latter directly calls the
+game definition manager's GetDefGlobalIndexFromName. Read-only export:
+`build/namespace-tng-container-name-20261008.c`. AtmosPlayer 02796F90 and Hero
+02473F20 directly resolve the corresponding names; CreatureGenerator 02514FD0
+uses CDefIndex text TransferIn 03178B80. Augmentation 025EA5D0 is conditional on
+SavedInGame and slot count, so a quoted name alone does not establish a lookup.
+
+`build/tng-component-lookup-plans-20261008.json` records 40 component references
+(37 type/component/field/name groups) in Seasons loose accepted TNGs, 34 (31)
+in Secrets, and 43 (39) per WAD. Every nonempty group has a unique source CRC
+candidate, unchanged in both namespace orders. Each WAD also contains one empty
+name group, reported separately. Existing DefinitionType counts and all storage
+refusals are unchanged; every input hash is preserved. Reproduce with the prior
+thing-text audit command using this output filename and --definition-symbols.
+
+All Release targets build and all 49 core tests pass (24.06s), logged in
+`build/tng-component-full-build-20261008.log` and `build/tng-component-core-20261008.log`.
+The CLI's 18 checks pass; three thing-symbol regressions cover rejected-file
+exclusion, missing/ambiguous names, CRLF source lines, indexed duplicates, empty
+names, unrelated quoted fields and identical CLI/core extraction. No live game,
+install writes, source admission or divergent-bank composer change.
+
+
+Public read-only diagnostic: `build/forge-tools.exe world review-storage <file>
+[--json]` now dispatches to the existing LEV/STB/WLD/BWD/TNG/GTG storage/domain
+reviewers. WAD review checks the compact envelope and every payload in table
+order, reporting each entry ID and refusal independently. Unknown extensions,
+missing files, directories and unsupported layouts refuse. Exit status is 0 for
+all supported storage, 1 for any refusal/error, 2 for invalid command syntax.
+The report always states `source_admitted: false`; symbolic resolution, topology,
+navigation behavior and source admission are not certified. In-memory payloads
+have an explicit 128 MiB diagnostic limit; STB/WAD use their streaming envelope
+reviewers. No extraction, repair, installation or composer-policy change.
+
+`python tools/test_worldreview_cli.py` passes 16 end-to-end checks: JSON/text,
+exit codes, malformed/unknown input, Unicode paths, unchanged fixture bytes,
+and sparse-ID WAD aggregation that continues after a refused entry. Full Release
+build and 49 core tests pass (17.94s). `build/world-review-cli-corpus-20261008.json`
+records hash-before/after checks for eight original inputs spanning all seven
+formats and both WAD paths. STB/BWD/WLD/LEV pass; original GTG and selected TNG
+refuse known unsupported content. Each WAD reports 695 supported units (envelope,
+398 LEVs, 296 TNGs) and 102 refused TNGs. Every original hash is unchanged.
+
+
+Text review failures now carry a one-based `line` and `directive` (including
+component context), independently of the existing reason categories. GTG body
+locations are translated to the enclosing file and retain the local map slot.
+EOF structural failures point to the line following the final raw line. JSON
+and text CLI output expose the location; the corpus inventory retains it too.
+Focused checks cover CRLF/blank lines, component fields, EOF, and the second
+GTG map. All 49 core tests pass (24.64s), and all 16 CLI checks pass. Original
+`creature_hub.tng` correctly points to its overflowing UID at line 7; original
+GTG points to map 3 ScriptData at line 477. Their bytes remain unchanged;
+`build/world-review-location-original-20261008.json` records these checks.
+
+Additional hook investigation did not justify relaxing its refusal. Constructor
+0253C860 initializes ReplacementObject (+0x50) to zero, but this alone does not
+classify nonzero references. Existing ego_r type layout labels it `long` and
+has different string/member offsets; it is not FableWin storage proof. A broad
+FableWin type iteration was cancelled without a useful result. Targeted
+read-only accessor/thunk xrefs and UseObject.PerformAction 022138D0 only lead
+to OnActionUse, which does not consume this field. Evidence:
+`namespace-tng-hook-constructor-20261008.c`,
+`namespace-tng-hook-accessor-callers-20261008.log`, and
+`namespace-tng-hook-use-object-20261008.c`. ReplacementObject remains unresolved;
+no acceptance rule changed from this investigation.
+
+
+DoorTriggerType follow-up also preserves refusal: PDB EDoorTriggerType is a
+four-byte enum (0 ON_PERSON, 1 MANUAL); text transfer 01C25D1D uses signed-long
+storage and setter 02A6EBE0 writes +0x1c. However, transfer thunk 0182511D is
+called by CDoorDef::Transfer 01B9DD72, not CTCDoor::OnSerialise 0257E9F0, which
+only consumes Open/OldOpen. A matching enum name is insufficient to classify
+that extra component field. See `namespace-tng-door-trigger-20261008.c`,
+`namespace-tng-door-enum-20261008.tsv`, and
+`namespace-tng-door-transfer-thunk-callers-20261008.log`.
+
+LEV symbolic inventory now reuses complete LEV validation and independently
+reads each source game.bin via `tools/audit_levsymbols.py`. The LEV test tool's
+optional `--symbols` returns named palettes per file; public `review-storage`
+JSON also exposes these as `unresolved_symbols`. Exact names are reported as
+unique/missing/ambiguous; ground and sound receive separate expected-class
+checks. Native ground RTTI at 02232D7D targets CEngineThemeDef (type descriptor
+04A415A0), and sound lookup 0223320C targets CSoundThemeDef. Atmosphere class
+compatibility, aliases, runtime fallback and composed-name lookup still require
+review. No source is admitted by this inventory.
+
+Reproduce: `python tools/audit_levsymbols.py --source
+work/nexus_mods/_peek/ProjectSeasons --source
+work/nexus_mods/_peek/AlbionSecretsModpack --out
+build/lev-symbol-inventory-20261008.json`. Each source has 448 loose maps with
+463 unique domain/name pairs, four missing pairs, zero ambiguous pairs and one
+wrong-class pair; 398 WAD maps have 409 unique pairs, three missing pairs and no
+class mismatch. Missing ground names: SLIDING_BLOCK_ROCKS_ET (three maps), plus
+GROUND_SCRUB_ROCKS_LOCAL_DETAIL in ProjectAutumn/dd2final.lev. Missing sound names
+SOUND_THEME_Z_PLAY_ONLY_WHEN_INSIDE_TEST and
+SOUND_THEME_Z_PLAY_ONLY_WHEN_OUTSIDE_TEST each occur in six maps. The loose-only
+ProjectAutumn/emitest_filler3.lev has 30 active ground-palette entries named
+NULLDEF_CHighlightItemDef, which resolves uniquely to slot 1 CHighlightItemDef,
+not ENGINE_THEME. These are original-source findings; no bytes were repaired.
+All LEV/WAD/game.bin/names.bin hashes remain unchanged. Focused LEV tests, 16 CLI
+checks and two Python regression tests pass; tests cover duplicate-name ambiguity,
+wrong class, missing/case-different names and repeated uses across files.
+
+
+Native compiled-definition lookup now has a separate candidate-set audit.
+LoadBinaryDefinitions 0305D150 inserts CDefString CRC/global-slot pairs;
+GetDefGlobalIndexFromName 03062820 computes the query CRC and searches that
+numeric table (empty query returns 0). The source-symbol fallback is a different
+path. GetCRC 0186D2A0 hashes raw character bytes; Insert 03064E40 appends duplicate
+keys, Update 03064CA0 sorts, Find 03064CD0 uses lower_bound. No duplicate winner
+is claimed. Exports: `namespace-definition-name-lookup-20261008.c`,
+`namespace-definition-name-crc-20261008.c`,
+`namespace-definition-lookup-build-20261008.c`, and
+`namespace-definition-lookup-vector-20261008.c`.
+
+`tools/audit_defnamespace.py` now checks each original stored name CRC against
+crc0(text), inventories all composed CRC candidate groups and compares each
+source's candidates after numeric remapping. Both original orders still pass
+independent identity/payload/hash checks: 15,386 slots, 14,206 names, 241/13
+rewrites and zero unresolved BIN candidates. New reports are
+`build/defnamespace-lookups-seasons-secrets-20261008.json` and reverse order.
+They expose one changed duplicate group: CRC 0x45AA7442,
+OBJECT_OBJECT_SILVERKEY_CHEST_35. Each source has two rows with this name; the
+plan retains four. Seasons-first targets are 14795,14796,15196,15197;
+Secrets-first targets are 14795,14796,15368,15369. This is candidate ambiguity,
+not proof of which row runtime chooses. No distinct-name CRC collision was
+observed in these original plans. Original name pools have no CRC/text mismatch.
+
+`tools/audit_levlookupplans.py --symbols build/lev-symbol-inventory-20261008.json
+--plan build/defnamespace-lookups-seasons-secrets-20261008.json --plan
+build/defnamespace-lookups-secrets-seasons-20261008.json --out
+build/lev-composed-lookups-20261008.json` checks report/input hashes, reconstructs
+all planned identities and compares every collected LEV name's CRC candidates.
+Both orders preserve every candidate set: zero changed or ambiguous LEV queries;
+the existing missing names and wrong-class ground name remain unresolved source
+findings. Hashes are rechecked after review. Three regression tests cover a real
+pair of distinct strings sharing CRC 0x5B4D7946, duplicate-set expansion, and
+capture of a previously missing name by an added definition. This remains
+read-only evidence, not source admission or composer integration.
+
+
+Public WLD/BWD storage reports now list region slot/name, region-definition
+name, display label and minimap graphic separately in `unresolved_region_symbols`.
+`tools/audit_worldregions.py` validates each world through this command, verifies
+original name CRCs, inventories region-definition candidates and optionally
+compares hash-pinned namespace plans. It does not treat labels/graphics as game
+indices, harmonize WLD/BWD, select duplicate winners or admit sources.
+
+`build/world-region-lookup-plans-20261008.json` covers six original files and
+both namespace orders. Per source, BWD has 96 nonempty/45 empty region-definition
+fields, root WLD 109/32, ProjectAutumn WLD 94/47. Every nonempty field has exactly
+one source candidate, of definition type REGION, and the same mapped candidate
+in both plans. All original world/bank hashes stay unchanged. These populated
+field differences are preserved rather than implicitly recompiling the BWD.
+Reproduce with `python tools/audit_worldregions.py --source
+work/nexus_mods/_peek/ProjectSeasons --source
+work/nexus_mods/_peek/AlbionSecretsModpack --plan
+build/defnamespace-lookups-seasons-secrets-20261008.json --plan
+build/defnamespace-lookups-secrets-seasons-20261008.json --out
+build/world-region-lookup-plans-20261008.json`. The CLI regression now passes
+17 checks, including distinct region-definition/display/minimap fields. Four
+lookup tests pass, including stale-input refusal preserving existing reports.
+Last full core gate remains 49/49 (24.64s); subsequent changes are read-only
+CLI/reporting helpers and were checked with their focused tests and original
+corpus audits.
+
+
+Region labels/minimaps now have a distinct asset-reference inventory, avoiding
+an incorrect direct-texture-name assumption. Native CRegion::GetDisplayName
+01F71350 falls back to RegionName only for an empty display string; literal
+04145187 is empty. CTCRegionDisplay::SetCurrentAreaName 01F6F280 computes a
+text-bank symbol CRC, accepts text/group entries, and falls back to the literal
+string when lookup returns zero. Thus the original unmatched filler labels
+are not automatically missing required text entries. Exports:
+`namespace-region-display-20261008.c`, `namespace-region-text-lookup-20261008.c`.
+
+CMiniMapDisplay::InitialiseOnRegionLoad 027CFA00 instead finds the region's
+minimap name in CPlayerGuiDef::MiniMapGraphics. Original instructions at
+027CFA90..99 bind the map to PeekGuiDef()+0xA6C, matching the schema's member
+offset 2668. DrawMap 027D3C00 consumes the selected graphic ID in its sprite.
+Relevant exports: `namespace-region-minimap-initialise-20261008.c`,
+`namespace-region-minimap-native-20261008.txt`, and
+`namespace-region-minimap-draw-20261008.c`. File-loading minimap generation is
+a different native path and was not invoked.
+
+`tools/audit_worldassets.py --world-report
+build/world-region-lookup-plans-20261008.json --out
+build/world-region-assets-20261008.json` verifies report/input hashes, uses the
+public core decoder for both PLAYER_GUI_PC and PLAYER_GUI_DEFAULT, and parses
+only the validated MiniMapGraphics field bytes (bounded count, ASCII terminated
+keys, signed values, no duplicate keys or trailing bytes). It checks mapped IDs
+against GBANK_MAIN_PC metadata, and region labels against TEXT_ENGLISH_MAIN CRC
+candidates. This does not choose the active GUI, merge asset banks, validate
+texture payloads, or admit sources.
+
+Both original sources agree: BWD has 95 text-entry labels / 46 literal fallbacks,
+root WLD 109/32, Autumn WLD 94/47. Every populated minimap key has a mapped ID
+with a unique type-0 texture candidate under BOTH GUI definitions; respective
+counts are 95,109,94, with the other fields empty. No missing map key, missing
+texture ID or ambiguous texture candidate was found. All source world/BIN/BIG
+hashes remain unchanged. Two minimap table regressions pass, including every
+truncated prefix, overflowing count, duplicate/empty/non-ASCII keys and trailing
+bytes. Signed values are preserved for diagnostics, not normalized.
+
+
+TNG DefinitionType lookup inventory now runs only on files that pass the strict
+storage reviewer. Public CLI JSON emits `unresolved_thing_definitions` with type,
+name and original line, explicitly excluding component references. The existing
+TNG corpus helper accepts `--symbols`; `tools/audit_thingtext.py` exposes it as
+`--definition-symbols` and optionally compares `--plan` namespace reports after
+checking their source hashes and original stored-name CRCs. Rejected files keep
+their reasons/locations and contribute no symbols. GTG bodies are deliberately
+excluded from this field inventory, even if a synthetic GTG storage check passes.
+
+`build/tng-definition-lookup-plans-20261008.json` covers both original sources
+and orders. Accepted Seasons loose TNGs contribute 684 references / 140 distinct
+thing-type/name groups; accepted Secrets loose TNGs 519 / 110. Each accepted WAD
+subset contributes 955 / 172. Every group has one source CRC candidate and the
+same mapped candidate in both plans. Coverage remains 311/449 and 309/449 loose
+text files, 296/398 WAD TNGs each: this does not erase the remaining refusals.
+No whole TNG-reference or source-admission claim follows. All input hashes stay
+unchanged. Reproduce with `python tools/audit_thingtext.py --source
+work/nexus_mods/_peek/ProjectSeasons --source
+work/nexus_mods/_peek/AlbionSecretsModpack --definition-symbols --plan
+build/defnamespace-lookups-seasons-secrets-20261008.json --plan
+build/defnamespace-lookups-secrets-seasons-20261008.json --out
+build/tng-definition-lookup-plans-20261008.json`.
+
+The public CLI now passes 18 checks. Two TNG symbol regressions verify source
+locations, missing/duplicate definitions, explicit exclusion of refused TNG and
+GTG bodies, and byte preservation. `tools/check_all.py` now runs the CLI, LEV
+symbol, definition lookup, minimap table and TNG symbol regression scripts after
+CTest. The newly wired checks pass individually; the entire GUI/retail broad
+suite was not rerun for these diagnostic-only additions.
+
+Complete STB runtime ownership is now reusable core code:
+`stbstorage::validateMapChunk` follows the fixed-count foreground directory,
+bounded background child/LOD blocks and local-detail tables from the common
+record. It rejects overlapping structures, conflicting frame domains, cycles,
+invalid block bounds, nonzero unowned bytes and out-of-palette detail indices.
+Shared frames within one domain are validated and counted once. Every owned frame
+uses the existing complete decoded-storage validators. Generation-only
+edge/shore/checksum offsets are not followed. Input bytes are never changed.
+
+`validateBankStorage` composes strict metadata/common/chunk/sea review, binds
+common map names and IDs to exactly one entry, rejects unowned non-sea entries,
+and checks every gap outside live bank payloads in bounded reads. Supported
+subset is compact retail banks; append-only banks retaining old nonzero tables
+in unreachable space intentionally refuse. External asset resolution and
+gameplay remain outside this storage check. Composer refusal remains.
+
+Reproduce the original corpus review:
+
+```powershell
+python tools/audit_stbstorage.py --bank work/nexus_mods/_peek/ProjectSeasons/data/Levels/FinalAlbion_RT.stb --bank work/nexus_mods/_peek/AlbionSecretsModpack/data/Levels/FinalAlbion_RT.stb --out build/stb-whole-storage-review-20261008.json
+```
+
+Both source paths pass: 473 entries, 446 maps, 26 seas, 3,597 palette rows,
+21,904 foreground / 95,895 background / 22,226 local-detail frames,
+1,051,982,805 decoded bytes, 40,861,364 zero chunk-gap bytes and 645,492 zero
+bank-gap bytes. Their STBs are byte-identical: SHA256
+`53afd28b0407802a8cff5d475958c7fe7584f5279d91baad20749f437fe66a02`.
+This is one distinct bank checked at two original source locations; both hashes
+remain unchanged. The permanent audit records tool/script/input hashes.
+Counts agree with the prior independent scratch ownership and metadata audits.
+
+Authored fixtures cover complete banks, shuffled physical/TOC order, sea
+metadata, shared LOD frames, background partitioning, child cycles/reuse,
+truncated structures, unknown gaps, conflicting owners and malformed palettes.
+All Release targets build; **46/46 tests pass (29.12s)** in
+`build/stb-whole-storage-core-20261008.log`; build log is
+`build/stb-whole-storage-build-20261008.log`. Next: remaining world-file
+reference admission, then composer integration with source ownership intact.
+No package, live-install write or gameplay claim.
+
+Compiled-world follow-up: `defexternal::reviewBwd` validates complete known BWD
+framing with the canonical parser, exact round-trip, canonical flags, strings
+without embedded NULs, and bounded Contains/Sees map slots. Stored numeric
+fields are local slots, coordinates and UIDs; RegionDef is a presized string.
+Symbolic names still need caller-side resolution. Evidence reused directly:
+retail CMapInfo::LoadBinary 004FB4F0 in FableTLC
+`ghidra_out/newlevel_retail_decomp.c`, and debug CRegion Load/Save
+01F70940/01F70650 in `newlevel_fablewin_run5_decomp.c`.
+
+Both original BWD paths pass, each with 446 maps / 141 regions, and independently
+round-trip through FableTLC `tools/wld_bwd.py`. They are byte-identical with
+SHA256 `b2f0d5a35b5628dcf2e56bc8b20c278dfc9c71443bceb441d7458c44a19d2278`;
+inputs remain unchanged. Report: `build/bwd-external-review-20261008.json`.
+Reproduce core review with `build/fableforge_defexternal_tests.exe --bwd <file>`.
+Tests include candidate-valued coordinates/UIDs/float bytes/names, all truncated
+prefixes, trailing bytes, invalid local slots/flags and embedded NUL names.
+All Release targets build; **46/46 tests pass (37.14s)** in
+`build/bwd-external-core-20261008.log`. LEV/text/world-archive admission remains
+unfinished; next investigation is native LEV palette loading and brush storage.
+
+LEV storage follow-up now validates complete level/map headers, both 256-row
+palettes, sound names, height/game-cell grids, empty script-brush storage and
+all navigation sections through EOF. `levstorage::validate` returns symbolic
+ground/atmos/sound names for caller-side resolution. Nonempty brushes remain
+unsupported. `navmesh::validateNavigationStorage` reuses the canonical flat
+reader with exact contiguous boundaries, canonical flags and bounded local
+indices. It does not recursively traverse child graphs or certify navigation
+behavior. Unbuilt shipped sections legitimately retain layer-zero action
+points with zero layers/nodes; a regression preserves that case.
+
+Native evidence corrected old header descriptions: CFileFormatLevel is length
+25 / version byte 4 / map-data offset 25, not an independent u16 version 6404.
+CFileFormatMapHeader is length 67614/67618 / version 8/9. The v9 extra word is
+StaticMapChecksum. PDB fields and native Save/Load agree. Ground and atmosphere
+palette values gate on zero/nonzero and are replaced by name lookup results
+(02232CC5/02232D07 and 022338D3/0223390E); stored stale numeric IDs are preserved.
+Signed-negative game-cell sound values map to null (02233BBC..02233BDC), proven
+by original ProjectAutumn/emitest4 with all 256 sound bytes equal to 255.
+Tests cover both map-header versions, stale cached IDs, both negative-byte
+boundaries, corrupt storage and navigation versions 5 through 8.
+
+The large LoadFromFile decompilation timed out; it was not retried. The direct
+hash-pinned disassembly is `build/namespace-lev-native-20261008.txt`, generated
+by `inspect_lev_native_20261008.py`. Brush Load/Save decompilations completed in
+`namespace-lev-readers-20261008.c`; PDB layouts are in the FableTLC checkout.
+Executable SHA256 remains A9D6D0977D9D7FC8242DA4292AE7ED92E926CA80364A95C003D9B9F689E41845.
+
+Permanent audit:
+`python tools/audit_levstorage.py --source work/nexus_mods/_peek/ProjectSeasons --source work/nexus_mods/_peek/AlbionSecretsModpack --out build/lev-whole-storage-review-20261008.json`.
+Each pack passes 448 loose LEVs (5,732,000 height cells / 352,256 game cells /
+288 nav sections / 525,149 nodes) and 398 WAD LEVs (4,640,078 / 284,928 /
+233 / 416,689). This includes ProjectAutumn's loose maps, separately from WAD
+payloads; WAD metadata is not claimed by this gate. Input hashes are unchanged.
+All Release targets build and **48/48 tests pass (30.43s)** in
+`build/lev-whole-storage-core-20261008.log`. Text-file/whole-source admission
+and composer integration remain unfinished.
+
+Next WAD investigation reproduced the sparse-ID bug: open/repack/append read
+header +20 as the live count, and append wrote the count to both +20/+24.
+Native CWADBank inherits CBankFileAsync and declares data format 2; bank native
+ReadEntryList/WriteFileInformation instead use +20 maximum ID / +24 live count.
+The new sparse regression failed with truncated entry magic before the fix and
+passes after correcting all three readers and the append header. Clone/native
+one/two-entry append, same-size/resized repack, exact untouched bytes and
+ID-overflow output preservation pass. All Release targets build and **49/49 tests
+pass (24.60s)** in `build/wad-sparse-core-20261008.log`.
+Metadata evidence: `build/namespace-wad-metadata-20261008.c`; 88-byte WAD info
+is the PDB CFileInformation (three CDateAndTime records, ReadOnly and padding).
+Native AddFile 031E0FE0 / GetFileInformation 031E01C0 independently confirm
+0x58-byte raw info storage (`build/namespace-wad-info-20261008.c`).
+
+`wadstorage::validateMetadata` now bounds the complete header/table, sparse IDs,
+unique names, histogram, payload spans, one filename and native file info.
+Terminal NUL names are accepted; embedded NULs refuse. Timestamp/dependencies
+are legacy API names for native checksum/filenames. Date words and three raw
+padding bytes are preserved; ReadOnly must be canonical. `validateEnvelope`
+additionally requires every unowned byte to be zero in bounded reads. Payloads
+still need independent LEV/TNG review; retained nonzero dead tables/payloads
+are outside this compact subset. No extraction/path-safety claim.
+
+`tools/audit_wadstorage.py --bank <path> --out <report>` checks original/tool
+hashes. Both original renamed WADs pass 796 entries / maximum ID 796 /
+1,038,496 zero padding bytes; identical SHA256
+`0941eb84952ea30824be69e08b2193dead268a2de57bad023b77ef0b975af3e1`.
+Report: `build/wad-envelope-review-20261008.json`. Fixtures include every
+truncated TOC prefix, sparse IDs, duplicate IDs, overlaps, overflow bounds,
+unknown type, embedded NUL, read-only flags, trailing data, nonzero gaps and
+independent review of clone/native append metadata. All Release targets build;
+**49/49 tests pass (24.54s)** in `build/wad-envelope-core-20261008.log`.
+Next: complete WLD/TNG/GTG directive review and symbolic/source admission.
+
+WLD follow-up: `defexternal::reviewWld` checks every line against known native
+directive domains, complete block framing, typed values, sequential local
+slots, required fields and canonical flags. Unknown directives, malformed
+quotes/numbers, duplicate scalar fields, nonfinite settings and unsupported
+syntax refuse. It leaves the permissive editing parser unchanged and checks
+that its model/round-trip agrees. Symbolic resolution and world topology are
+still separate. Evidence is the existing retail CWorldMap::LoadFromFile
+00507C30 export in FableTLC `ghidra_out/newlevel_retail_decomp2.c`.
+
+Both original root WLDs (446 maps / 141 regions) and ProjectAutumn copies
+(433 / 141) pass with unchanged hashes; report
+`build/wld-directive-review-20261008.json`. Reproduce each review with
+`build/fableforge_defexternal_tests.exe --wld <path>`. The two distinct hashes
+are `177bc127c4ffc5822915f3a56f063b4253327b28fa933e40a2d29eda7deb50b9`
+and `807e5a7d8c0dd107137ff24640d2ab0d36f43a01b98380b81eb99b2b344d776e`.
+All Release targets build; **49/49 pass (23.92s)** in
+`build/wld-directive-core-20261008.log`. Malformed quoted-value regression
+caught an accidental `std::quoted` overload selection; the validation helper
+is now unambiguously named `validateQuoted`.
+
+TNG/GTG investigation is active. Initial loose-only inventory records 449
+files per pack and 384 context-qualified fields across 55 contexts, including
+numeric ReplacementObject/GiftToGiveDef fields. This is discovery, not an
+admission schema: nested camera blocks need structural handling, and numeric
+field meanings require native serializer evidence. Scratch inventory is
+`build/tng-directive-inventory-20261008.json`. Native CThing and physics entry
+exports: `build/namespace-tng-entry-20261008.c`. Numeric-link serializers
+(`namespace-tng-numeric-links-20261008.c`) prove TrophyID and
+LastWeaponEquippedID are 64-bit thing UIDs; GiftToGiveDef/ReplacementObject
+are signed 32-bit storage. FindAppropriateGift 02488520 reads stock definition
+indices with GetDef and stores the selected index at +0x74; this proves
+GiftToGiveDef is a game definition index. All 66 loose instances per pack are
+zero. ReplacementObject has 284/283 zeros and one 2856 per pack, at
+FinalAlbion/LookoutPoint_Filler_01.tng. Its runtime consumer remains unresolved;
+the three inspected hook methods do not establish its numeric domain.
+Direct original-byte confirmation is in `namespace-tng-native-20261008.txt`,
+using the pinned FableWin SHA from the LEV investigation.
+
+Additional targeted serializer exports: `namespace-tng-components-a-20261008.c`
+(targeted/generator/activation/atmos/particle/container/chest/editor) and
+`namespace-tng-dispatch-20261008.c` (component dispatch, camera base,
+activation base). These are evidence, not a completed TNG admission schema.
+No whole-source or divergent composer admission yet.
+
+Initial reusable TNG subset: `defexternal::reviewTng` validates Version 2,
+balanced unique sections, Object identities, signed-byte player / uint64 UID,
+named definitions, null ScriptData, physical scalar fields and eight explicitly
+reviewed component layouts. Unknown types/components/fields, non-null script
+data, noncanonical booleans, overflow/nonfinite numbers, mismatched blocks,
+duplicate scalar fields and nonsequential definition-name arrays refuse.
+Canonical TNG model/count and exact serialization are cross-checked. This is
+partial TNG coverage and does not admit GTG or certify symbolic resolution.
+
+`tools/audit_thingtext.py --source <root> --out <report>` inventories loose
+TNG/GTG plus WAD TNGs, validates WAD envelopes, records every refusal, and checks
+input/tool hashes. A successful inventory exit is explicitly not admission.
+`build/tng-object-coverage-20261008.json`: each original pack has 278/449 loose
+text files and 261/398 WAD TNGs accepted; 171/137 respectively remain refused.
+Original hashes remain unchanged. Some loose UIDs have 23 decimal digits and
+exceed uint64, e.g. BowerstoneJail_Filler_01 first UID
+1844674141891617723626335. These remain outside the supported bounded subset;
+no native wrapping/normalization or gameplay claim. GTG's NEWMAP wrapper also
+remains unsupported. All Release targets build; **49/49 tests pass (23.45s)**
+in `build/tng-object-core-20261008.log`.
+
+Further native exports for the observed components are retained in
+`namespace-tng-components-{b,c,d}-20261008.c`, and storage routing in
+`namespace-tng-storage-routing-20261008.c`. CDefIndex text TransferIn 03178B80
+uses name lookup (including creature-family arrays); CThingPhysical 01F1F560
+reads Health/ObjectScale/angles as floats. Component schemas beyond the initial
+subset, other thing-class loader inheritance and GTG framing remain work items.
+
+TNG expansion confirms constructor/vtable routing from original bytes:
+Marker 040D2814, Building 040D1D9C, Village 040D21AC use loader 027EBDD0,
+which delegates to CThingPhysical; Holy Site 040D2424 uses 027F8160, which
+adds only definition lookup after that same loader. Reports:
+`namespace-tng-class-native-20261008.txt`, `namespace-tng-class-vtables-20261008.txt`,
+and `namespace-tng-other-classes-20261008.c`. Those four types plus 17 simple
+component layouts are now supported, including explicit uint64 thing UIDs.
+Whole-file counts remain 278/449 loose and 261/398 WAD per pack because the
+newly understood files reach other unsupported fields. Updated unchanged-input
+report: `build/tng-expanded-coverage-20261008.json`. All Release targets build;
+**49/49 tests pass (51.80s)** in `build/tng-expanded-core-20261008.log`.
+Manager/entity creation routing and remaining component formats are next.
+
+An allocation follow-up also checked native CBankFile::AddEntryMultipleFiles
+02F92590 (`namespace-bank-id-allocation-20261008.c`): it searches vacant slots
+from 1, so the header maximum is not a permanent no-reuse watermark. No
+additional append policy change was made on the assumption of reserved IDs.
+
+GTG/native dispatch follow-up: InitThingTypes 01D3D170 explicitly registers
+"Thing" with CThing::Alloc. The strict subset now permits that base class but
+keeps physical-only fields separate. `reviewGtg` validates positive unique
+signed map slots and exact NEWMAP/ENDMAP bodies through `reviewTng`; caller
+world-slot resolution remains separate. Native CWorldMap 01C80E90 reads each
+slot/body and calls CThingManager 01D3BD20 -> 01D33D90. Original-byte string
+and call checks are `namespace-gtg-native-20261008.txt`; dispatch/type exports
+are `namespace-tng-{single-and-gtg,type-registration}-20261008.c`.
+GTG checkpoint: **49/49 tests pass (41.51s)** in
+`build/gtg-wrapper-core-20261008.log`; coverage was 281/449 loose and 264/398 WAD.
+
+Latest TNG increment adds confirmed PhysicsNavigator/Light serializer inheritance,
+retained inert editor booleans, class-name CreateTC declarations, reviewed
+legacy camera/seed empty blocks, activation receptor scalar fields and fishing
+flags. Navigator slot 1 is Standard 02527070; Light slot 1 is Base 0246E620
+(`namespace-tng-physics-vtables-20261008.txt`). NavigationSeed constructor
+01BA8C04 installs vtable 04098FDC whose slot 1 is CTCBase::OnSerialise 02190CB0;
+original bytes show a no-op (`namespace-tng-seed-vtable-20261008.txt`).
+Legacy camera PointType remains unsupported. CreateTC 01CF0320 reads a class
+name and calls AddTC, not a game-definition lookup. Relevant exports:
+`namespace-tng-empty-and-create-20261008.c`, `namespace-tng-empty-seed-fishing-20261008.c`.
+
+Focused regressions pass, including unknown fields inside empty blocks,
+unreviewed camera integers, numeric class names and physics inheritance.
+`build/tng-empty-components-coverage-20261008.json` now accepts **298/449 loose
+text files and 281/398 WAD TNGs per pack**, leaving 151/117 refusals. Input and
+tool hashes remain stable. All 49 core tests pass (51.59s) in
+`build/tng-empty-components-core-20261008.log`. No whole-source admission.
+
+Camera/light follow-up adds native three-float C3DCoordF vectors and four-byte
+CRGBColour tuples, camera base plus Track/FixedPoint/GeneralCase/Scripted
+leaves, and Light/SpotLight fields. Evidence: base 024F3E20 and leaves
+025C5160/025C5CB0/025C5EF0/025C7110 in the existing targeted exports;
+`namespace-tng-vector-colour-20261008.c` confirms TransferIn 0309D6C0/0309F610.
+Scripted camera ThingUID is a uint64 thing identity. Legacy light typo
+Interted remains unsupported. Focused malformed tuple/overflow/context tests pass.
+
+Spline 025CB1E0 adds bounded signed keyframe counts, complete required frame
+fields and optional roll/animation speed, without allocating from the declared
+count. Nonempty Event strings remain refused pending consumer evidence.
+Missing/extra/aliased indices, incomplete frames and opaque events refuse.
+`build/tng-spline-coverage-20261008.json` accepts **300/449 loose text files
+and 283/398 WAD TNGs per original pack**; all source hashes remain unchanged.
+This is a coverage inventory, not whole-source admission. All Release targets
+build and **49/49 core tests pass (28.38s)** in
+`build/tng-spline-core-20261008.log`; build log is
+`build/tng-spline-full-build-20261008.log`. Remaining opaque ScriptData,
+overflowing source UIDs and unsupported components remain explicit refusals.
+
+
+Ownership/container follow-up adds version-1 OwnedEntity, Door, named enemy
+factions, SearchableContainer inheritance, BuyableHouse and GeneratorCreator.
+OwnerUID/WifeLivingHere/GeneratorUID are uint64 thing identities with native
+remapping; an unsupported/missing ownership version refuses. House dressing
+levels compare local Dress suffix digits (024B1D00), not game definition IDs.
+Evidence: `namespace-tng-pointer-20261008.c` (0287E370),
+`namespace-tng-house-faction-20261008.c`, `namespace-tng-house-level-20261008.c`,
+`namespace-tng-generator-creator-20261008.c` (02723880), and original-byte
+`namespace-tng-house-spline-native-20261008.txt`. Scalar refusal messages now
+identify the component and field. Legacy DoorTriggerType and Interted remain
+unsupported rather than being silently treated as recognized properties.
+
+Focused version/UID-overflow/container/faction tests pass. Latest original
+inventory `build/tng-house-coverage-20261008.json`: Seasons **304/449 loose**,
+Secrets **303/449 loose**, and **287/398 WAD TNGs** in each (identical archives).
+All hashes remain unchanged. All Release targets build and **49/49 tests pass
+(23.26s)** in `build/tng-house-core-20261008.log`. Opaque ScriptData now accounts
+for 43/37 first loose refusals; no script-data semantics or whole-source
+admission is claimed. Composer still refuses divergent banks.
+
+
+Further text-domain coverage adds reviewed Village flags/frame/fine fields and
+Shop day/donation counters. PlayersCrimes, SpecialItem and stock arrays remain
+unsupported. Village transfer widths were checked against original bytes in
+`namespace-tng-village-native-20261008.txt`; native OnSerialise 0215BCB2/02622E10
+exports remain the source. Hook OnActionUse/SetFromPropertiesStruct in
+`namespace-tng-hook-action-20261008.c` did not resolve ReplacementObject; no
+admission policy was relaxed for that integer.
+
+TrackNode 027FC620 and Switch 027F9220 inherit the already reviewed GameObject /
+Physical loaders. Track UID links are remapped thing identities; Start/End are
+booleans. TrackNode may repeat an identical ScriptName (observed native save
+form); conflicting repeats refuse. Legacy track FileIDs remain unclassified.
+Switch radius/time are floats and trigger/environment values are names.
+Evidence: `namespace-tng-remaining-types-20261008.c`; literal 042F7A58 is End.
+Focused inheritance/repeated-name/unknown-ID/nonfinite tests pass; all Release
+targets build and **49/49 tests pass (24.70s)** in
+`build/tng-track-core-20261008.log`. Original coverage totals are unchanged in
+`build/tng-track-coverage-20261008.json`, but subsequent refusal sites are now
+visible. AI Creature loader/base exports are available; its relationship
+consumers are the next review question before adding that type.
+
+
+AI creature and appearance follow-up: AICreature 01D6E630 delegates to
+CreatureBase 01D8A560 and GameObject. InitialActivate 01D71CE0 remaps all five
+relationship fields and calls GetPThingWithUID; they are uint64 thing identities.
+Reviewed flags, initial positions and brain names are supported. Legacy
+HasRelationships remains unsupported. Exports: `namespace-tng-creature-base-20261008.c`
+and `namespace-tng-creature-activation-20261008.c`.
+
+Opinion fields from 01F3E310 now accept reviewed flags, counters and floats;
+ForcedAttitude accepts only native default 18 (EOpinionAttitudeType, TransferIn
+019EAB0A). COpinionSet 01F40850 adds no level-load fields. Talk 023E6600 is empty
+on level load; its game-state fields are a boolean and a voice name. Evidence:
+`namespace-tng-opinion-domains-20261008.c`, `namespace-tng-talk-20261008.c`.
+
+RandomAppearanceMorph Seed is uint32 PRNG state: 0252E4E0 -> 0252DBD0 ->
+0289AC90/0289AD40, with original instructions passing the seed pointer to
+GFRandom 018CF370. See `namespace-tng-morph-seed-20261008.c`,
+`namespace-tng-random-skeletal-20261008.c`, and `namespace-tng-random-native-20261008.txt`.
+Corpus review exposed 274 negative seed spellings. Native unsigned traits
+0189B010/0189B040 both delegate to signed-long text transfer, so these are
+valid bit-preserving signed int32 representations, not malformed uint32 text.
+The reviewed unsigned-long scalar domain now validates signed decimal int32;
+negative minimum passes and both adjacent overflows refuse. No input rewriting.
+Evidence: `namespace-tng-unsigned-text-20261008.c`.
+
+`build/tng-signed-seed-coverage-20261008.json`: Seasons **309/449 loose**,
+Secrets **307/449 loose**, each **292/398 WAD TNGs**. Source hashes unchanged.
+All Release targets build and **49/49 tests pass (24.04s)** in
+`build/tng-signed-seed-core-20261008.log`. ObjectAugmentations subsequently adds
+SavedInGame plus a sequential quoted AugmentationDefNames array, using native
+025EA5D0 GetDef(name) evidence; focused array/name/refusal checks pass. Its
+whole-corpus/full-suite follow-up is included below. Opaque scripts and Hook
+ReplacementObject remain unresolved.
+
+
+Shape/route follow-up: PreCalculatedNavigationRoute version 2 now checks the
+complete declared sequence of 2D coordinate tuples and unsigned-byte navigation
+layers, plus its remapped target thing UID. Counts never drive allocations;
+each declared step must have both fields and canonical bounded indices.
+Evidence: 026C1580 -> LoadRoute 026C19F0 in
+`namespace-tng-route-load-20261008.c`; C2DVector TransferIn 0309C9D0 in
+`namespace-tng-vector2-20261008.c`. Older route versions remain unsupported.
+
+ShapeManager 025D6A50 -> CShape::StatOnSerialise 025D9B20 reads nested declared
+shape/point counts and three float coordinates per point. Core review requires
+complete, bounded, canonical indexed records. Native initializers 03FF3F60 and
+03FF3F90 bind SHAPE_TYPE_CLOSED / SHAPE_TYPE_LINE to globals 04AC2F94 / 04AC2F9C;
+original factory instructions compare them before BasicShape / Track creation.
+Evidence: `namespace-tng-shape-records-20261008.c`,
+`namespace-tng-shape-native-20261008.txt`, and
+`namespace-tng-shape-globals-native-20261008.txt`. The initial defined-string
+query found zero matches; raw-byte locations and initializer instructions
+provided the evidence instead. No geometric validity/gameplay claim.
+
+Focused tests cover huge/negative counts, missing points/axes, malformed/aliased
+indices, unknown types, nonfinite coordinates and overflowing layers. All
+Release targets build and **49/49 tests pass (24.97s)** in
+`build/tng-shape-route-core-20261008.log`. Latest corpus inventory
+`build/tng-shape-route-coverage-20261008.json` preserves the previous total
+309/307 loose and 292 archived acceptances, with deeper refusal sites now
+visible. All input hashes remain unchanged; this includes augmentation-array
+coverage. Further review candidates are receptor inheritance, wife/guard/hero
+fields and explicit treatment of known numeric definition references.
+
+
+Character/receptor follow-up: original Door receptor constructor 01BA9A63
+installs vtable 040995DC, slot 1 -> ActivationReceptorBase 02637DC0
+(`namespace-tng-door-receptor-vtable-20261008.txt`). Its two inherited fields
+are accepted; generator-only fields still refuse. Ghidra's PDB type archive
+reports EOpinionAttitudeType 0..17 plus LAST/default 18, and ECrimeSeverity 0..3
+(`namespace-tng-opinion-crime-enums-20261008.tsv`). Opinion validation now uses
+that complete enum range. Guard 026DE780 accepts known frame/bribe counters and
+crime severity; pending-crime records still refuse.
+
+Wife 0248DC80 adds reviewed flags, counters, floats and four fixed husband
+appearance booleans. GiftToGiveDef is a known game definition reference, so
+only zero is admitted: ClearGiftToGiveDef 02C62010 explicitly clears field +74h
+to zero; Getter 02C61760 reads the same field. Nonzero values refuse with a
+specific relocation-required reason. Evidence: `namespace-tng-wife-null-gift-20261008.c`
+and earlier gift consumer export. Named wife clothing/gift arrays remain
+outside this subset. Focused enum bounds, field context, fixed-array bounds
+and nonzero reference refusals pass.
+
+Latest inventory `build/tng-character-coverage-20261008.json`: Seasons
+**310/449 loose**, Secrets **308/449 loose**, each **293/398 WAD TNGs**; all
+hashes unchanged. All Release targets build and **49/49 tests pass (26.24s)**
+in `build/tng-character-core-20261008.log`.
+
+
+Hero/spline follow-up: Hero 02473F20 stores LastWeaponEquippedID as a remapped
+thing UID and hero_title_object_def_name as a definition name. Spline
+UpdateCameraParams 025C98E0 queues Event strings, while HasMessage 025C9550
+compares and removes matching strings; they are event names, not numeric
+references (`namespace-tng-spline-events-20261008.c`). ValidAnims is a sequential
+array of entry symbols written from the animation bank by 025CB1E0. Reviewed
+quoted event and animation names are now supported. All named arrays reject
+noncanonical aliases such as [00] as well as gaps and numeric unquoted names.
+
+`build/tng-spline-events-coverage-20261008.json`: Seasons **311/449 loose**,
+Secrets **309/449 loose**, each **296/398 WAD TNGs**. All input hashes unchanged.
+Remaining first refusals concentrate on opaque ScriptData, oversized loose
+UIDs, legacy DoorTriggerType/Interted, base Thing Health and scripted Hook.
+All Release targets build and **49/49 tests pass (24.85s)** in
+`build/tng-spline-events-core-20261008.log`. Composer/source admission is still
+closed; these are layout/domain reviews and do not resolve symbolic links.
+
 ## 2026-10-06 namespace allocation continuation (active)
 
 User resumed Forge work continuously until asked to stop. Checkout remains

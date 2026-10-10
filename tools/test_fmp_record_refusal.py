@@ -40,7 +40,8 @@ def main():
            ('new-empty-type','NEW_RECORD','', 'has no definition type'),
            ('unnamed','',TYPE,'has no matching blank-name baseline identity'),
            ('wrong-type',RECORD,'DifferentDefinition','different definition type'),
-           ('reserved-anonymous-name','@unnamed:0',TYPE,'reserved anonymous identity namespace')]
+           ('reserved-anonymous-name','@unnamed:0',TYPE,'reserved anonymous identity namespace'),
+           ('embedded-nul-name','BAD\0NAME',TYPE,'embedded NUL')]
     for label,name,definition,reason in cases:
         package=work/(label+'.fmp')
         # First contribution is valid: a later invalid one must abort the whole package.
@@ -77,6 +78,16 @@ def main():
         assert entries[1]['definition']==TYPE and entries[1]['data']==payload
         assert snapshot(base)==before and digest(package)==package_before
         checks.append('typed-addition-'+mode)
+    package=work/'oversized-record.fmp'
+    write_fmp(package,[(RECORD,TYPE,payload + bytes(65535-len(payload)))])
+    for mode in ('standalone','composed'):
+        command=['fmp','apply',base,package,out] if mode=='standalone' else ['mods','merge',base,out,'--with',package]
+        before=snapshot(base);prior=snapshot(out);package_before=digest(package)
+        result=subprocess.run([str(tool),*map(str,command)],cwd=cwd,capture_output=True,timeout=120)
+        (work/('oversized-'+mode+'.log')).write_bytes(result.stdout+result.stderr)
+        assert result.returncode!=0 and b'chunk capacity' in result.stderr,result.stderr
+        assert snapshot(base)==before and snapshot(out)==prior and digest(package)==package_before
+        checks.append('oversized-record-'+mode)
     (work/'result.json').write_text(json.dumps({'passed':True,'checks':checks,'gameplay_tested':False},indent=2),encoding='utf-8')
     print('PASS:',len(checks),'record refusal and supported replacement cases',flush=True)
 

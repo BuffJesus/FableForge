@@ -2,7 +2,9 @@
 #include "forge/stbbake.hpp"
 #include "forge/rangecodec.hpp"
 #include "forge/stb.hpp"
+#include "forge/lzo.hpp"
 #include "forge/temporarydirectory.hpp"
+#include <nlohmann/json.hpp>
 #include <algorithm>
 #include <fstream>
 #include <iostream>
@@ -18,7 +20,17 @@ template<class F> static void refuses(F f) {
     try {f();}catch(const std::exception&) {return;}
     throw std::runtime_error("malformed terrain storage accepted");
 }
-int main() {try {
+int main(int argc,char** argv) {try {
+    if(argc==2) {
+        const auto r=forge::stbstorage::validateBankStorage(argv[1]);
+        const nlohmann::json report={{"entries",r.entries},{"maps",r.maps},{"seas",r.seas},
+            {"palette_rows",r.paletteRows},{"bank_zero_padding_bytes",r.zeroBankPaddingBytes},
+            {"foreground_frames",r.chunks.foregroundFrames},{"background_frames",r.chunks.backgroundFrames},
+            {"detail_frames",r.chunks.detailFrames},{"decoded_bytes",r.chunks.decodedBytes},
+            {"chunk_zero_padding_bytes",r.chunks.zeroPaddingBytes}};
+        std::cout<<report.dump(2)<<'\n';return 0;
+    }
+    if(argc!=1)return 2;
     using namespace forge::stbstorage;
     forge::stbbake::ForegroundFrame frame;
     forge::stbbake::ForegroundLayer layer;layer.sharedIndexBuffer=true;layer.vertices.resize(3);
@@ -142,6 +154,94 @@ int main() {try {
     auto setWord=[](Bytes& b,size_t at,uint32_t v) {
         for(unsigned i=0;i<4;++i)b.at(at+i)=uint8_t(v>>(8*i));
     };
+    // Independent chunk wiring: one foreground row, one background LOD and
+    // one local-detail group. Legacy generation pointers deliberately remain
+    // outside this chunk. Frame owners, rather than byte scanning, drive decode.
+    Bytes chunkRecord=record,chunk(1024);chunk[0]=1;
+    setWord(chunkRecord,100,32);setWord(chunkRecord,104,80);setWord(chunkRecord,108,60);
+    setWord(chunkRecord,125+24,160);setWord(chunkRecord,125+28,60);
+    auto placeFrame=[&](Bytes& target,size_t at,const Bytes& body) {
+        const auto encoded=forge::lzo::compressFramed(body.data(),body.size());
+        if(at+encoded.size()>target.size())throw std::runtime_error("fixture frame too large");
+        std::copy(encoded.begin(),encoded.end(),target.begin()+at);return uint32_t(encoded.size());
+    };
+    const auto fgSize=placeFrame(chunk,256,dry);
+    setWord(chunk,32,256);setWord(chunk,36,fgSize);
+    Bytes backgroundBody(95);backgroundBody[8]=1; // water-only with absent water
+    const auto bgSize=placeFrame(chunk,512,backgroundBody);
+    forge::stbbake::BackgroundTreeHeader backgroundHeader;
+    backgroundHeader.width=backgroundHeader.height=16;
+    backgroundHeader.firstBand=backgroundHeader.firstNonSplitBand=backgroundHeader.lastBand=1;
+    backgroundHeader.lod.push_back({0,512,int32_t(bgSize),0});
+    const auto backgroundBytes=forge::stbbake::serializeBackgroundTreeHeader(backgroundHeader);
+    std::copy(backgroundBytes.begin(),backgroundBytes.end(),chunk.begin()+80);
+    Bytes detailBody;word(detailBody,1);word(detailBody,0);word(detailBody,0);word(detailBody,0);
+    const auto detailSize=placeFrame(chunk,768,detailBody);
+    setWord(chunk,160,1);setWord(chunk,164,768);setWord(chunk,168,detailSize);
+    const auto chunkOriginal=chunk,recordOriginal=chunkRecord;
+    const auto chunkResult=validateMapChunk(chunk,chunkRecord,4096);
+    if(chunkResult.foregroundFrames!=1 || chunkResult.backgroundFrames!=1 || chunkResult.detailFrames!=1 ||
+       chunkResult.decodedBytes!=dry.size()+backgroundBody.size()+detailBody.size() ||
+       chunkResult.zeroPaddingBytes!=1024-1-36-60-60-fgSize-bgSize-detailSize ||
+       chunk!=chunkOriginal || chunkRecord!=recordOriginal)
+        throw std::runtime_error("chunk ownership/count/preservation mismatch");
+    // Every prefix cutting a live structure/frame refuses. Trailing zero
+    // alignment is optional and therefore deliberately excluded from this loop.
+    for(size_t n=0;n<768+detailSize;++n)
+        refuses([&]{validateMapChunk(Bytes(chunk.begin(),chunk.begin()+n),chunkRecord,4096);});
+    for(const auto [at,value]:{std::pair<size_t,uint32_t>{0,2},{32,0},{36,0},{36,fgSize-1},
+        {32,0xffffffffu},{256,0xffffffffu},{260,0xffffffffu},{80+11,80},{80+15,60},
+        {80+48,256},{160,0xffffffffu},{164,512},{168,detailSize-1},{204,2},{224,1},{1000,1}}) {
+        auto bad=chunk;setWord(bad,at,value);refuses([&]{validateMapChunk(bad,chunkRecord,4096);});
+    }
+    for(const auto [at,value]:{std::pair<size_t,uint32_t>{100,0},{100,80},{104,32},{108,59},
+        {125+24,0},{125+28,59},{125+32,60},{170,0}}) {
+        auto bad=chunkRecord;setWord(bad,at,value);refuses([&]{validateMapChunk(chunk,bad,4096);});
+    }
+    // An out-of-palette index is valid local-detail storage but invalid here.
+    auto badPaletteChunk=chunk;setWord(detailBody,8,1);
+    setWord(badPaletteChunk,168,placeFrame(badPaletteChunk,768,detailBody));
+    refuses([&]{validateMapChunk(badPaletteChunk,chunkRecord,4096);});
+    // Sharing the same background frame across LODs is legal and counted once.
+    auto sharedChunk=chunk,sharedRecord=chunkRecord;
+    backgroundHeader.lastBand=2;backgroundHeader.lod.push_back(backgroundHeader.lod.front());
+    const auto sharedHeader=forge::stbbake::serializeBackgroundTreeHeader(backgroundHeader);
+    std::copy(sharedHeader.begin(),sharedHeader.end(),sharedChunk.begin()+80);setWord(sharedRecord,108,uint32_t(sharedHeader.size()));
+    if(validateMapChunk(sharedChunk,sharedRecord,4096).backgroundFrames!=1)
+        throw std::runtime_error("shared background frame counted twice");
+    auto conflicting=chunk;setWord(conflicting,128,256);setWord(conflicting,132,fgSize);
+    refuses([&]{validateMapChunk(conflicting,chunkRecord,4096);});
+    // A two-child background tree exercises owner-block ends and geometry
+    // partitioning independently of the frame storage checks.
+    auto splitChunk=chunk,splitRecord=chunkRecord;splitChunk.resize(2048);
+    std::copy(chunk.begin()+32,chunk.begin()+68,splitChunk.begin()+1100);
+    std::fill(splitChunk.begin()+32,splitChunk.begin()+68,0);
+    setWord(splitRecord,12,32);setWord(splitRecord,100,1100);
+    auto splitHeader=backgroundHeader;splitHeader.width=32;splitHeader.lastBand=splitHeader.firstNonSplitBand=2;
+    splitHeader.lod.resize(1);splitHeader.fileBlockPos=1280;splitHeader.fileBlockSize=120;
+    auto childHeader=backgroundHeader;childHeader.lastBand=1;childHeader.lod.resize(1);
+    auto putHeader=[&](size_t at,const auto& h) {
+        const auto bytes=forge::stbbake::serializeBackgroundTreeHeader(h);
+        std::copy(bytes.begin(),bytes.end(),splitChunk.begin()+at);
+    };
+    putHeader(80,splitHeader);putHeader(1280,childHeader);childHeader.mapX=16;putHeader(1340,childHeader);
+    if(validateMapChunk(splitChunk,splitRecord,4096).backgroundFrames!=1)
+        throw std::runtime_error("background child owners changed frame count");
+    for(const auto [at,value]:{std::pair<size_t,uint32_t>{80+15,119},{1340,17},{1280+11,1280}}) {
+        auto bad=splitChunk;setWord(bad,at,value);
+        if(at==1280+11)setWord(bad,1280+15,120);
+        refuses([&]{validateMapChunk(bad,splitRecord,4096);});
+    }
+    // A present detail child may have no table. Re-entering the parent's table
+    // must refuse before recursion can loop or reinterpret its bytes.
+    auto childChunk=chunk,childRecord=chunkRecord;
+    // Move the foreground frame away from the expanded detail table.
+    std::copy(chunk.begin()+256,chunk.begin()+256+fgSize,childChunk.begin()+900);
+    std::fill(childChunk.begin()+256,childChunk.begin()+256+fgSize,0);
+    setWord(childChunk,32,900);setWord(childChunk,204,1);setWord(childRecord,125+28,104);
+    validateMapChunk(childChunk,childRecord,4096);
+    setWord(childChunk,208+24,160);setWord(childChunk,208+28,104);
+    refuses([&]{validateMapChunk(childChunk,childRecord,4096);});
     auto relocateRecord=[&](uint32_t base,uint32_t chunk) {
         auto copy=record;
         for(const auto [at,relative]:{std::pair<size_t,uint32_t>{32,92},{36,113},
@@ -223,6 +323,57 @@ int main() {try {
         auto bad=seaTable;setWord(bad,at,value);refuses([&]{validateBankMetadata(seaHeader,bad,128+bad.size());});
     }
     forge::TemporaryDirectory scratch(std::filesystem::temp_directory_path(),"stb-sparse-append-");
+    // A complete compact bank, with physical order differing from TOC order.
+    // Build the BBB envelope independently of the production archive writer.
+    Bytes completeCommon;word(completeCommon,1);completeCommon.push_back('A');completeCommon.push_back(0);word(completeCommon,10);
+    auto completeRecord=chunkRecord;
+    for(const auto [at,relative]:{std::pair<size_t,uint32_t>{32,92},{36,113},{88,238},{92,112},{113,125}})
+        setWord(completeRecord,at,10+relative);
+    setWord(completeRecord,4,7);append(completeCommon,completeRecord);
+    Bytes compact;
+    for(uint32_t v:{0x42424242u,115u,174u,1u,64u,31u,3u,0u})word(compact,v);
+    compact.resize(64);const uint32_t mapAt=uint32_t(compact.size());append(compact,chunk);
+    const uint32_t seaAt=uint32_t(compact.size());compact.resize(compact.size()+8);
+    compact.resize((compact.size()+63)/64*64);const uint32_t manifestAt=uint32_t(compact.size());append(compact,completeCommon);
+    compact.resize((compact.size()+63)/64*64);const uint32_t compactToc=uint32_t(compact.size());setWord(compact,28,compactToc);
+    word(compact,1);word(compact,0);word(compact,3);
+    auto compactName=[&](const std::string& name){word(compact,uint32_t(name.size()));compact.insert(compact.end(),name.begin(),name.end());};
+    auto compactRow=[&](uint32_t id,const std::string& name,uint32_t at,uint32_t length,bool isSea) {
+        const size_t row=compact.size();
+        for(uint32_t v:{42u,id,0u,length,at,0u})word(compact,v);
+        compactName(name);word(compact,0);word(compact,1);compactName(name);word(compact,isSea?16:0);
+        if(isSea)for(uint32_t v:{12u,22u,0u,123u})word(compact,v);
+        return row;
+    };
+    compactRow(31,"__STATIC_MAP_COMMON_HEADER__",manifestAt,uint32_t(completeCommon.size()),false);
+    const auto mapRow=compactRow(7,"A",mapAt,uint32_t(chunk.size()),false);
+    const auto seaRow=compactRow(8,seaName,seaAt,8,true);
+    const auto compactPath=scratch.path()/"compact.stb";
+    auto writeCompact=[&](const Bytes& bytes) {
+        std::ofstream out(compactPath,std::ios::binary);out.write(reinterpret_cast<const char*>(bytes.data()),bytes.size());
+        if(!out)throw std::runtime_error("cannot write compact test fixture");
+    };
+    writeCompact(compact);const auto complete=validateBankStorage(compactPath);
+    if(complete.entries!=3 || complete.maps!=1 || complete.seas!=1 || complete.paletteRows!=1 ||
+       complete.chunks.foregroundFrames!=1 || complete.chunks.backgroundFrames!=1 || complete.chunks.detailFrames!=1 ||
+       complete.zeroBankPaddingBytes!=compactToc-32-chunk.size()-8-completeCommon.size())
+        throw std::runtime_error("whole bank ownership mismatch");
+    {std::ifstream in(compactPath,std::ios::binary);const Bytes after((std::istreambuf_iterator<char>(in)),{});
+     if(after!=compact)throw std::runtime_error("whole bank review changed input");}
+    for(const auto [at,value]:{std::pair<size_t,uint32_t>{32,1},{seaAt+8,1},{compactToc-4,1},
+        {manifestAt+10+4,8},{mapRow+28,'B'},{mapRow+4,9},{seaAt,1},{mapAt+1000,1}}) {
+        auto bad=compact;setWord(bad,at,value);writeCompact(bad);
+        refuses([&]{validateBankStorage(compactPath);});
+    }
+    // A metadata-valid extra non-sea entry remains unowned and must refuse.
+    auto unowned=compact;unowned[seaRow+28]='X';
+    const size_t seaInfoSize=seaRow+40+2*seaName.size();
+    setWord(unowned,seaInfoSize,0);unowned.resize(unowned.size()-16);writeCompact(unowned);
+    refuses([&]{validateBankStorage(compactPath);});
+    for(size_t n:{size_t(0),size_t(31),size_t(compactToc),compact.size()-1}) {
+        writeCompact(Bytes(compact.begin(),compact.begin()+n));refuses([&]{validateBankStorage(compactPath);});
+    }
+    refuses([&]{validateBankStorage(scratch.path()/"missing.stb");});
     const auto source=scratch.path()/"source.stb",destination=scratch.path()/"appended.stb";
     {std::ofstream out(source,std::ios::binary);out.write(reinterpret_cast<const char*>(bank.data()),bank.size());}
     for(size_t added:{size_t(1),size_t(2)}) {

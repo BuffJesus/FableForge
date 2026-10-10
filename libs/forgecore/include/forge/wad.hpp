@@ -2,7 +2,8 @@
 // Reader for Fable TLC level archives (FinalAlbion.wad).
 // Byte layout cross-checked against EgoCore (MIT, AeoN/AlbionSecrets) WADBackend.h
 // and the fabletlcmod.com community documentation:
-//   header: u32 entryCount at offset 20, u32 footerOffset at offset 28
+//   header: u32 maximumEntryId at offset 20, u32 entryCount at offset 24,
+//           u32 footerOffset at offset 28 (native CBankFile layout)
 //   footer: u32 statsCount, statsCount*8 bytes of stats, then per entry:
 //     u32 magic (must be 42), u32 id, u32 type, u32 size, u32 offset, u32 crc,
 //     u32 nameLen + name bytes, u32 timestamp, u32 depCount + (u32 len + bytes)*,

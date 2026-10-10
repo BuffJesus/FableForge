@@ -43,6 +43,43 @@ def main():
     if not a.no_build:
         ok &= run("build", ["cmake", "--build", "build"], capture_output=True)
     ok &= run("CTest (core, rows, geometry, LZO)", ["ctest", "--test-dir", "build", "--output-on-failure"], capture_output=True)
+    for label, script in (
+        ("read-only world storage CLI and per-entry refusals", "test_worldreview_cli.py"),
+        ("LEV exact-name ambiguity and class findings", "test_levsymbols.py"),
+        ("compiled name CRC candidates and stale-report refusal", "test_deflookups.py"),
+        ("read-only namespace CLI, mappings and lookup hazards", "test_namespacereview_cli.py"),
+        ("BIN chunk framing and malformed record boundaries", "test_binboundaries.py"),
+        ("names writer native stream length and preservation", "test_nameswriter.py"),
+        ("new retail BIG entry markers and donor preservation", "test_big_entry_markers.py"),
+        ("definition diagnostic raw-field reconstruction", "test_defsdecode_raw.py"),
+        ("music-array framing, local keys and source path bounds", "test_musicbindings.py"),
+        ("text entry ID parsing, explicit allocation and refusal preservation", "test_text_entry_ids.py"),
+        ("text show strict identity, ambiguity refusal and narrator headers", "test_text_show_identity.py"),
+        ("text import encoding/ID refusal before writes", "test_text_import_validation.py"),
+        ("text speaker header synchronization and unsafe narrator refusal", "test_text_speaker_header.py"),
+        ("text payload truncation and string terminators", "test_text_decode_boundaries.py"),
+        ("texture exact-name priority and ambiguous write refusal", "test_texture_lookup.py"),
+        ("texture dimension validation and output preservation", "test_texture_dimensions.py"),
+        ("texture import option refusal and preservation", "test_texture_import_options.py"),
+        ("animated/volume texture replacement refusal", "test_texture_layout_refusal.py"),
+        ("cutout texture replacement and alpha preservation", "test_texture_cutout.py"),
+        ("new texture entry types and donor preservation", "test_texture_entry_types.py"),
+        ("texture append ID exhaustion and output preservation", "test_texture_id_exhaustion.py"),
+        ("mesh/collision ID exhaustion and install preservation", "test_mesh_id_exhaustion.py"),
+        ("mesh-import strict texture IDs and refusal preservation", "test_mesh_texture_ids.py"),
+        ("mesh donor identity and generated name refusal", "test_mesh_identity_refusal.py"),
+        ("mesh non-finite geometry and bank preservation", "test_mesh_invalid_geometry.py"),
+        ("static mesh replacement and archive preservation", "test_mesh_replace.py"),
+        ("definition finite float/vector edits and byte preservation", "test_defs_finite_values.py"),
+        ("sparse mesh imports and refusal preservation", "test_mesh_sparse.py"),
+        ("triangle strip/fan imports and refusal preservation", "test_mesh_topology.py"),
+        ("combined collision hull index limits and preservation", "test_mesh_collision_limit.py"),
+        ("faction registry domains and literal relationship framing", "test_factionregistry.py"),
+        ("particle literal symbol filtering and accepted field locations", "test_particlebindings.py"),
+        ("bounded minimap reference table inventory", "test_worldassets.py"),
+        ("reviewed TNG definition coverage and ambiguity", "test_thingsymbols.py"),
+    ):
+        ok &= run(label, [sys.executable, "tools/" + script], capture_output=True)
     ok &= run("unchanged bank carries, unsupported sibling/FMP bank refusal and export preservation",
               [sys.executable, "tools/test_mod_bank_refusal.py"], capture_output=True)
     ok &= run("whole-bank slots, sibling banks and granular conflict choices",
@@ -54,6 +91,28 @@ def main():
     ok &= run("finite float conflict text and exact selected bank bits",
               [sys.executable, "tools/test_mod_float_values.py"], capture_output=True)
     if os.name == "nt":
+        ok &= run("restore language/root aliases and stage-created running ownership",
+                  [sys.executable, "tools/test_text_restore_alias_guard.py"], capture_output=True)
+        ok &= run("text bank prepared verification, locked publication, backups and running destination guards",
+                  [sys.executable, "tools/test_text_write_publication.py"], capture_output=True)
+        ok &= run("text browser property jumps, narrator lists, TSV preservation and language/root fallback",
+                  [sys.executable, "tools/test_text_browser_ui.py"], capture_output=True)
+        ok &= run("mod output publish rollback, running destination refusal and exit retry",
+                  [sys.executable, "tools/test_mod_output_publish.py"], capture_output=True)
+        ok &= run("cutout texture replacement in the editor",
+                  [sys.executable, "tools/test_texture_cutout.py", "--ui"], capture_output=True)
+        ok &= run("animated/volume texture visible replacement refusal",
+                  [sys.executable, "tools/test_texture_layout_refusal.py", "--ui"], capture_output=True)
+        ok &= run("model format UI imports, visible refusal and preserved preview",
+                  [sys.executable, "tools/test_mesh_format_ui.py"], capture_output=True)
+        ok &= run("static mesh replacement UI, visible refusal and refreshed preview",
+                  [sys.executable, "tools/test_mesh_replace_ui.py"], capture_output=True)
+        ok &= run("texture UI exact names, ambiguous shortcuts and max ID",
+                  [sys.executable, "tools/test_texture_names_ui.py"], capture_output=True)
+        ok &= run("model UI exact names and ambiguous ID/name preservation",
+                  [sys.executable, "tools/test_model_names_ui.py"], capture_output=True)
+        ok &= run("effect exact names, unique fallback and duplicate refusal",
+                  [sys.executable, "tools/test_effect_names.py"], capture_output=True)
         for options in ([], ["--complete-data"]):
             ok &= run("Windows Unicode file identity, choices and exact restoration " + str(options),
                       [sys.executable, "tools/test_mod_unicode_file_identity.py", *options], capture_output=True)
@@ -101,9 +160,9 @@ def main():
                   [sys.executable, "tools/test_model_import_form.py", "--install", install_root], capture_output=True)
         if os.name == "nt":
             for options in ([], ["--invalid"], ["--add"], ["--add", "--invalid"]):
-                ok &= run("Texture image refusal, persistent error, retry and exact Restore " + str(options),
+                ok &= run("Texture image refusal, persistent error, retry and exact Restore (bounded retail-derived bank) " + str(options),
                           [sys.executable, "tools/test_texture_replace_failure_ui.py", "--install", install_root,
-                           *options], capture_output=True)
+                           "--small-bank", *options], capture_output=True)
             for mode in ("redeploy", "report", "missing", "unnamed", "sibling", "record"):
                 ok &= run(f"Mods {mode} persistent errors, preserved files and same-process retry",
                           [sys.executable, "tools/test_mod_action_error_ui.py", "--install", install_root,
@@ -245,6 +304,68 @@ def main():
               [sys.executable, "tools/test_mod_asset_health.py"], capture_output=True)
     ok &= run("backup manager (every suffix, stage revert + rebase)", [sys.executable, "tools/test_backups.py"], capture_output=True)
     ok &= run("Setup restore (scratch loose level, GUI reload)", [sys.executable, "tools/test_setup_restore_ui.py"], capture_output=True)
+    ok &= run("Localization backup discovery, text-reader barrier and refreshed restore preview",
+              [sys.executable, "tools/test_text_backup_restore.py"], capture_output=True)
+    ok &= run("Text content editing, metadata/original preservation and stale-edit refusal",
+              [sys.executable, "tools/test_text_content_edit_ui.py"], capture_output=True)
+    ok &= run("Donor-based text addition, free IDs and unsafe-addition refusal",
+              [sys.executable, "tools/test_text_donor_add_ui.py"], capture_output=True)
+    ok &= run("Text speaker picker, narrator indices, metadata preservation and stale-header refusal",
+              [sys.executable, "tools/test_text_speaker_picker_ui.py"], capture_output=True)
+    ok &= run("Text speech-bank/identifier inputs, ASCII/legacy preservation and stale metadata refusal",
+              [sys.executable, "tools/test_text_metadata_ui.py"], capture_output=True)
+    ok &= run("Text tag controls, ordering, signed positions and stale/legacy preservation",
+              [sys.executable, "tools/test_text_tags_ui.py"], capture_output=True)
+    ok &= run("Text metadata byte display/export, valid UTF-8 JSON/TSV and source preservation",
+              [sys.executable, "tools/test_text_byte_export.py"], capture_output=True)
+    ok &= run("Definition vector controls, exact component preservation and malformed-value refusal",
+              [sys.executable, "tools/test_definition_vector_edit_ui.py"], capture_output=True)
+    ok &= run("Definition donor cloning, paired publication, rollback and exact Restore",
+              [sys.executable, "tools/test_definition_clone.py"], capture_output=True)
+    ok &= run("Definition existing-name picker, exact field deltas, invalid offsets and Restore",
+              [sys.executable, "tools/test_definition_name_picker_ui.py"], capture_output=True)
+    ok &= run("Definition owning names offsets, duplicate names, refresh and source preservation",
+              [sys.executable, "tools/test_definition_name_labels_ui.py"], capture_output=True)
+    ok &= run("Definition terrain texture IDs, bank scope, ambiguity and protected drafts",
+              [sys.executable, "tools/test_definition_texture_ui.py"], capture_output=True)
+    ok &= run("Definition object model IDs, numeric names, ambiguity and protected drafts",
+              [sys.executable, "tools/test_definition_model_ui.py"], capture_output=True)
+    ok &= run("Definition type/group trees, group search, virtualized selection and protected drafts",
+              [sys.executable, "tools/test_definition_tree_ui.py"], capture_output=True)
+    ok &= run("Definition group navigation, typed targets, numeric names and protected drafts",
+              [sys.executable, "tools/test_definition_groups_ui.py"], capture_output=True)
+    ok &= run("Definition scalar drafts, real inputs, destinations, stale guards, close review and Restore",
+              [sys.executable, "tools/test_definition_edit_ui.py"], capture_output=True)
+    ok &= run("Definition wide ASCII drafts, native encoding, real inputs and protected Unicode originals",
+              [sys.executable, "tools/test_definition_wide_edit_ui.py"], capture_output=True)
+    ok &= run("Definition integer bounds, signed name references and exact field deltas",
+              [sys.executable, "tools/test_definition_integer_bounds.py"], capture_output=True)
+    ok &= run("Definition native UTF16 terminators, malformed-layout guards and source preservation",
+              [sys.executable, "tools/test_definition_wide_layout.py"], capture_output=True)
+    ok &= run("Definition inline ASCII strings, real inputs, size boundaries and legacy-byte refusal",
+              [sys.executable, "tools/test_definition_string_edit_ui.py"], capture_output=True)
+    ok &= run("Definition string terminators, opaque-byte refusal and exact unrelated fields",
+              [sys.executable, "tools/test_definition_string_layout.py"], capture_output=True)
+    ok &= run("Definition colour picker, real RGBA channels, exact no-ops and invalid-layout refusal",
+              [sys.executable, "tools/test_definition_colour_edit_ui.py"], capture_output=True)
+    ok &= run("Definition native BGRA colours, RGBA input, component bounds and preserved neighbors",
+              [sys.executable, "tools/test_definition_colour.py"], capture_output=True)
+    ok &= run("Definition scalar widths, opaque-trailer refusal and preserved source",
+              [sys.executable, "tools/test_definition_layout.py"], capture_output=True)
+    ok &= run("Definition bank publication, exact name pools, locks, aliases and recovery",
+              [sys.executable, "tools/test_definition_publication.py"], capture_output=True)
+    ok &= run("Definition field selectors, ambiguous-name refusal and one-field preservation",
+              [sys.executable, "tools/test_definition_selector.py"], capture_output=True)
+    ok &= run("Definition browser controls, confirmed fields, raw fallback and unchanged source",
+              [sys.executable, "tools/test_definition_browser_ui.py"], capture_output=True)
+    ok &= run("Text draft close prompt, review/save/cancel/discard and failed-save retention",
+              [sys.executable, "tools/test_text_close_prompt_ui.py"], capture_output=True)
+    ok &= run("Text pack destination, composition, manifest guards and tracked-folder recovery",
+              [sys.executable, "tools/test_text_pack_destination_ui.py"], capture_output=True)
+    ok &= run("Text-only tracked-folder Restore, running-owner aliases and stage recovery",
+              [sys.executable, "tools/test_text_restore_alias_guard.py", "--text-only"], capture_output=True)
+    ok &= run("Text folder creation, recovery tracking and external-destination refusal",
+              [sys.executable, "tools/test_text_folder_destination_ui.py"], capture_output=True)
     ok &= run("Setup locked-write error visibility, preserved bytes and same-process retry",
               [sys.executable, "tools/test_setup_restore_failure_ui.py"], capture_output=True)
     ok &= run("Setup partial restore, selected-map refresh and remaining locked target retry",
@@ -286,14 +407,14 @@ def main():
                   [sys.executable, "tools/test_setup_asset_restore.py", "--install", install_root], capture_output=True)
     ok &= run("Install switch (scratch roots, unsaved edit and invalid path)",
               [sys.executable, "tools/test_install_switch_ui.py"], capture_output=True)
-    ok &= run("Project Seasons refusal + content-only WAD fixture (skips without the pack)", [sys.executable, "tools/test_gbpack.py"], capture_output=True)
-    ok &= run("Seasons/AlbionSecrets refusals + overlapping content-only WAD fixtures (skips without both)",
-              [sys.executable, "tools/test_gbpack.py", "--pack", "both"], capture_output=True)
+    ok &= run("Project Seasons bank preservation + level/WAD fixture without graphics (skips without the pack)", [sys.executable, "tools/test_gbpack.py", "--skip-graphics"], capture_output=True)
+    ok &= run("Seasons/AlbionSecrets bank preservation + overlapping level/WAD fixtures without graphics (skips without both)",
+              [sys.executable, "tools/test_gbpack.py", "--pack", "both", "--skip-graphics"], capture_output=True)
     ok &= run("Dragon Cliff Restored (root WAD levels and asset references; skips without the archive)",
               [sys.executable, "tools/test_dragoncliff.py"], capture_output=True)
     ok &= run("Lost Content refusal + content-only WAD payloads (skips without the archive)",
               [sys.executable, "tools/test_lost_content.py"], capture_output=True)
-    ok &= run("Expanded Chapters refusal + content-only WAD payloads (skips without both archives)",
+    ok &= run("Expanded Chapters bank/text preservation and WAD payloads (skips without both archives)",
               [sys.executable, "tools/test_expanded_chapters.py"], capture_output=True)
     ok &= run("custom mesh import (.obj + .glb cube into scratch banks)", [sys.executable, "tools/test_meshimport.py"], capture_output=True)
     ok &= run("custom theme import (base/cliff textures, failure rollback)", [sys.executable, "tools/test_custom_theme.py"], capture_output=True)
