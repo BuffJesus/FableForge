@@ -1,4 +1,4 @@
-> Active continuation: [private Creature visual graph recovery](HANDOFF_CREATURE_CLONE_2026-10-10.md). GUI milestone a04ba4c passes CI. Read-only CDefs/native/PDB evidence establishes visual targets and original-parent ownership; 502 three-node graphs observed, 25 with unresolved candidates. Private writer remains next. RC2 unchanged.
+> Active continuation: [private Creature visual cloning](HANDOFF_CREATURE_CLONE_2026-10-10.md). Canonical animation boundaries now resolve appearance findings; 494 of 502 observed three-node graphs have no unresolved candidates, eight root findings remain. Private append/ownership plan is next; no eligibility claim. RC2 unchanged.
 
 # Navigation lane, 2026-09-27
 

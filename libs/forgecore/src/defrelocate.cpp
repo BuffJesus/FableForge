@@ -165,6 +165,8 @@ Analysis analyze(const bin::Entry& entry, const defschema::Schema& schema, const
             field.name == "StatLevels" && field.type == "vector<CAbilityTrackDef>";
         const bool tavernScoreText = entry.definition == "CTavernGameDef" &&
             field.name == "BestScore" && field.type == "?";
+        const bool appearanceAnimation = entry.definition == "CAppearanceDef" &&
+            field.name == "Animation" && field.type == "CAnimationSet";
         const bool primitiveVector = field.type == "Vector_J" || field.type == "Vector_K" ||
             field.type == "Vector_int32" || field.type == "Vector_uint32" || field.type == "Vector_float" || heroCosts;
         const bool primitiveMap = field.type == "Map_JJ" || field.type == "Map_KK" ||
@@ -207,6 +209,78 @@ Analysis analyze(const bin::Entry& entry, const defschema::Schema& schema, const
             // 022D72F0, which resolves it through the game text bank.
             if (field.value.size() != 4) fail(entry, "invalid tavern score text width");
             cover(at, 4);
+        } else if (appearanceAnimation) {
+            // FableWin set in/out 01FA26B0/01FA27A0 and entry in/out
+            // 01F9D270/01F9D590: count, {name CRC, animation-bank index,
+            // AnimName, GroupName, counted discriminated components}, then
+            // three defaults and DefaultGroup. Matching PDB EAnimComponent
+            // and the thirteen reader/writer pairs establish each body.
+            // BankIndex is passed to CMeshDataBank::PeekAnimation at 01FA0C81;
+            // Add obtains the key from AnimName.GetCRC at 01FA0F8F.
+            size_t cursor = 0;
+            auto take = [&](size_t size) {
+                if (cursor > field.value.size() || size > field.value.size() - cursor)
+                    fail(entry, "truncated appearance animation body");
+                const auto offset = cursor; cursor += size; return offset;
+            };
+            auto scalar = [&] { const auto offset = take(4); cover(at + offset, 4);
+                               return word(field.value, offset); };
+            auto opaque = [&] {
+                const auto offset = take(4);
+                primitiveBoundaries.push_back(at + offset);
+                primitiveBoundaries.push_back(at + offset + 4);
+            };
+            auto nameOffset = [&](std::string path) {
+                reference(at + take(4), Domain::NameOffset, std::move(path));
+            };
+            auto boolean = [&] {
+                const auto offset = take(1);
+                if (field.value[offset] > 1) fail(entry, "invalid appearance animation boolean");
+                cover(at + offset, 1);
+            };
+            if (field.value.size() < 20) fail(entry, "truncated appearance animation defaults");
+            const size_t count = scalar();
+            if (count > (field.value.size() - 20) / 20)
+                fail(entry, "invalid appearance animation entry count");
+            for (size_t i = 0; i < count; ++i) {
+                const auto path = "Animation[" + std::to_string(i) + "]";
+                scalar(); // Name CRC, not an offset.
+                scalar(); // Animation asset bank, never a game entry.
+                nameOffset(path + ".AnimName");
+                nameOffset(path + ".GroupName");
+                const size_t components = scalar();
+                if (components > 13) fail(entry, "invalid appearance animation component count");
+                uint32_t seen = 0;
+                for (size_t j = 0; j < components; ++j) {
+                    const auto kind = scalar();
+                    if (kind > 12 || (seen & (1u << kind)))
+                        fail(entry, "unknown or duplicate appearance animation component");
+                    seen |= 1u << kind;
+                    const auto component = path + ".Components[" + std::to_string(kind) + "]";
+                    if (kind == 12) {
+                        const size_t length = scalar();
+                        const auto offset = take(length); cover(at + offset, length);
+                    } else if (kind == 8 || kind == 11) {
+                        nameOffset(component + ".Name");
+                    } else if (kind == 6 || kind == 7) {
+                        boolean();
+                        if (kind == 6) boolean();
+                        else { scalar(); scalar(); } // Two floats, packed after the bool.
+                    } else if (kind == 4 || kind == 5) {
+                        // PDB says ComboStage/ComboID or RecoilAnimIndex, but
+                        // their runtime value domains are not established yet.
+                        // Distinct primitive boundaries exclude straddled matches;
+                        // equal whole integers still refuse rather than guessing.
+                        opaque(); if (kind == 4) opaque();
+                    } else {
+                        scalar(); // Flags, timing, float multiplier or mode enum.
+                        if (kind == 3) scalar(); // Start/end handedness enums.
+                    }
+                }
+            }
+            scalar(); scalar(); scalar(); // DefaultFlags, TransitionTime, Delay.
+            nameOffset("Animation.DefaultGroup");
+            if (cursor != field.value.size()) fail(entry, "trailing appearance animation bytes");
         } else if (statLevels) {
             // Native transfers 01A0E34C/01A0F440. UI 023B058A passes both
             // nested Description and MaxedOutDescription to GetInventoryText.

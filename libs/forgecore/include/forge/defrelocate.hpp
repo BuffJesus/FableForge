@@ -30,7 +30,8 @@ struct Analysis {
 };
 
 // Inspect one decoded-bank payload. Recognizes OBJECT/BUILDING/CREATURE CDefs listings,
-// verified hero-ability, brain-behaviour and shop-stock reference layouts, and
+// verified hero-ability, brain-behaviour, shop-stock and appearance animation
+// reference layouts, and
 // explicitly typed CDefIndex/CDefString scalar/vector fields. Other integer
 // fields are not inferred to be references. Every-byte candidate scanning is
 // a conservative rejection guard, never a source of rewrite locations.

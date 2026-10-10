@@ -11,6 +11,7 @@ import hashlib
 import json
 from pathlib import Path
 import struct
+import subprocess
 import tempfile
 from test_fmp_links import read_bank, crc0
 from audit_creature_visual_graph import listing
@@ -71,7 +72,10 @@ def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--install',type=Path)
     parser.add_argument('--work-root',type=Path,default=Path(__file__).resolve().parents[1]/'build')
+    parser.add_argument('--payload-exe',type=Path,help='Optional canonical relocation audit executable')
+    parser.add_argument('--schema',type=Path,default=Path(__file__).resolve().parents[1]/'docs/re_reference/def_schema.json')
     args=parser.parse_args();self_test()
+    assert not args.payload_exe or args.install,'canonical audit requires an explicit native install'
     if not args.install:
         print('Animation layout synthetic checks PASS');return
     sources=[args.install/'data/CompiledDefs'/name for name in ('game.bin','names.bin')]
@@ -101,13 +105,42 @@ def main():
                 overlaps=[s for s in spans if relative<s['offset']+s['size'] and relative+4>s['offset']]
                 observations.append(dict(root=index,appearance=component,offset=offset,value=index,
                     spans=overlaps,whole_primitive=len(overlaps)==1 and overlaps[0]['offset']==relative and overlaps[0]['size']==4))
-    assert all(hashlib.sha256(p.read_bytes()).hexdigest()==hashes[str(p)] for p in sources),'native bank changed'
     args.work_root.resolve().mkdir(parents=True,exist_ok=True)
     work=Path(tempfile.mkdtemp(prefix='creature-animation-audit-',dir=args.work_root.resolve()))
     report=dict(source_sha256=hashes,counts=dict(counts),layout_failures=failures,
                 candidate_observations=observations,clone_eligibility_verified=False)
+    if args.payload_exe:
+        result=subprocess.run([str(args.payload_exe.resolve()),'--creature-animation-name-audit',
+            str(args.install.resolve()),str(args.schema.resolve())],capture_output=True,text=True,timeout=120)
+        assert result.returncode==0,result.stderr
+        payloads=json.loads(result.stdout)
+        assert not payloads['clone_eligibility_verified']
+        maps=dict(payloads['name_map']);seen=set();rewrites=0
+        for row in payloads['records']:
+            index=row['index'];assert index in decoded and index not in seen;seen.add(index)
+            end,spans=decoded[index];original=records[index]['data']
+            before=original[:3]+struct.pack('<I',crc0('Animation'))+original[28:28+end]
+            assert bytes.fromhex(row['before_hex'])==before and not row['unresolved']
+            expected=bytearray(before);locations={}
+            for span in spans:
+                if span['label'].split('.')[-1] not in ('AnimName','GroupName','DefaultGroup') and not span['label'].endswith('.name_offset'):continue
+                value=struct.unpack_from('<I',before,7+span['offset'])[0]
+                if value in (0,0xffffffff):continue
+                assert value in maps,'native name reference missing from audit map'
+                locations[7+span['offset']]=(value,maps[value])
+                struct.pack_into('<I',expected,7+span['offset'],maps[value])
+            assert len(row['rewrites'])==len(locations)
+            for rewrite in row['rewrites']:
+                assert rewrite['domain']=='name' and locations[rewrite['offset']]==(rewrite['before'],rewrite['after'])
+            assert bytes.fromhex(row['after_hex'])==expected,'unexpected animation payload delta'
+            rewrites+=len(locations)
+        assert seen==set(decoded)
+        report['canonical_name_audit']=dict(payloads=len(seen),verified_name_rewrites=rewrites)
+        (work/'payloads.json').write_text(json.dumps(payloads,indent=2)+'\n',encoding='utf-8')
+    assert all(hashlib.sha256(p.read_bytes()).hexdigest()==hashes[str(p)] for p in sources),'native bank changed'
     (work/'result.json').write_text(json.dumps(report,indent=2)+'\n',encoding='utf-8')
-    print(json.dumps(dict(counts=dict(counts),layout_failures=len(failures),candidates=len(observations))))
+    print(json.dumps(dict(counts=dict(counts),layout_failures=len(failures),candidates=len(observations),
+                         canonical_name_audit=report.get('canonical_name_audit'))))
     print('Read-only animation observations retained at',work)
     assert not failures,'appearance layout failures: inspect retained observations'
 

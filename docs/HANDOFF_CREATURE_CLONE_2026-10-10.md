@@ -279,3 +279,41 @@ Registered native/synthetic gates; no full-suite or new shipping archive claim.
 Next: translate these verified primitive/reference boundaries into canonical
 relocation coverage, testing name-offset remapping and strict malformed refusal.
 Then implement the coordinated private visual plan with localized parent updates.
+
+## Canonical animation relocation coverage
+
+`defrelocate` now recognizes only CAppearanceDef.Animation/CAnimationSet. It
+checks entry counts, all thirteen component shapes, duplicate/unknown selectors,
+canonical booleans, inline string extents, defaults and exact end-of-value.
+AnimName, GroupName, DefaultGroup and component 8/11 CDefStrings use the existing
+NameOffset domain; CRC keys, animation-bank indices, flags, timings, enum/float
+values and inline bytes stay exact. ComboStage/ComboID and RecoilAnimIndex have
+verified primitive boundaries but whole matching integers remain refused until
+their runtime domains are established. Nothing is inferred from integer equality.
+
+Synthetic all-variant, simultaneous-domain, unknown-owner, count/duplicate/type,
+boolean/string/trailer and every-truncation checks pass. Two initial fixture
+mistakes (partial-word mutation and missing scan candidates in very short values)
+were corrected; final affected CTest passes. Five affected/neighbor CTests pass:
+defrelocate, defnamespace, binclone, fmplinks and binwrite. Not a full-suite claim.
+
+Read-only `creature-visual-graph-d3hdld8y` checks all 502 three-node graphs:
+494 now have no unresolved candidates; eight root payload findings remain.
+All 1,506 payloads round-trip; 2,435 verified root rewrites and zero body or
+appearance rewrites. Native bank hashes unchanged. The former twenty appearance
+findings are resolved as asset fields or straddled primitive windows, not remapped.
+
+`creature-animation-audit-nzpfyd8g` independently verifies canonical relocation
+on isolated native Animation values from all 320 appearance entries. All 38,351
+non-null native name-offset words relocate to synthetic in-memory destinations;
+the full before/after bytes match only those independently located words.
+Every actual non-null reference is covered by the audit map (native minimum
+106,608; map includes names offsets >=65,536). Small-offset ambiguity is tested
+synthetically, not claimed as fully classified. Other appearance fields are not
+included in this name-rebase audit. Source banks unchanged; no installed outputs,
+new archive, gameplay, transaction or private visual clone eligibility claim.
+
+Next: implement the coordinated root/body/appearance append plan. Selected visual
+rows must receive new component indices and localized new-root original parents;
+unselected shared gameplay rows retain their original-parent bytes. Do not use
+a value-wide old-parent map or mark borrowed components as privately owned.

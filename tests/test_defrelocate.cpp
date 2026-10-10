@@ -27,6 +27,24 @@ Bytes fixture(bool moved) {
     field(out, "Other", {12345});
     return out;
 }
+Bytes animationFixture(bool moved) {
+    Bytes out{1,0,1};
+    field(out,"Animation",{1,77,77,moved ? 900u : 77u,moved ? 900u : 77u,13});
+    for (uint32_t kind=0;kind<=12;++kind) {
+        word(out,kind);
+        if (kind==3) { word(out,77);word(out,77); }
+        else if (kind==4) { word(out,1);word(out,60); }
+        else if (kind==5) word(out,12345);
+        else if (kind==6) { out.push_back(1);out.push_back(0); }
+        else if (kind==7) { out.push_back(0);word(out,77);word(out,77); }
+        else if (kind==8 || kind==11) word(out,moved ? 900 : 77);
+        else if (kind==12) { word(out,5);word(out,77);out.push_back('X'); }
+        else word(out,77);
+    }
+    word(out,77);word(out,77);word(out,77);word(out,moved ? 900 : 77);
+    field(out,"Tail",{});out.push_back(0);
+    return out;
+}
 std::string hex(const Bytes& data) {
     static constexpr char digits[] = "0123456789abcdef";
     std::string out;
@@ -79,6 +97,57 @@ int audit(char** argv) {
 }
 
 int main(int argc, char** argv) {
+    if (argc == 4 && std::string_view(argv[1]) == "--creature-animation-name-audit") {
+        try {
+            using namespace forge;
+            const auto folder=std::filesystem::path(argv[2])/"data"/"CompiledDefs";
+            const auto schema=defschema::Schema::load(argv[3]);
+            const auto source=bin::File::open(folder/"names.bin",folder/"game.bin");
+            const auto isolatedSchema=defschema::Schema::loadText(R"({
+                "CAppearanceDef":{"prefix_len":3,"fields":[{"name":"Animation","type":"CAnimationSet"}]}
+            })");
+            // In-memory synthetic destinations only. The independent auditor
+            // verifies that every non-null native Animation name is in this
+            // map; low integers stay out so unproven combo/recoil domains are
+            // not implicitly claimed. Small-name collisions have CTest cases.
+            defrelocate::Maps maps;
+            uint64_t offset=4;
+            for(const auto& name:source.originalNames()) {
+                if(offset>=65536) {
+                    if(offset+0x10000000>=UINT32_MAX) throw std::runtime_error("animation audit name overflow");
+                    maps.nameOffsets.emplace(uint32_t(offset),uint32_t(offset+0x10000000));
+                }
+                offset+=name.second.size()+5;
+            }
+            nlohmann::json rows=nlohmann::json::array();
+            for(size_t i=0;i<source.entries().size();++i) {
+                const auto& entry=source.entries()[i];if(entry.definition!="CAppearanceDef") continue;
+                const auto decoded=defdecode::decode(entry,schema);
+                if(!decoded.clean() || defdecode::encode(decoded)!=entry.data || decoded.prefixLen!=3)
+                    throw std::runtime_error("animation audit appearance decode mismatch");
+                std::vector<const defdecode::DecodedField*> matches;
+                for(const auto& field:decoded.fields) if(field.name=="Animation" && field.type=="CAnimationSet" && field.tagOk)
+                    matches.push_back(&field);
+                if(matches.size()!=1) throw std::runtime_error("animation audit requires one verified field");
+                bin::Entry isolated{"CAppearanceDef",entry.name,entry.indexInDefinition,decoded.prefix};
+                word(isolated.data,defdecode::fieldTag("Animation"));
+                isolated.data.insert(isolated.data.end(),matches.front()->value.begin(),matches.front()->value.end());
+                const auto analysis=defrelocate::analyze(isolated,isolatedSchema,maps);
+                nlohmann::json row{{"index",i},{"before_hex",hex(isolated.data)},
+                    {"rewrites",nlohmann::json::array()},{"unresolved",nlohmann::json::array()}};
+                for(const auto& rewrite:analysis.rewrites)
+                    row["rewrites"].push_back({{"offset",rewrite.offset},{"before",rewrite.before},
+                        {"after",rewrite.after},{"path",rewrite.path},
+                        {"domain",rewrite.domain==defrelocate::Domain::GameEntry?"game":"name"}});
+                for(const auto& candidate:analysis.unresolved)
+                    row["unresolved"].push_back({{"offset",candidate.offset},{"value",candidate.value}});
+                if(analysis.unresolved.empty()) row["after_hex"]=hex(defrelocate::relocate(isolated,isolatedSchema,maps));
+                rows.push_back(std::move(row));
+            }
+            std::cout<<nlohmann::json{{"records",rows},{"name_map",maps.nameOffsets},
+                {"clone_eligibility_verified",false}}.dump()<<'\n';return 0;
+        } catch(const std::exception& e) {std::fprintf(stderr,"%s\n",e.what());return 1;}
+    }
     if (argc == 4 && std::string_view(argv[1]) == "--creature-visual-audit") {
         try {
             using namespace forge;
@@ -452,6 +521,66 @@ int main(int argc, char** argv) {
     rejects([&] { defrelocate::relocate(badSound,soundSchema,soundMaps); }, "music row count must match full value");
     badSound = sound; badSound.data.pop_back();
     rejects([&] { defrelocate::relocate(badSound,soundSchema,soundMaps); }, "reverb row must contain all 21 floats");
+    const auto animationSchema = defschema::Schema::loadText(R"({
+        "CAppearanceDef":{"fields":[{"name":"Animation","type":"CAnimationSet"},
+            {"name":"Tail","type":"bool"}]},
+        "UNVERIFIED_ANIMATION":{"fields":[{"name":"Animation","type":"CAnimationSet"},
+            {"name":"Tail","type":"bool"}]}
+    })");
+    bin::Entry animation{"CAppearanceDef","ANIMATION_DOMAINS",0,animationFixture(false)};
+    const defrelocate::Maps animationMaps{{{77,88},{15360,20000}},{{77,900},{15360,21000}}};
+    const auto animationAnalysis = defrelocate::analyze(animation,animationSchema,animationMaps);
+    check(animationAnalysis.unresolved.empty() && animationAnalysis.rewrites.size()==5,
+          "all thirteen animation variants identify only five native names-offset references");
+    check(defrelocate::relocate(animation,animationSchema,animationMaps)==animationFixture(true),
+          "animation CRCs, asset IDs, scalar bits, inline strings and cross-primitive matches stay exact");
+    check(defrelocate::relocate(animation,animationSchema,defrelocate::Maps{{{77,88},{15360,20000}}, {}})==animation.data,
+          "animation names and asset IDs never become game-entry references");
+    check(animation.data==animationFixture(false),"animation relocation leaves input unchanged");
+    auto badAnimation=animation;
+    badAnimation.data[7]=2;
+    rejects([&] {defrelocate::relocate(badAnimation,animationSchema,animationMaps);},"animation entry count requires complete rows");
+    badAnimation=animation;for(size_t i=7;i<11;++i) badAnimation.data[i]=255;
+    rejects([&] {defrelocate::relocate(badAnimation,animationSchema,animationMaps);},"overflowing animation entry count refuses");
+    badAnimation=animation;badAnimation.data[27]=14;
+    rejects([&] {defrelocate::relocate(badAnimation,animationSchema,animationMaps);},"animation component count is bounded");
+    badAnimation=animation;badAnimation.data[31]=13;
+    rejects([&] {defrelocate::relocate(badAnimation,animationSchema,animationMaps);},"unknown animation component refuses");
+    badAnimation=animation;badAnimation.data[39]=0;
+    rejects([&] {defrelocate::relocate(badAnimation,animationSchema,animationMaps);},"duplicate animation component refuses");
+    for(const auto offset:{91u,97u}) {
+        badAnimation=animation;badAnimation.data[offset]=2;
+        rejects([&] {defrelocate::relocate(badAnimation,animationSchema,animationMaps);},"animation bool must be canonical");
+    }
+    badAnimation=animation;for(size_t i=142;i<146;++i) badAnimation.data[i]=255;
+    rejects([&] {defrelocate::relocate(badAnimation,animationSchema,animationMaps);},"animation inline string length must fit");
+    badAnimation=animation;badAnimation.data.insert(badAnimation.data.end()-5,0);
+    rejects([&] {defrelocate::relocate(badAnimation,animationSchema,animationMaps);},"animation trailing data refuses");
+    badAnimation=animation;badAnimation.data.erase(badAnimation.data.end()-6);
+    rejects([&] {defrelocate::relocate(badAnimation,animationSchema,animationMaps);},"truncated animation defaults refuse");
+    for(const auto offset:{71u,75u,83u}) {
+        badAnimation=animation;
+        for(size_t i=0;i<4;++i) badAnimation.data[offset+i]=uint8_t(77u >> (8*i));
+        rejects([&] {defrelocate::relocate(badAnimation,animationSchema,animationMaps);},
+                "unproven whole combo/recoil integers remain refusal candidates");
+    }
+    auto truncationMaps=animationMaps;
+    // The structural tag is always present even before a truncated value's
+    // first numeric candidate; force analysis rather than its no-candidate no-op.
+    truncationMaps.gameEntries.emplace(defdecode::fieldTag("Animation"),1234567);
+    for(size_t end=7;end<animation.data.size()-5;++end) {
+        badAnimation=animation;badAnimation.data.resize(end);
+        field(badAnimation.data,"Tail",{});badAnimation.data.push_back(0);
+        rejects([&] {defrelocate::relocate(badAnimation,animationSchema,truncationMaps);},
+                "every truncated animation value refuses before reference output");
+    }
+    badAnimation=animation;badAnimation.definition="UNVERIFIED_ANIMATION";
+    rejects([&] {defrelocate::relocate(badAnimation,animationSchema,animationMaps);},"animation layout is limited to its verified owner/field");
+    bin::Entry emptyAnimation{"CAppearanceDef","EMPTY_ANIMATION",0,{1,0,1}};
+    field(emptyAnimation.data,"Animation",{0,77,77,77,77});field(emptyAnimation.data,"Tail",{});emptyAnimation.data.push_back(0);
+    auto emptyExpected=emptyAnimation.data;emptyExpected[23]=132;emptyExpected[24]=3;
+    check(defrelocate::relocate(emptyAnimation,animationSchema,animationMaps)==emptyExpected,
+          "empty animation set still relocates only DefaultGroup");
     const auto expressionSchema = defschema::Schema::loadText(R"({
         "CExpressionSubDef":{"fields":[{"name":"ExpressionDef","type":"int32"}]}})");
     bin::Entry expression{"CExpressionSubDef","EXPRESSION_OWNER",0,{0,0,0}};
