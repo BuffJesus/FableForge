@@ -1,0 +1,451 @@
+#include "forge/lev.hpp"
+
+#include <cmath>
+#include <cstring>
+#include <fstream>
+#include <iterator>
+#include <limits>
+#include <stdexcept>
+
+namespace fs = std::filesystem;
+
+namespace forge::lev {
+namespace {
+
+constexpr size_t kCellSize = 21;
+constexpr uint16_t kLevVersion = 6404;
+constexpr size_t kPaletteSize = 33792;
+
+// Ground-theme palette: 256 x { char name[128]; u32 defIndex } immediately after
+// the 25-byte LEVHeader and the 22-byte LEVMapHeader.
+constexpr size_t kThemeTableOffset = 25 + 22;
+constexpr size_t kThemeEntrySize = 128 + 4;
+constexpr size_t kThemeEntryCount = 256;
+
+class Reader {
+public:
+    explicit Reader(const fs::path& path) : file_(path, std::ios::binary) {
+        if (!file_.is_open()) {
+            throw std::runtime_error("lev: cannot open " + path.string());
+        }
+    }
+
+    void read(void* out, size_t count, const char* what) {
+        file_.read(static_cast<char*>(out), static_cast<std::streamsize>(count));
+        if (!file_) {
+            throw std::runtime_error(std::string("lev: truncated while reading ") + what);
+        }
+    }
+
+    template <typename T>
+    T readValue(const char* what) {
+        T value{};
+        read(&value, sizeof(T), what);
+        return value;
+    }
+
+    std::string readCountedString(const char* what) {
+        const uint32_t length = readValue<uint32_t>(what);
+        if (length > 4096) {
+            throw std::runtime_error(std::string("lev: implausible string length in ") + what);
+        }
+        std::string value(length, '\0');
+        read(value.data(), length, what);
+        return value;
+    }
+
+    void seek(uint32_t offset) { file_.seekg(offset, std::ios::beg); }
+    uint32_t tell() { return static_cast<uint32_t>(file_.tellg()); }
+    void skip(size_t count) { file_.seekg(static_cast<std::streamoff>(count), std::ios::cur); }
+
+private:
+    std::ifstream file_;
+};
+
+} // namespace
+
+File File::open(const fs::path& path) {
+    Reader reader(path);
+    File result;
+    result.source_ = path.filename().string();
+
+    // LEVHeader, 25 bytes
+    uint8_t header[25];
+    reader.read(header, sizeof(header), "header");
+    uint16_t version;
+    std::memcpy(&version, header + 4, 2);
+    if (version != kLevVersion) {
+        throw std::runtime_error("lev: bad version " + std::to_string(version) +
+                                 " in " + result.source_);
+    }
+    uint32_t navOffset;
+    std::memcpy(&navOffset, header + 21, 4);
+    result.navOffset_ = navOffset;
+
+    // LEVMapHeader, 22 bytes
+    uint8_t mapHeader[22];
+    reader.read(mapHeader, sizeof(mapHeader), "map header");
+    if (mapHeader[1] != 8) {
+        throw std::runtime_error("lev: bad map version in " + result.source_);
+    }
+    const uint8_t subVersion = mapHeader[4];
+    if (subVersion != 8 && subVersion != 9) {
+        throw std::runtime_error("lev: bad map sub-version in " + result.source_);
+    }
+    uint32_t uidLo, uidHi;
+    std::memcpy(&uidLo, mapHeader + 5, 4);
+    std::memcpy(&uidHi, mapHeader + 9, 4);
+    result.uid_ = (static_cast<uint64_t>(uidHi) << 32) | uidLo;
+    std::memcpy(&result.width_, mapHeader + 13, 4);
+    std::memcpy(&result.height_, mapHeader + 17, 4);
+    if (result.width_ < 0 || result.height_ < 0 ||
+        result.width_ > 4096 || result.height_ > 4096) {
+        throw std::runtime_error("lev: implausible map size in " + result.source_);
+    }
+
+    // 256 ground themes: 128-byte name + u32 value
+    result.groundThemes_.reserve(256);
+    for (int i = 0; i < 256; ++i) {
+        char name[128];
+        reader.read(name, sizeof(name), "ground theme name");
+        name[127] = '\0';
+        GroundTheme theme;
+        theme.name = name;
+        theme.value = reader.readValue<uint32_t>("ground theme value");
+        result.groundThemes_.push_back(std::move(theme));
+    }
+
+    const uint32_t fileVersion = reader.readValue<uint32_t>("cell version");
+    const uint32_t themeCount = reader.readValue<uint32_t>("theme count");
+    result.atmosPaletteOffset_ = reader.tell();
+    result.atmosThemes_.reserve(256);
+    for (size_t i = 0; i < kPaletteSize / kThemeEntrySize; ++i) {
+        char name[128];
+        reader.read(name, sizeof(name), "atmos theme name");
+        name[127] = '\0';
+        GroundTheme theme;
+        theme.name = name;
+        theme.value = reader.readValue<uint32_t>("atmos theme value");
+        result.atmosThemes_.push_back(std::move(theme));
+    }
+    if (subVersion == 9) {
+        reader.readValue<uint32_t>("sub-version 9 extra");
+    }
+    if (themeCount > 0) {
+        result.themes_.reserve(themeCount - 1);
+        for (uint32_t i = 0; i + 1 < themeCount; ++i) {
+            result.themes_.push_back(reader.readCountedString("theme string"));
+        }
+    }
+
+    // Cell grid
+    const size_t cellCount = static_cast<size_t>(result.width_ + 1) *
+                             static_cast<size_t>(result.height_ + 1);
+    result.cells_.resize(cellCount * kCellSize);
+    result.cellsOffset_ = reader.tell();
+    reader.read(result.cells_.data(), result.cells_.size(), "cells");
+
+    // Navigation table of contents (section payloads left unparsed for now)
+    reader.seek(navOffset);
+    uint8_t navHeader[8];
+    reader.read(navHeader, sizeof(navHeader), "nav header");
+    uint32_t sectionCount;
+    std::memcpy(&sectionCount, navHeader + 4, 4);
+    if (sectionCount > 256) {
+        throw std::runtime_error("lev: implausible nav section count in " + result.source_);
+    }
+    for (uint32_t i = 0; i < sectionCount; ++i) {
+        NavSectionInfo section;
+        section.name = reader.readCountedString("nav section name");
+        section.offset = reader.readValue<uint32_t>("nav section offset");
+        result.navSections_.push_back(std::move(section));
+    }
+
+    std::ifstream original(path, std::ios::binary);
+    result.originalBytes_.assign(std::istreambuf_iterator<char>(original),
+                                 std::istreambuf_iterator<char>());
+    if (result.cellsOffset_ + result.cells_.size() > result.originalBytes_.size()) {
+        throw std::runtime_error("lev: cell grid exceeds source file in " +
+                                 result.source_);
+    }
+    // the game-map grid follows the height cells and ends exactly at obsOffset;
+    // anything else (older files, fileVersion 1) is treated as absent
+    if (fileVersion > 1) {
+        uint32_t obsOffset;
+        std::memcpy(&obsOffset, header + 13, 4);
+        const size_t start = result.cellsOffset_ + result.cells_.size();
+        const size_t count = static_cast<size_t>(result.width_ / 4) * static_cast<size_t>(result.height_ / 4);
+        bool ok = count > 0 && start + count * 11 == obsOffset && obsOffset <= result.originalBytes_.size();
+        for (size_t i = 0; ok && i < count; ++i) {
+            const uint8_t* r = result.originalBytes_.data() + start + i * 11;
+            ok = r[0] == 11 && r[1] == 0 && r[2] == 0 && r[3] == 0 && r[4] == 1;
+        }
+        if (ok) result.gameMapOffset_ = start;
+    }
+
+    return result;
+}
+
+const uint8_t* File::gameMapCell(int gx, int gy) const {
+    if (!hasGameMap()) throw std::runtime_error("lev: " + source_ + " has no game-map grid");
+    if (gx < 0 || gy < 0 || gx >= gameMapWidth() || gy >= gameMapHeight())
+        throw std::out_of_range("lev: game-map cell out of range");
+    return originalBytes_.data() + gameMapOffset_ + (static_cast<size_t>(gy) * static_cast<size_t>(gameMapWidth()) + static_cast<size_t>(gx)) * 11;
+}
+
+uint8_t* File::gameMapCell(int gx, int gy) {
+    return const_cast<uint8_t*>(static_cast<const File*>(this)->gameMapCell(gx, gy));
+}
+
+File::AtmosBlend File::atmosAt(int gx, int gy) const {
+    const uint8_t* c = gameMapCell(gx, gy);
+    AtmosBlend b;
+    b.indices = {c[5], c[6], c[7]};
+    const unsigned stored = unsigned(c[8]) + unsigned(c[9]);
+    b.strengths = {c[8], c[9], static_cast<uint8_t>(stored >= 255 ? 0 : 255 - stored)};
+    return b;
+}
+
+void File::setAtmosAt(int gx, int gy, const AtmosBlend& blend) {
+    if (unsigned(blend.strengths[0]) + blend.strengths[1] + blend.strengths[2] != 255)
+        throw std::invalid_argument("lev: atmos strengths must sum to 255");
+    uint8_t* c = gameMapCell(gx, gy);
+    c[5] = blend.indices[0]; c[6] = blend.indices[1]; c[7] = blend.indices[2];
+    c[8] = blend.strengths[0]; c[9] = blend.strengths[1];
+}
+
+uint8_t File::soundAt(int gx, int gy) const { return gameMapCell(gx, gy)[10]; }
+
+uint8_t File::addSoundTheme(const std::string& name) {
+    for (size_t i = 0; i < themes_.size(); ++i)
+        if (themes_[i] == name) return static_cast<uint8_t>(i + 1);
+    if (name.empty() || name.size() > 255) throw std::invalid_argument("lev: bad sound theme name");
+    if (themes_.size() >= 127) throw std::runtime_error("lev: " + source_ + " already names 127 sound themes (the cell index is a signed byte)");
+    auto u32At = [&](size_t at) { uint32_t v; std::memcpy(&v, originalBytes_.data() + at, 4); return v; };
+    auto putU32 = [&](size_t at, uint32_t v) { std::memcpy(originalBytes_.data() + at, &v, 4); };
+    const size_t countAt = 25 + 0x841a;
+    if (countAt + 4 > originalBytes_.size() || u32At(countAt) != themes_.size() + 1)
+        throw std::runtime_error("lev: sound count field not where expected in " + source_);
+    const size_t at = cellsOffset_;   // the list ends where the cells begin
+    const uint32_t delta = static_cast<uint32_t>(4 + name.size());
+    std::vector<uint8_t> record(4 + name.size());
+    const uint32_t len = static_cast<uint32_t>(name.size());
+    std::memcpy(record.data(), &len, 4);
+    std::memcpy(record.data() + 4, name.data(), name.size());
+    // the nav offsets are read BEFORE the insert, then everything is shifted
+    const uint32_t nav = navOffset_;
+    std::vector<size_t> sectionOffsetFields;   // positions (pre-insert) of the TOC offset u32s
+    {
+        size_t pos = nav + 8;
+        for (size_t i = 0; i < navSections_.size(); ++i) {
+            const uint32_t n = u32At(pos);
+            pos += 4 + n;
+            sectionOffsetFields.push_back(pos);
+            pos += 4;
+        }
+    }
+    originalBytes_.insert(originalBytes_.begin() + static_cast<std::ptrdiff_t>(at), record.begin(), record.end());
+    putU32(countAt, u32At(countAt) + 1);
+    const uint32_t brush = u32At(13);
+    if (brush >= at) putU32(13, brush + delta);
+    putU32(21, nav + delta);
+    const size_t navNew = nav + delta;
+    putU32(navNew, u32At(navNew) + delta);                 // the table's end
+    for (size_t i = 0; i < sectionOffsetFields.size(); ++i) {
+        const size_t f = sectionOffsetFields[i] + delta;
+        const uint32_t sec = u32At(f) + delta;
+        putU32(f, sec);                                     // the section's offset
+        putU32(sec, u32At(sec) + delta);                    // its leading end-of-section
+        navSections_[i].offset = sec;
+    }
+    navOffset_ = static_cast<uint32_t>(navNew);
+    cellsOffset_ += delta;
+    if (gameMapOffset_) gameMapOffset_ += delta;
+    themes_.push_back(name);
+    return static_cast<uint8_t>(themes_.size());
+}
+
+void File::setSoundAt(int gx, int gy, uint8_t index) {
+    if (index > themes_.size()) throw std::out_of_range("lev: sound index past the map's sound list");
+    gameMapCell(gx, gy)[10] = index;
+}
+
+void File::setAtmosTheme(size_t slot, const std::string& name, uint32_t value) {
+    if (slot >= atmosThemes_.size()) throw std::out_of_range("lev: atmos slot out of range");
+    if (name.size() >= 128) throw std::invalid_argument("lev: atmos theme name longer than 127 bytes");
+    uint8_t* at = originalBytes_.data() + atmosPaletteOffset_ + slot * kThemeEntrySize;
+    std::memset(at, 0, 128);
+    std::memcpy(at, name.data(), name.size());
+    std::memcpy(at + 128, &value, 4);
+    atmosThemes_[slot].name = name;
+    atmosThemes_[slot].value = value;
+}
+
+void File::checkCell(int x, int y) const {
+    if (x < 0 || y < 0 || x >= cellsX() || y >= cellsY()) {
+        throw std::out_of_range("lev: cell coordinate out of range (" +
+                                std::to_string(x) + "," + std::to_string(y) + ")");
+    }
+}
+
+const uint8_t* File::cell(int x, int y) const {
+    checkCell(x, y);
+    const size_t index = static_cast<size_t>(y) * static_cast<size_t>(width_ + 1) +
+                         static_cast<size_t>(x);
+    return cells_.data() + index * kCellSize;
+}
+
+uint8_t* File::cell(int x, int y) {
+    checkCell(x, y);
+    const size_t index = static_cast<size_t>(y) * static_cast<size_t>(width_ + 1) +
+                         static_cast<size_t>(x);
+    return cells_.data() + index * kCellSize;
+}
+
+float File::heightAt(int x, int y) const {
+    float raw;
+    std::memcpy(&raw, cell(x, y) + 5, 4);
+    return raw * 2048.0f;
+}
+
+void File::setHeightAt(int x, int y, float worldHeight) {
+    if (!std::isfinite(worldHeight)) {
+        throw std::invalid_argument("lev: height must be finite");
+    }
+    const float raw = worldHeight / 2048.0f;
+    std::memcpy(cell(x, y) + 5, &raw, sizeof(raw));
+}
+
+void File::save(const fs::path& path) const {
+    std::vector<uint8_t> output = originalBytes_;
+    std::copy(cells_.begin(), cells_.end(), output.begin() +
+              static_cast<std::vector<uint8_t>::difference_type>(cellsOffset_));
+    if (!path.parent_path().empty()) fs::create_directories(path.parent_path());
+    std::ofstream stream(path, std::ios::binary | std::ios::trunc);
+    if (!stream) throw std::runtime_error("lev: cannot write " + path.string());
+    stream.write(reinterpret_cast<const char*>(output.data()),
+                 static_cast<std::streamsize>(output.size()));
+    stream.close();
+    if (!stream) throw std::runtime_error("lev: failed writing " + path.string());
+}
+
+void File::setGroundThemeValue(size_t slot, uint32_t defIndex) {
+    if (slot >= groundThemes_.size()) {
+        throw std::out_of_range("lev: ground theme slot out of range");
+    }
+    groundThemes_[slot].value = defIndex;
+    const size_t at = kThemeTableOffset + slot * kThemeEntrySize + 128;
+    if (at + 4 > originalBytes_.size()) {
+        throw std::runtime_error("lev: theme palette runs past end of " + source_);
+    }
+    std::memcpy(originalBytes_.data() + at, &defIndex, sizeof(defIndex));
+}
+
+void File::setGroundTheme(size_t slot, const std::string& name, uint32_t defIndex) {
+    if (slot >= groundThemes_.size())
+        throw std::out_of_range("lev: ground theme slot out of range");
+    if (name.size() >= 128 || name.find('\0') != std::string::npos)
+        throw std::invalid_argument("lev: ground theme name must fit 127 bytes");
+    const size_t at = kThemeTableOffset + slot * kThemeEntrySize;
+    if (at + kThemeEntrySize > originalBytes_.size())
+        throw std::runtime_error("lev: theme palette runs past end of " + source_);
+    std::fill(originalBytes_.begin() + static_cast<std::ptrdiff_t>(at),
+              originalBytes_.begin() + static_cast<std::ptrdiff_t>(at + 128), 0);
+    std::copy(name.begin(), name.end(),
+              originalBytes_.begin() + static_cast<std::ptrdiff_t>(at));
+    groundThemes_[slot].name = name;
+    setGroundThemeValue(slot, defIndex);
+}
+
+std::vector<ThemePaletteIssue> File::auditThemePalette(const DefIndexTable& defs) const {
+    std::vector<ThemePaletteIssue> issues;
+    if (!defs.indexOf) return issues;
+    for (size_t slot = 0; slot < groundThemes_.size() && slot < kThemeEntryCount; ++slot) {
+        const GroundTheme& theme = groundThemes_[slot];
+        if (theme.name.empty()) continue; // unused palette slot
+        ThemePaletteIssue issue;
+        issue.slot = static_cast<int>(slot);
+        issue.name = theme.name;
+        issue.stored = theme.value;
+        uint32_t want = 0;
+        issue.resolvable = defs.indexOf(theme.name, want);
+        issue.expected = issue.resolvable ? want : theme.value;
+        if (issue.resolvable && want == theme.value) continue; // correct already
+        if (defs.typeOf) issue.storedDefType = defs.typeOf(theme.value);
+        issues.push_back(std::move(issue));
+    }
+    return issues;
+}
+
+size_t File::rebaseThemePalette(const DefIndexTable& defs) {
+    size_t changed = 0;
+    for (const ThemePaletteIssue& issue : auditThemePalette(defs)) {
+        if (!issue.resolvable) continue;
+        setGroundThemeValue(static_cast<size_t>(issue.slot), issue.expected);
+        ++changed;
+    }
+    return changed;
+}
+
+bool File::walkableAt(int x, int y) const {
+    return cell(x, y)[15] != 0;
+}
+
+void File::setWalkableAt(int x, int y, bool walkable) {
+    cell(x, y)[15] = walkable ? 1 : 0;
+}
+
+bool File::cameraPassableAt(int x, int y) const { return cell(x, y)[16] != 0; }
+void File::setCameraPassableAt(int x, int y, bool passable) { cell(x, y)[16] = passable ? 1 : 0; }
+
+bool File::shorePointAt(int x, int y) const { return cell(x, y)[19] != 0; }
+void File::setShorePointAt(int x, int y, bool shore) { cell(x, y)[19] = shore ? 1 : 0; }
+
+bool File::preferredPathAt(int x, int y) const {
+    return cell(x, y)[20] != 0;
+}
+
+void File::setPreferredPathAt(int x, int y, bool preferred) {
+    cell(x, y)[20] = preferred ? 1 : 0;
+}
+
+uint8_t File::themeIndexAt(int x, int y, int index) const {
+    if (index < 0 || index >= 3) throw std::out_of_range("lev: theme layer out of range");
+    return cell(x, y)[10 + index];
+}
+
+uint8_t File::themeStrengthAt(int x, int y, int index) const {
+    if (index < 0 || index >= 3) throw std::out_of_range("lev: theme layer out of range");
+    const uint8_t* c = cell(x, y);
+    if (index < 2) return c[13 + index];
+    const unsigned stored = unsigned(c[13]) + unsigned(c[14]);
+    return static_cast<uint8_t>(stored >= 255 ? 0 : 255 - stored);
+}
+
+void File::setThemeBlendAt(int x, int y,
+                           const std::array<uint8_t, 3>& indices,
+                           const std::array<uint8_t, 3>& strengths) {
+    const unsigned total = unsigned(strengths[0]) + unsigned(strengths[1]) +
+                           unsigned(strengths[2]);
+    if (total != 255) throw std::invalid_argument("lev: theme strengths must sum to 255");
+    uint8_t* c = cell(x, y);
+    for (int i = 0; i < 3; ++i) c[10 + i] = indices[i];
+    c[13] = strengths[0];
+    c[14] = strengths[1];
+}
+
+int File::dominantLayerAt(int x, int y) const {
+    int best = 0;
+    for (int layer = 1; layer < 3; ++layer) {
+        if (themeStrengthAt(x, y, layer) > themeStrengthAt(x, y, best)) {
+            best = layer;
+        }
+    }
+    return best;
+}
+
+const std::string& File::themeNameAt(int x, int y) const {
+    return groundThemes_[themeIndexAt(x, y, dominantLayerAt(x, y))].name;
+}
+
+} // namespace forge::lev

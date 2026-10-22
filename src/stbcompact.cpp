@@ -1,0 +1,49 @@
+#include "backups.hpp"
+#include "stbcompact.hpp"
+#include "pendingbanks.hpp"
+
+#include <stdexcept>
+#include <system_error>
+
+namespace fs = std::filesystem;
+
+namespace albion::stbcompact {
+
+fs::path bankPath(const fs::path& installRoot) {
+    return installRoot / "data" / "Levels" / "FinalAlbion_RT.stb";
+}
+
+forge::stb::CompactReport measure(const fs::path& installRoot) {
+    return forge::stb::compactMeasure(bankPath(installRoot));
+}
+
+Result compact(const fs::path& installRoot) {
+    Result r;
+    const fs::path stb = bankPath(installRoot);
+    try {
+        if (backups::gameRunningIn(installRoot)) throw std::runtime_error("Fable.exe is running from this install; quit the game before compacting");
+        const auto before = forge::stb::compactMeasure(stb);
+        if (before.deadBytes() == 0) { r.ok = true; r.alreadyCompact = true; r.report = before; return r; }
+        // write beside the bank, verify every payload survived, then swap in
+        detail::PendingBanks pending(installRoot, ".forge-stb-compact-");
+        const fs::path tmp = pending.prepare("data/Levels/FinalAlbion_RT.stb");
+        r.report = forge::stb::compactBank(stb, tmp);
+        const auto a = forge::stb::Archive::open(stb), b = forge::stb::Archive::open(tmp);
+        if (a.entries().size() != b.entries().size() || a.staticMaps().size() != b.staticMaps().size())
+            throw std::runtime_error("compacted bank lists a different entry set");
+        for (size_t i = 0; i < a.entries().size(); ++i) {
+            const auto& x = a.entries()[i];
+            const auto& y = b.entries()[i];
+            if (x.id != y.id || x.name != y.name || x.size != y.size || a.read(x) != b.read(y))
+                throw std::runtime_error("compacted payload differs: " + x.name);
+        }
+        if (backups::gameRunningIn(installRoot)) throw std::runtime_error("Fable.exe started during compaction; quit the game before replacing the bank");
+        if (!pending.install(true, r.error)) return r;
+        r.ok = true;
+    } catch (const std::exception& e) {
+        r.error = e.what();
+    }
+    return r;
+}
+
+}  // namespace albion::stbcompact

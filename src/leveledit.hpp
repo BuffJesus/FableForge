@@ -1,0 +1,696 @@
+#pragma once
+// albion::editor -- the editable level document behind the FableForge
+// editor: one map's .tng (placed things) with undoable commands, plus the
+// terrain heights it rests on.
+//
+// The document wraps forge::tng::File, which keeps every raw line so an
+// unmodified file serialises back byte-identically and each edit touches only
+// the lines it must. Transform edits rewrite the CTCPhysicsStandard /
+// CTCPhysicsNavigator position + right-handed basis lines in retail float
+// spelling; new things go through forge::thingplacer (retail field order,
+// per-file UID namespace).
+//
+// Undo is snapshot based: every command stores the full serialised text
+// before it ran (a .tng is a few hundred KB at most; the stack is capped).
+// Undo/redo re-parse the snapshot, so thing indices are stable for the same
+// text and callers should track things by UID across commands.
+//
+// Frames use the engine's convention (see thingsexport::thingBasis): a thing
+// is `pos` + right-handed `forward`/`up`; the mesh instance matrix rows are
+// { -(forward x up), -forward, up } * 0.01 * ObjectScale.
+
+#include <cstddef>
+#include <cstdint>
+#include <filesystem>
+#include <memory>
+#include <functional>
+#include <optional>
+#include <set>
+#include <string>
+#include <unordered_map>
+#include <utility>
+#include <vector>
+
+#include "forge/lev.hpp"
+#include "forge/terrain.hpp"
+#include "forge/fillerfit.hpp"
+#include "forge/fractal.hpp"
+#include "forge/terraintex.hpp"
+#include "forge/thingplacer.hpp"
+#include "forge/tng.hpp"
+
+namespace albion::editor {
+
+struct Frame {
+    float pos[3] = {0, 0, 0};         // map-local Fable units
+    float forward[3] = {1, 0, 0};
+    float up[3] = {0, 0, 1};
+    float scale = 1.0f;               // ObjectScale (1 when absent)
+};
+
+// 4x4 row-vector matrix (rows = images of local axes, row 3 = position), Fable
+// space, cm-scale baked in like the preview instances: v_world = v_local * M.
+void frameToMatrix(const Frame& f, float m[16]);
+// Inverse of frameToMatrix for a matrix of the same shape (rows orthogonal,
+// uniform scale). Returns false for a degenerate matrix.
+bool matrixToFrame(const float m[16], Frame& f);
+void multiply(const float a[16], const float b[16], float out[16]);   // out = a * b (row-vector order)
+bool invert(const float m[16], float out[16]);
+
+// Editable terrain state: vertex heights and per-cell walkability, both on the
+// LEV's (width+1) x (height+1) grid (walkability of the extra row/column is
+// carried but meaningless, like the file's).
+struct TerrainState {
+    std::vector<float> heights;
+    std::vector<uint8_t> walkable;
+    std::vector<uint8_t> shorePoint;                    // independent LEV cell byte +19
+    std::vector<uint8_t> cameraPassable;                // per cell (+16); walkable cells are always passable
+    std::vector<std::array<uint8_t, 3>> themeIndex;     // per cell: the 3 palette slots
+    std::vector<std::array<uint8_t, 3>> themeStrength;  // ... and their weights (sum 255)
+    std::vector<forge::lev::GroundTheme> palette;       // the LEV's 256 ground-theme slots
+    // the game-map grid (one cell per 4x4 height cells, when the .lev has it):
+    // environment (atmos) blend into atmosPalette, and the sound index (0 = none)
+    std::vector<std::array<uint8_t, 3>> atmosIndex, atmosStrength;
+    std::vector<uint8_t> sound;
+    std::vector<forge::lev::GroundTheme> atmosPalette;
+};
+
+struct TerrainBrush {
+    // ReplaceTheme: the vanilla Themes dialog's Replace pen -- under the brush,
+    // `replaceFrom` becomes `themeIndex` in every slot (no blending).
+    // Environment / Sound: the game-map grid (vanilla ENVIRONMENT tab / Survey >
+    // Sounds): `themeIndex` is the atmos palette slot / the sound index (0 = none).
+    // CameraPass / CameraBlock: the vanilla Survey > Passability camera brush (+16).
+    // Flatten / Smooth / Noise and Raise / Lower with exactStep are the vanilla Height Toolbox
+    // pens (forge/heightpen: Paint Height, Smear, Noise, Change Height): one application per
+    // call, no dt, no falloff. Raise / Lower without exactStep are FableForge's smooth brush.
+    enum class Mode { Raise, Lower, Flatten, Smooth, Walkable, Blocked, Theme, ReplaceTheme, Environment, Sound, CameraPass, CameraBlock, Noise, HeightKey, EnvironmentSmear, ShoreSet, ShoreClear, ThemeSmear };   // HeightKey: the -/= keys, `step` signed
+    Mode mode = Mode::Raise;
+    float x = 0, y = 0;        // map-local centre
+    float radius = 6.0f;
+    float strength = 1.0f;     // units/second (raise/lower), blend/second (flatten/smooth/theme)
+    uint8_t themeIndex = 0;    // Theme / ReplaceTheme: LEV palette slot to paint
+    uint8_t replaceFrom = 0;   // ReplaceTheme: the slot being replaced
+    bool exactStep = false;    // Raise / Lower: vanilla Change Height, +-step once per block per stroke
+    bool themeStamp = false;   // Theme: native full assignment, strict truncated vertex disc
+    float step = 1.0f;         // world units
+    bool targetFromStroke = true;   // Flatten: the ground where the stroke starts, else `target`
+    float target = 0.0f;       // Flatten: vanilla Paint Height's "m" box
+    float speed = 0.5f;        // Flatten: vanilla Speed (0..1; opacity = 1 - cos(pi/2 * speed))
+    float smoothness = 0.5f;   // Smooth: vanilla "Smear: Smoothness %" (0..1)
+    float spikyness = 0.0f;    // Smooth: vanilla "Smear: Spikyness Allowed" (0..1)
+    float magnifier = 1.0f;    // Noise: vanilla noise magnifier (1..50)
+};
+
+// A copied block of ground (the vanilla Copy and paste dialog's "Copy heights /
+// Copy themes", FableWin CEditInputProcessCopyPaste::CopySelectedRegion 0x02953540):
+// w x h vertices, row-major, with each cell's theme blend carried by NAME so it
+// pastes into another map's palette.
+struct TerrainClip {
+    int w = 0, h = 0;
+    std::vector<float> heights;
+    std::vector<std::array<uint8_t, 3>> themeIndex, themeStrength;   // indices into `themes`
+    std::vector<forge::lev::GroundTheme> themes;                       // name + def index per clip slot
+    // Things inside the copied rectangle (the vanilla Copy and paste dialog's "Copy things"): the
+    // thing's .tng block, its place relative to the clip's first vertex, its height above the ground
+    // there, and its orientation / scale (frame.pos unused).
+    struct Thing { std::string block; float dx = 0, dy = 0, aboveGround = 0; Frame frame; };
+    std::vector<Thing> things;
+    bool empty() const { return w <= 0 || h <= 0; }
+};
+
+// A brush library entry (the vanilla Brush library: CEditInputProcessCopyPaste::SaveBrush /
+// LoadBrush, CEditMapBrush::SaveToFile -- themes by name, things by their data): a clip as a
+// small JSON file. False with `error` set on failure.
+bool saveTerrainClip(const TerrainClip& clip, const std::filesystem::path& file, std::string& error);
+bool loadTerrainClip(const std::filesystem::path& file, TerrainClip& clip, std::string& error);
+
+struct ThingSummary {
+    size_t index = 0;
+    uint64_t uid = 0;
+    std::string type;          // NewThing <type>
+    std::string definition;    // DefinitionType, unquoted
+    std::string scriptName;    // "" for NULL
+    bool hasFrame = false;
+};
+
+class Document {
+public:
+    // Loads <map>.tng (loose data/Levels/FinalAlbion/<map>.tng, else the
+    // FinalAlbion.wad entry) and the matching .lev for ground heights (from
+    // `levPath` when given). Returns false with `error` set.
+    //
+    // A map of another world (a modder's own .wld next to FinalAlbion.wld): its
+    // .wld and the .tng beside its .lev. The document then reads and saves those
+    // files; there is no WAD entry or FinalAlbion_RT.stb chunk to deploy into.
+    struct ExternalWorld { std::filesystem::path wld, tng; };
+    bool open(const std::filesystem::path& gameRoot, const std::string& mapName,
+              const std::filesystem::path& levPath, std::string& error,
+              const ExternalWorld* external = nullptr);
+    bool external() const { return !externalWld_.empty(); }   // a map of a world other than FinalAlbion
+    // In-memory document (tests, scratch levels).
+    bool openText(const std::string& mapName, std::string tngText, std::string& error);
+    // Attach a .lev (ground heights + terrain editing); open() does this itself.
+    bool loadLevel(const std::filesystem::path& levPath, std::string& error);
+
+    const std::string& mapName() const { return mapName_; }
+    const forge::tng::File& file() const { return file_; }
+    std::string text() const { return file_.serialize(); }
+    bool loadedFromWad() const { return fromWad_; }
+    std::filesystem::path loosePath() const { return loosePath_; }
+
+    size_t thingCount() const { return file_.things().size(); }
+    ThingSummary summary(size_t index) const;
+    std::optional<size_t> indexOfUid(uint64_t uid) const;
+    uint64_t uidOf(size_t index) const;
+    // Stable breadth-first descendants, excluding roots. Ambiguous/malformed
+    // UID or ownership declarations are not traversed; cycles are visited once.
+    // Each ownedTree entry is {child, direct parent}, in parent-before-child order.
+    std::vector<std::pair<size_t,size_t>> ownedTree(const std::vector<size_t>& roots) const;
+    std::vector<size_t> ownedDescendants(const std::vector<size_t>& roots) const;
+    // Rigidly move/rotate owned descendants from explicit root frame edits.
+    // Scale alone has no effect on children. Pure query for live preview.
+    std::vector<std::pair<size_t,Frame>> ownedFramesAfter(const std::vector<std::pair<size_t,Frame>>& roots) const;
+    bool frameOf(size_t index, Frame& out) const;
+
+    // Ground height (bilinear LEV sample) at a map-local XY; nullopt when no
+    // level is loaded or the point is outside the grid.
+    std::optional<float> groundHeight(float x, float y) const;
+    bool hasLevel() const { return level_ != nullptr; }
+    const forge::lev::File* level() const { return level_.get(); }
+
+    // ---- commands (each one undo step) ----
+    // Missing/empty CTCEditor defaults to unlocked. setLocked requires the block;
+    // a missing flag is inserted, but unrelated component schemas are not created.
+    bool isLocked(size_t index) const;
+    bool setLocked(size_t index, bool locked);
+    // Non-finite frame components refuse without mutation or undo/history changes.
+    void setFrame(size_t index, const Frame& frame);
+    // The native owner move ignores the child's own editor lock. Call only for
+    // descendants returned by ownedFramesAfter for an unlocked edited parent.
+    void setOwnedFrame(size_t index, const Frame& frame);
+    // Absolute Z, clamped to terrain at this XY. False for unavailable terrain,
+    // invalid/nonfinite input, missing frame or locks. Successful no-ops keep history.
+    bool setHeight(size_t index, float height);
+    // Repairs an older draft after the ground changed. Current brush and direct
+    // height edits already move grounded unlocked things in their own undo step;
+    // props also follow the slope, preserving their terrain-relative orientation.
+    // Creatures, buildings and markers retain their orientation. Owned children
+    // follow their parent's rigid transform. This older-draft repair is Z-only.
+    // A thing near the old ground follows only if it is not already closer to
+    // the new ground; deliberately floating/buried things stay. Returns moved count.
+    size_t reseatThings(const TerrainState& before, float tolerance = 1.0f);
+    // The same against the terrain as last saved/deployed (the sculpt session's baseline).
+    size_t reseatThingsSinceSave(float tolerance = 1.0f) { return savedTerrain_ ? reseatThings(*savedTerrain_, tolerance) : 0; }
+    void setProperty(size_t index, const std::string& key, const std::string& value);
+
+    // ---- quest sections (the vanilla Quests dialog, inventory 5.5): a .tng groups
+    // its things in XXXSectionStart <quest> blocks; "NULL" always loads, the
+    // others load with their quest.
+    std::vector<std::string> sections() const { return file_.sectionNames(); }
+    std::string sectionOf(size_t index) const { return file_.sectionOf(index); }
+    std::vector<std::string> thingSections() const { return file_.thingSections(); }
+    // A new empty section (letters, digits, '_'). One undo step; false when the
+    // name is invalid or taken.
+    bool addSection(const std::string& name);
+    // Where new things go (vanilla SetQuestBeingAddedTo); falls back to NULL when
+    // the section does not exist.
+    void setPlacementSection(const std::string& name) { placementSection_ = name; }
+    const std::string& placementSection() const { return placementSection_; }
+    // Moves a thing and its valid OwnerUID descendants into another section
+    // (vanilla RCtrl+; AddSelectedThingToCurrentQuest). Preserves each thing's
+    // block text. One undo step; returns the root's new index.
+    std::optional<size_t> moveToSection(size_t index, const std::string& name);
+    // Day / night-only creatures (vanilla CTCDayOrNightOnlySupport, on every CREATURE_BASE_TEMPLATE
+    // def): nothing is written into the thing block -- its section carries it, "<quest>%DayOnly" or
+    // "<quest>%NightOnly" (CQuestManager::GetFullSectionNameForThing, exact case; a NULL-section
+    // creature goes to "NULL%DayOnly"). In-game such a section streams in only by day / by night.
+    // splitDayNight -> {quest part, 0 both | 1 day | 2 night}.
+    static std::pair<std::string, int> splitDayNight(const std::string& section);
+    // Move the thing to its quest section + the mode's suffix (vanilla SetFromPropertiesStruct
+    // 0x02668150), creating the section when missing. One undo step; the thing's new index.
+    std::optional<size_t> setDayNight(size_t index, int mode);
+
+    // ---- per-component properties (the vanilla Thing Properties dialog's category
+    // tabs, inventory 5.4): every editable field of a thing, grouped by its CTC
+    // block ("" = the thing's own fields). UID links (Links) and the physics frame
+    // (the gizmo) are left out.
+    struct PropertyRow {
+        std::string ctc, key, value;
+        enum class Kind { Bool, Int, Float, String, Raw } kind = Kind::Raw;
+    };
+    std::vector<PropertyRow> propertiesOf(size_t index) const;
+    // Known scalar overrides on a conservative set of existing, unique CTCs.
+    // An absent row has an empty value: no definition/engine default is inferred.
+    // General fields, component creation, coupled light/script controls and lists
+    // are excluded. Ambiguous duplicate blocks/keys are never admitted.
+    struct KnownProperty { PropertyRow row; bool present = false; };
+    std::vector<KnownProperty> knownComponentProperties(size_t index) const;
+    bool setComponentOverride(size_t index, const std::string& ctc, const std::string& key, const std::string& value);
+    bool resetComponentOverride(size_t index, const std::string& ctc, const std::string& key);
+    std::vector<std::string> ctcBlocksOf(size_t index) const;
+    // Sets one field (value as the .tng spells it: TRUE, 3, 1.5, "text"); one undo
+    // step. False when the value does not fit the field's kind or the field is absent.
+    // Values cannot contain CR, LF or NUL. Refusals do not create undo entries.
+    bool setPropertyValue(size_t index, const std::string& ctc, const std::string& key, const std::string& value);
+    static PropertyRow::Kind kindOf(const std::string& value);
+    // Indexed list fields (CTCCreatureGenerator CreatureFamilies[n]; no count field,
+    // contiguous from 0): append after the last entry / remove entry i shifting the
+    // rest down. One undo step each; false when the block is absent / i is out of range.
+    // Structured editing requires one block and a unique contiguous quoted list.
+    bool listEditable(size_t index, const std::string& ctc, const std::string& base) const;
+    bool addListEntry(size_t index, const std::string& ctc, const std::string& base, const std::string& value);
+    bool removeListEntry(size_t index, const std::string& ctc, const std::string& base, int i);
+    std::vector<std::string> listEntries(size_t index, const std::string& ctc, const std::string& base) const;
+
+    // ---- tracks (the vanilla Tracks dialog, FableWin CThingTrackNode; static RE +
+    // 319 dev-tree nodes): a track is a doubly-linked chain of TrackNode things
+    // (TRACK_NODE_BASIC) sharing one name -- LinkedToUID1 = previous, LinkedToUID2 =
+    // next, Start TRUE on the head, End TRUE on the tail, no branches or loops.
+    // Village guards patrol them (GuardTrack); cut scenes preview a camera along them.
+    struct Track {
+        std::string name;
+        std::vector<size_t> nodes;   // head -> tail
+        float length = 0;            // sum of straight segments (GetTrackLength)
+    };
+    std::vector<Track> tracks() const;
+    bool isTrackNode(size_t index) const;
+    // A lone node (Start TRUE, End TRUE, named INVALID like vanilla's Shift+click) at a
+    // map-local point; returns its index. One undo step.
+    size_t placeTrackNode(float x, float y, float z, const std::string& name = "INVALID");
+    // Link a -> b (vanilla SetAsLinkedTo): both need a free slot and must be in different
+    // chains; a chain is flipped when needed so the joined track runs a -> b; the
+    // joined track takes a's name. One undo step; false when not allowed (error set).
+    bool linkTrackNodes(size_t a, size_t b, std::string& error);
+    bool flipTrack(size_t node);                           // reverse the chain (vanilla F)
+    bool renameTrack(size_t node, const std::string& name); // every node of the chain
+    // Remove the node's links (vanilla Delete in linking mode): a neighbour left alone
+    // becomes INVALID, the part after the node gets a TrackTempName<n>, the node's
+    // own name becomes empty. One undo step.
+    bool unlinkTrackNode(size_t node);
+
+    // ---- invalid things (the vanilla V key, FindInvalidThing 0x0203ff10 ->
+    // CThing::ValidateThing 0x01cf74e0 -> the five CTC Validate overrides; static RE).
+    // Vanilla rules (offline-checkable ones) plus FableForge's own (vanilla checks no
+    // links); `vanilla` says which. isFamily answers "is this a CREATURE_GENERATION_FAMILY
+    // def" (empty = skip that rule). Vanilla warns on save but never blocks it.
+    struct Issue { size_t thing = 0; std::string rule, message; bool vanilla = false; };
+    std::vector<Issue> validate(const std::function<bool(const std::string&)>& isFamily = {}) const;
+
+    // ---- links between things: the vanilla editor's attach modes (FableWin
+    // EAttachModeType, docs/VANILLA_EDITOR_INVENTORY.md 5.4) as the .tng stores
+    // them -- a UID field on a component (or on the thing) naming another thing.
+    struct Link {
+        std::string ctc;       // component block ("" = a field of the thing itself)
+        std::string field;     // e.g. VillageUID
+        std::string label;     // e.g. "Village"
+        std::string wants;     // what the target should be, for the UI ("a village")
+        uint64_t target = 0;   // 0 = not linked
+        std::optional<size_t> targetIndex;   // the target in this map (nullopt: none, or another map)
+    };
+    // The link fields this thing carries (component present / field present), in a fixed order.
+    std::vector<Link> linksOf(size_t index) const;
+    // Does `target` fit the link (a village for VillageUID, a region entrance for
+    // EntranceConnectedToUID, a building for Home/WorkBuildingUID ...)? The vanilla
+    // editor offers only viable modes (GetViableAttachModesForThing).
+    bool linkTargetFits(const Link& link, size_t target) const;
+    // Optional definition lookup for Father/Mother target validation. Unknown
+    // sex remains permissible; a known mismatch is rejected by setLink.
+    void setCreatureSexLookup(std::function<std::optional<int32_t>(const std::string&)> lookup) {
+        creatureSexLookup_ = std::move(lookup);
+    }
+    // Sets the field to `targetUid` (0 clears). One undo step; false when the thing
+    // lacks that link.
+    bool setLink(size_t index, const std::string& ctc, const std::string& field, uint64_t targetUid);
+    struct IncomingLink { size_t source = 0; Link link; };
+    std::vector<IncomingLink> linksInto(size_t target) const;
+    enum class AttachMode { Owned, LivesIn, WorksIn, Village, Receptor,
+                            RegionEntrance, RouteTarget, Spouse, Father, Mother };
+    struct AttachOption { AttachMode mode; std::string field, ctc, caption; };
+    std::vector<AttachOption> viableAttachModes(size_t anchor) const;
+    bool canAttach(size_t anchor, AttachMode mode, size_t clicked, std::string* reason = nullptr) const;
+    // Toggle one clicked thing while the anchor stays selected; one undo step.
+    bool toggleAttachment(size_t anchor, AttachMode mode, size_t clicked, std::string& error);
+    // Copy of a thing with a fresh UID and ScriptName NULL, inserted right
+    // after the original. A saved OwnerUID is cleared on the copy so it does
+    // not remain owned by the source's parent. Returns the new index.
+    size_t duplicate(size_t index);
+    // Copy selected things in one undo step. Links whose unique targets are
+    // also selected point to the corresponding copies; external links stay put.
+    // Returns copy indices in the input order after all insertions.
+    std::vector<size_t> duplicateGroup(const std::vector<size_t>& indices);
+    size_t place(forge::thingplacer::Placement placement);
+    // An enemy spawner: a MARKER_CREATURE_GENERATOR thing carrying the retail
+    // CTCCreatureGenerator block (self-triggering when the hero comes within
+    // `radius`, `activeLimit` creatures at once, -1 = unlimited) drawing from
+    // the given CREATURE_GENERATION_FAMILY names. Position is map-local.
+    size_t placeCreatureGenerator(const float pos[3], const std::vector<std::string>& families,
+                                  float radius, int activeLimit, const std::string& scriptName = "");
+    // A fishing spot: the retail MARKER_FISHING_SPOT thing (CTCPhysicsStandard +
+    // an empty CTCFishingSpot block; BarrowFields/Bordello/Darkwood_9 shape). With
+    // `reward` (an OBJECT_* def, e.g. OBJECT_MOONFISH) it also carries the retail
+    // CTCContainerRewardHero so the first catch there is that item. Map-local.
+    size_t placeFishingSpot(const float pos[3], const std::string& reward = "", const std::string& scriptName = "");
+    // A creature (NPC, animal, guard...) as the retail AICreature thing: a
+    // CTCPhysicsNavigator frame, targetable/talk blocks, VillageMember 0 for
+    // villager defs, and the world-space InitialPos the engine reads (map
+    // origin from FinalAlbion.wld). Position/forward are map-local.
+    // `player`: the .tng Player field (the vanilla owner combo; App resolves Auto to the def's DefaultOwner).
+    size_t placeCreature(const float pos[3], const float forward[2], const std::string& definition,
+                         const std::string& scriptName = "", int player = 0);
+    // A village: the retail `Village` thing (CTCVillage + enemy/opinion blocks,
+    // ThingGamePersistent) for a VILLAGE_* def. Buildings, markers and
+    // creatures join it through their CTCVillageMember.VillageUID.
+    size_t placeVillage(const float pos[3], const std::string& definition, const std::string& scriptName = "", int player = 4);
+    // A particle emitter: the retail PARTICLE_EMITTER_PLACEABLE thing (CTCDParticleEmitter,
+    // IndependantObject TRUE) playing the named effects.big entry. Position is map-local.
+    size_t placeEmitter(const float pos[3], const std::string& effectName, const std::string& scriptName = "");
+    // Every Village thing in the map (index, uid, definition, script name).
+    std::vector<ThingSummary> villages() const;
+    // The village a thing belongs to (its CTCVillageMember.VillageUID; 0 = none / no block).
+    uint64_t villageOf(size_t index) const;
+    // Make a thing a member of the village with that uid (0 = leave, the block
+    // stays with VillageUID 0 like retail). Adds the CTCVillageMember block
+    // after CTCEditor when the thing has none. One undo step.
+    void setVillageMember(size_t index, uint64_t villageUid);
+    // WLD MapX/MapY of this map (0,0 when the map is not placed / no WLD).
+    int worldX() const { return worldX_; }
+    int worldY() const { return worldY_; }
+    int worldSlot() const { return worldSlot_; }   // WLD map slot (GoToMapSlotRetailTransition), 0 = unknown
+    // Deletes one unlocked thing, clears saved incoming UID links and repairs a
+    // surviving track chain. Returns the number of cleared link fields.
+    size_t remove(size_t index);
+    // Delete unlocked selected roots, optionally including valid OwnerUID
+    // descendants even when those children carry an editor lock. If children
+    // are kept, unlink only surviving direct children of deleted roots.
+    // One undo step; returns the number of things removed.
+    size_t removeWithOwned(const std::vector<size_t>& roots, bool includeOwned,
+                           size_t* clearedLinks=nullptr);
+    // Framed things within an inclusive map-local rectangle (including locked
+    // things and helpers). The delete skips locked roots and keeps descendants
+    // outside the rectangle, using the normal owned/link cleanup in one undo.
+    std::vector<size_t> thingsInRect(int x0, int y0, int x1, int y1) const;
+    size_t removeThingsInRect(int x0, int y0, int x1, int y1,
+                             size_t* skipped=nullptr, size_t* clearedLinks=nullptr);
+
+    // Several commands as ONE undo step (multi-select move / delete / duplicate / paste):
+    // the first pushUndo inside the batch snapshots, the rest are skipped. Nestable.
+    void beginBatch();
+    void endBatch();
+    bool inBatch() const { return batchDepth_ > 0; }
+
+    // A fragment: thing blocks with positions relative to their centroid (copy/paste,
+    // presets). `paste` inserts each block at the end of the things with a fresh UID,
+    // ScriptName NULL and its frame moved so the centroid lands on `at` (map-local; the
+    // z of each thing keeps its offset from the centroid unless `dropToGround`, in which
+    // case each is set on the terrain). Returns the new indices; one undo step.
+    struct Fragment {
+        struct Item { std::string block; Frame frame; bool hasFrame = false; };
+        std::vector<Item> items;
+        float centre[3] = {0, 0, 0};
+        bool empty() const { return items.empty(); }
+    };
+    Fragment extract(const std::vector<size_t>& indices) const;
+    bool isEditBrushCopyable(size_t index) const;
+    std::vector<size_t> paste(const Fragment& fragment, const float at[3], bool dropToGround);
+
+    bool canUndo() const { return !undo_.empty(); }
+    bool canRedo() const { return !redo_.empty(); }
+    bool undo();
+    bool redo();
+    // Increments on every change (commands, undo, redo); the preview uses it
+    // to know when to rebuild.
+    uint64_t revision() const { return revision_; }
+    bool dirty() const;   // cached per revision
+    // Per-thing description of the differences against the opened text, by
+    // UID: "added ...", "removed ...", "moved ...", "changed ...".
+    std::vector<std::string> changes() const;
+
+    // Writes the loose data/Levels/FinalAlbion/<map>.tng (creating the folders).
+    bool saveLoose(const std::filesystem::path& gameRoot, std::string& error);
+    // Replaces the map's entry in FinalAlbion.wad (backup FinalAlbion.wad.forge-orig
+    // is made once, the first time the archive is touched).
+    bool deployWad(const std::filesystem::path& gameRoot, std::string& error);
+    // Marks the current text as the saved baseline.
+    void markSaved() { original_ = file_.serialize(); dirtyRev_ = ~0ull; }
+
+    // ---- terrain (needs the .lev) ----
+    bool hasTerrain() const { return level_ != nullptr && terrain_ != nullptr; }
+    int cellsX() const { return level_ ? level_->cellsX() : 0; }
+    int cellsY() const { return level_ ? level_->cellsY() : 0; }
+    const TerrainState& terrain() const { return *terrain_; }
+    // The state being drawn: the stroke's working copy while one is active.
+    const TerrainState& liveTerrain() const { return stroke_ && working_ ? *working_ : *terrain_; }
+    const TerrainState* savedTerrain() const { return savedTerrain_.get(); }
+    // Strokes: beginStroke snapshots for undo, applyBrush edits the working
+    // copy (call every frame while the mouse is down), endStroke writes the
+    // result into the .lev and moves grounded things in the same undo step.
+    void beginStroke(const TerrainBrush& brush);
+    void applyBrush(const TerrainBrush& brush, float dt);
+    bool strokeActive() const { return stroke_; }
+    void endStroke();
+    // One undo step that sets vertex heights directly and moves grounded things
+    // with them (the seam stitcher; no brush). Out-of-range vertices are ignored.
+    struct VertexHeight { int x = 0, y = 0; float h = 0; };
+    // Bilinear height of a terrain state at a map-local point (nullopt outside the grid).
+    static std::optional<float> sampleHeight(const TerrainState& t, int cellsX, int cellsY, float x, float y);
+    bool setVertexHeights(const std::vector<VertexHeight>& edits);
+    // the same; followGround = false leaves every placed thing where it is
+    bool setVertexHeights(const std::vector<VertexHeight>& edits, bool followGround);
+    uint64_t terrainRevision() const { return terrainRev_; }
+    bool terrainDirty() const;       // differs from the terrain last written into the game/pack
+    bool terrainDraftDirty() const;  // differs from the most recently saved authoring draft
+    std::filesystem::path terrainDraftPath(const std::filesystem::path& gameRoot) const;
+    bool saveDraftLoose(const std::filesystem::path& gameRoot, std::string& error,
+                        std::vector<std::string>* notes = nullptr);
+    bool saveTerrainDraft(const std::filesystem::path& gameRoot, std::string& error,
+                          std::vector<std::string>* notes = nullptr);
+    bool loadTerrainDraft(const std::filesystem::path& gameRoot, std::string& error);
+    // Standalone editor recovery archive: never marks authoring/game baselines saved.
+    bool saveRecovery(const std::filesystem::path& path, std::string& error) const;
+    bool editActive() const { return stroke_ || batchDepth_ > 0; }
+    bool recover(const std::filesystem::path& path, std::string& error);
+    Document recoveryWriteSnapshot() const;
+    bool themesDirty() const;          // ground-theme paint pending (needs the layer-mesh rebuild on deploy)
+    uint64_t themeRevision() const { return themeRev_; }   // bumps when a theme stroke ends / undoes
+    std::optional<float> terrainHeight(float x, float y) const;   // bilinear on the working copy
+    // Ground-theme tools of the vanilla editor's Themes dialog (FableWin, see
+    // docs/VANILLA_EDITOR_INVENTORY.md 5.3). Eyedropper: the strongest slot of
+    // the cell under a map-local point (EditGetMaxThemeAt); nullopt off the map.
+    std::optional<uint8_t> dominantThemeAt(float x, float y) const;
+    // Flood Replace (EditFloodReplaceEngineThemeUndoable): an 8-neighbour flood
+    // from the cell under (x, y) over the cells holding `from`, replacing it with
+    // `to`. All: every cell of the map (Replace All; not in vanilla). One undo
+    // step; returns the cells changed (0 = nothing to do, no undo step).
+    // Like vanilla (also IsPosValidFloodReplaceSite 0x02979e00 and the Replace pen
+    // 0x0297a6c0), a cell holds `from` when any slot's index matches, whatever its
+    // strength, and a slot matches when its index is `from` or shares `from`'s water
+    // family (setThemeFamilies). `to` = 0 ("no theme") is refused.
+    enum class ReplaceScope { Connected, All };
+    size_t replaceTheme(uint8_t from, uint8_t to, ReplaceScope scope, float x = 0, float y = 0);
+    // One NoWaterThemeDef per LEV palette slot (0 = none); the App fills it from the
+    // theme library. All zeros = exact-index matching.
+    void setThemeFamilies(const std::array<uint32_t, 256>& families) { themeFamily_ = families; }
+    std::array<bool, 256> replaceMatchSet(uint8_t from) const;
+    // Theme Paint/Replace vertices: the caller truncates the pointer, then
+    // tests strict squared distance < radius^2 (0x029799d0 / 0x0297a6c0).
+    std::vector<std::pair<int, int>> themeBrushVertices(float x, float y, float radius) const;
+    // Height Toolbox "Draw Paths" (EditDrawPathPenUndoable): every vertex within
+    // `radius` of the segment takes the height interpolated between the ground
+    // at its two ends. One undo step; returns the vertices changed.
+    size_t drawPath(float x0, float y0, float x1, float y1, float radius);
+    // Copy the vertices of [x0..x1] x [y0..y1] (map-local, inclusive, clamped).
+    // withThings: also the things standing inside the rectangle (vanilla GetCopyThings).
+    TerrainClip copyTerrain(int x0, int y0, int x1, int y1, bool withThings = false) const;
+    // Paste with its first vertex at (x, y), rotated by quarterTurns x 90 degrees
+    // (vanilla RotateBrush steps). relative: heights keep their shape but sit on the
+    // ground under the paste origin (clip height - clip corner + ground there);
+    // otherwise absolute. Themes map by name into this palette (a missing one takes a
+    // free slot). One undo step; returns the vertices changed.
+    // withThings: the clip's things too, turned with the ground and set at their old height above
+    // the (new) ground; they get fresh UIDs and no script name, like any paste. Returns the vertices
+    // changed plus the things placed; `thingsPlaced` (optional) gets the latter.
+    size_t pasteTerrain(const TerrainClip& clip, int x, int y, int quarterTurns, bool heights, bool themes, bool relative,
+                        bool withThings = false, size_t* thingsPlaced = nullptr);
+    size_t pasteTerrainCells(const TerrainClip& clip, int x, int y, int quarterTurns, bool heights, bool themes, bool relative);
+    // The vanilla Fractals dialog's "Apply fractal" (CEditMap::EditGenerateFractal):
+    // every vertex SET to fractal(world position) * params.scale world units,
+    // clamped to [0, 2048) like CHeightMap::SetSizeZAt. World = the map's WLD origin
+    // + map-local, so maps done one after another meet at their seams. One undo
+    // step; returns the vertices changed.
+    size_t applyFractal(const forge::fractal::Params& params);
+    // The vanilla console's whole-map height edits (CEditMap::EditRaiseZ 0x029a8d10,
+    // EditResizeZPercent 0x029a8ac0, EditResetAllZ 0x029a8c30), every vertex clamped to
+    // [0, 2048 - 1e-4] like vanilla. One undo step each; return the vertices changed.
+    // raise: h + d; with moveThings every placed thing rises by d too (CEditRaiseZOnThing
+    // 0x0298e5a0 moves physics, camera coordinate bases and spline key positions),
+    // otherwise nothing moves. Relative camera bases account for the parent's move.
+    // scale: h * pct / 100 (100 = no change). set: h = v. These two keep Forge's rule that
+    // grounded objects follow the ground (vanilla leaves things where they are).
+    size_t raiseHeights(float d, bool moveThings = true);
+    size_t resizeHeightsPercent(float pct);
+    size_t setAllHeights(float v);
+    // The vanilla world-map "Fit Neighbours" (CEditWorldMap::EditFitFillerMap, ported in
+    // forge/fillerfit.hpp): the map rebuilt as a ridge that meets every touching map at
+    // the shared edge -- made for filler maps. fittedHeights previews it on the current
+    // (unsaved edits included) heights and leaves the map alone; empty when nothing
+    // touches it. fitToNeighbours applies it as one undo step, heights clamped to
+    // [0, 2048); returns the vertices changed.
+    std::vector<float> fittedHeights(const forge::fillerfit::Params& params, const std::vector<forge::fillerfit::Neighbour>& neighbours,
+                                     forge::fillerfit::Report* report = nullptr) const;
+    size_t fitToNeighbours(const forge::fillerfit::Params& params, const std::vector<forge::fillerfit::Neighbour>& neighbours,
+                           forge::fillerfit::Report* report = nullptr);
+    const std::vector<float>* terrainHeights() const { return terrain_ ? &terrain_->heights : nullptr; }
+    // The LEV's ground-theme palette (256 fixed slots, ~30 named on a retail
+    // map). Painting is limited to it, so any ENGINE_THEME of the game can be
+    // added to a free slot: returns the slot (the existing one when the name is
+    // already there), -1 when the palette is full or no terrain is loaded. One
+    // undo step (the palette rides in TerrainState); written with the next
+    // terrain save.
+    int addGroundTheme(const std::string& name, uint32_t defIndex);
+    // The game-map grid: environment + sound themes per 4x4 cells.
+    bool hasGameMap() const { return level_ && level_->hasGameMap(); }
+    const std::vector<std::string>& soundThemes() const;   // index i+1 in a cell; 0 = none
+    // An ENVIRONMENT_THEME_DAY def into a free atmos slot (the existing slot when
+    // named already); -1 when full / no grid. One undo step, saved with the terrain.
+    int addEnvironmentTheme(const std::string& name, uint32_t defIndex);
+    // A SOUND_THEME def into the map's sound list (lev::File::addSoundTheme re-lays the
+    // file after the list). Returns the cell index, -1 on failure (error set). Not an
+    // undo step: an unused name is harmless; it is written with the next terrain save.
+    int addSoundTheme(const std::string& name, std::string& error);
+    // Vanilla EditFillSound (FableWin 0x02970df0, Survey > Sounds > Clear all with 0): every
+    // game-map cell of this map gets the sound index, 0 = none. Returns the cells changed;
+    // one undo step (vanilla has none). 0 when nothing changes or the index is not listed.
+    size_t fillSound(uint8_t index);
+    // Game-map cells touched by vanilla EditSetSounds' rounded height-vertex
+    // disc (0x02971010). One entry per sound cell, clipped to this map's grid.
+    std::vector<std::pair<int, int>> soundBrushCells(float x, float y, float radius) const;
+    // Environment maps the strict theme vertex pen to unique game cells.
+    std::vector<std::pair<int, int>> environmentBrushCells(float x, float y, float radius) const;
+    // Native walkability/camera/shore pen, clipped to regular cells (extra boundary vertices excluded).
+    std::vector<std::pair<int, int>> surveyBrushVertices(float x, float y, float radius) const;
+    std::vector<std::pair<int, int>> environmentSmearBrushCells(float x, float y, float radius) const;
+    using OverlayColour = std::array<uint8_t, 4>;
+    std::vector<OverlayColour> shoreOverlay() const;
+    using OverlayLookup = std::function<std::optional<OverlayColour>(const std::string&, const std::string&)>;
+    // One RGBA value per game cell. Sound filter -1 means all; 0 means none.
+    std::vector<OverlayColour> surveyOverlay(bool environment, int soundFilter, const OverlayLookup& lookup) const;
+    // What the grid holds under a map-local point: the strongest atmos slot and the sound.
+    std::optional<std::pair<uint8_t, uint8_t>> environmentAndSoundAt(float x, float y) const;
+    int paletteSlotOf(const std::string& name) const;
+    // Deploy: loose .lev, the FinalAlbion.wad entry, and the map's terrain chunk
+    // inside FinalAlbion_RT.stb re-baked from the edited heights (same-size,
+    // patched in place; one-time .forge-orig backups). `notes` gets the bake log.
+    // `library` (the install's ENGINE_THEME defs) is needed when themes were
+    // painted: the layer meshes are regenerated from the LEV themes then.
+    bool deployTerrain(const std::filesystem::path& gameRoot, std::vector<std::string>& notes, std::string& error,
+                       const forge::terraintex::ThemeLibrary* library = nullptr,
+                       const std::function<void(const std::string&)>& progress = {});
+    // End any stroke first. This owns its mutable LEV and contains only terrain
+    // write inputs, so a worker never reads or changes the active document.
+    Document terrainWriteSnapshot() const;
+    // Main thread, after a successful snapshot write. Later edits and undo stay
+    // intact; a reopened/replaced document does not accept the old completion.
+    bool acceptTerrainWrite(const Document& written);
+    // Writes the loose .lev. Cells whose walkable byte changed since the
+    // navigation was last consistent get the retail CNavQuadTree patched in
+    // place (only those cells; door nodes, stacked layers and the rest of the
+    // tree stay as retail wrote them). `notes` gets a line about the patch.
+    bool saveTerrainLoose(const std::filesystem::path& gameRoot, std::string& error,
+                          std::vector<std::string>* notes = nullptr);
+
+    // ---- into a FableForge mod pack instead of the game (the composer applies it at
+    // deploy): the objects as <pack>/data/Levels/FinalAlbion/<map>.tng (merged per thing
+    // by UID with the other mods); the terrain as that folder's <map>.lev plus the map's
+    // re-baked static-map chunk and record in <pack>/stb/<map>.chunk / .record (baked from
+    // gameRoot's FinalAlbion_RT.stb). No backups or markers are written inside a pack.
+    bool saveToPack(const std::filesystem::path& pack, std::string& error);
+    bool deployTerrainToPack(const std::filesystem::path& gameRoot, const std::filesystem::path& pack,
+                             std::vector<std::string>& notes, std::string& error,
+                             const forge::terraintex::ThemeLibrary* library = nullptr,
+                             const std::function<void(const std::string&)>& progress = {});
+
+private:
+    // Serialize terrain/navigation into an owned candidate without publishing saved state.
+    void prepareTerrainLoose(const std::filesystem::path& prepared, std::shared_ptr<forge::lev::File>& nextLevel,
+                             bool& patchedNavigation, std::vector<std::string>& notes) const;
+    // Prepare the LEV and its WAD/STB (or pack) companions, then install as one
+    // rollback group. Publish saved state only after the file group succeeds.
+    bool deployTerrainSteps(const std::filesystem::path& gameRoot, std::vector<std::string>& notes, std::string& error,
+                            const forge::terraintex::ThemeLibrary* library,
+                            const std::function<void(const std::string&)>& progress);
+    struct Snapshot {
+        std::string tng;
+        std::shared_ptr<const TerrainState> terrain;
+        // Recovery can replace sound names and navigation as well as editable cells.
+        // Ordinary edit snapshots retain the existing compact representation.
+        std::shared_ptr<const forge::lev::File> recoveryLevel;
+        std::vector<uint8_t> recoveryNav;
+        bool recoverySoundListGrew = false;
+    };
+    Snapshot recoverySnapshot() const;
+    void pushUndo();
+    void restore(const Snapshot& s);
+    Snapshot snapshot() const;
+    void writeTerrainToLevel();
+    size_t reseatGroundedThings(const TerrainState& before, float tolerance, bool recordUndo);
+    std::string mapName_;
+    std::function<std::optional<int32_t>(const std::string&)> creatureSexLookup_;
+    mutable uint64_t incomingCacheRevision_ = ~0ull;
+    mutable std::unordered_map<uint64_t,std::vector<IncomingLink>> incomingCache_;
+    int worldX_ = 0, worldY_ = 0, worldSlot_ = 0;
+    forge::tng::File file_;
+    std::string original_;
+    std::vector<Snapshot> undo_, redo_;
+    int batchDepth_ = 0;
+    bool batchPushed_ = false;
+    std::shared_ptr<const TerrainState> terrain_;        // committed state (immutable, shared with snapshots)
+    std::array<uint32_t, 256> themeFamily_{};             // NoWaterThemeDef per palette slot (setThemeFamilies)
+    bool saveDraftFiles(const std::filesystem::path& gameRoot, std::string& error,
+                        std::vector<std::string>* notes, bool includeObjects);
+    bool terrainDiffersFrom(const std::shared_ptr<const TerrainState>& baseline) const;
+    std::shared_ptr<const TerrainState> draftTerrain_;
+    std::vector<std::string> draftSoundThemes_;
+    std::shared_ptr<const TerrainState> savedTerrain_;   // baseline for terrainDirty()
+    std::unique_ptr<TerrainState> working_;              // during a stroke
+    std::unique_ptr<forge::terrain::Heightfield> hf_;    // during a stroke
+    bool stroke_ = false;
+    float flattenTarget_ = 0;
+    std::vector<uint8_t> alteredByPen_;   // Change Height: blocks already stepped this stroke
+    uint32_t penSeed_ = 0x2C6B3A91u;      // Noise: the engine LCG state (vanilla: the world seed)
+    uint64_t terrainRev_ = 0;
+    uint64_t themeRev_ = 0;
+    uint64_t revision_ = 0;
+    mutable uint64_t dirtyRev_ = ~0ull;
+    mutable bool dirtyValue_ = false;
+    bool fromWad_ = false;
+    std::filesystem::path loosePath_;
+    std::filesystem::path externalWld_, externalLev_;   // set for a map of another world
+    std::string placementSection_ = "NULL";
+    uint64_t trackTempCounter_ = 0;
+    // track helpers (no undo step of their own)
+    uint64_t trackLink(size_t node, int which) const;          // 1 = prev, 2 = next
+    void setTrackField(size_t node, const std::string& key, const std::string& value);
+    std::vector<size_t> trackChain(size_t node) const;         // head -> tail
+    std::vector<size_t> trackChain(size_t node, const std::unordered_map<uint64_t, size_t>* uidIndex) const;
+    void fixTrackEnds(const std::vector<size_t>& chain);
+    void nameChain(const std::vector<size_t>& chain, const std::string& name);
+    std::string nextTrackTempName();
+    size_t clearLinksTo(uint64_t uid, size_t except, const std::set<size_t>* pending);
+    size_t removeOne(size_t index, const std::set<size_t>* pending=nullptr); // assumes caller checked direct locks
+    bool soundListGrew_ = false;   // a sound name was added: the .lev must be written
+    std::filesystem::path packOut_;   // set while deployTerrainToPack runs: write into the pack, not the game
+    std::string targetSection() const;   // placementSection_ when it exists, else NULL
+    size_t intoPlacementSection(size_t index);   // moves a just-placed thing (no undo step of its own)
+    std::shared_ptr<forge::lev::File> level_;
+    std::shared_ptr<const uint8_t> terrainSession_ = std::make_shared<const uint8_t>(0);
+    std::vector<uint8_t> navWalkable_;   // walkable bytes the level's navigation tree agrees with
+};
+
+// Retail float spelling ("0.0", "-0.000102", "96.063965").
+std::string formatFloat(float v);
+
+// Every CREATURE_GENERATION_FAMILY name in the install's game.bin (the spawner picker).
+std::vector<std::string> creatureFamilies(const std::filesystem::path& gameRoot, std::string& error);
+
+} // namespace albion::editor

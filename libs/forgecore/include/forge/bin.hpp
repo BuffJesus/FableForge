@@ -1,0 +1,114 @@
+#pragma once
+// Reader for Fable TLC compiled definitions (data\CompiledDefs\*.bin plus the
+// shared names.bin string table). Layout cross-checked against
+// SilverChest.Formats.Bin (local reference source) and validated against the
+// retail install:
+//   names.bin: 20-byte header (u32 magic @4, PC = 0xA8E36C34; s32 count @8),
+//     u32 stream length @12 counts from +16, including its four-byte prefix;
+//     then count x { u32 nameCrc, ASCIIZ name }. References into names.bin are
+//     offsets of the name string relative to the end of the header.
+//   game.bin:  9-byte header (byte 1 == 0xAA means Xbox), u32 entryCount @9,
+//     main table @13 = entryCount x { s32 defNameOffset, s32 nameOffset,
+//     s32 indexInDefinition }, u32 chunkCount, chunkCount x { s32 firstEntry,
+//     s32 compressedOffset } (last pair is an end sentinel), u32, then the
+//     zlib chunk data. Each inflated chunk (<= 64 KiB) starts with u16
+//     payload offsets for its entries.
+// Entry order IS the runtime global definition index (evidence in
+// docs/FINDINGS.md 2026-07-18: reward payload indices resolve to entry rows).
+
+#include <cstdint>
+#include <filesystem>
+#include <optional>
+#include <string>
+#include <string_view>
+#include <vector>
+
+namespace forge::bin {
+
+// Native byte-wise name CRC: reflected CRC-32, seed zero, no final inversion.
+// This computes a key; distinct strings can collide and require ambiguity checks.
+uint32_t nameCrc(std::string_view name);
+
+struct Entry {
+    std::string definition;      // definition type, e.g. OBJECT, CChestDef
+    std::string name;            // e.g. OBJECT_CHEST_OPENABLE; "" for sub-defs
+    int32_t indexInDefinition = 0;
+    std::vector<uint8_t> data;   // raw payload
+};
+
+class File {
+public:
+    static File open(const std::filesystem::path& namesPath,
+                     const std::filesystem::path& binPath);
+
+    const std::vector<Entry>& entries() const { return entries_; }
+    // Loaded pool in exact order, including duplicate/unused strings and CRCs.
+    // Read-only namespace planning must retain names not used by table rows.
+    const std::vector<std::pair<uint32_t, std::string>>& originalNames() const { return names_; }
+
+    // First entry with this exact name, or nullptr.
+    const Entry* find(std::string_view name) const;
+
+    // Original names.bin text offset, used by references inside compiled payloads.
+    // This describes the loaded bank, not a subsequently saved/reordered table.
+    std::optional<uint32_t> originalNameOffset(std::string_view name) const;
+
+    // Offset this File::save() will assign after appending names for added
+    // definition records in entry order. Existing offsets remain unchanged.
+    std::optional<uint32_t> savedNameOffset(std::string_view name) const;
+
+    // --- Write path. Mutate payloads (or add entries), then save both files.
+    // Saving re-chunks and re-compresses, so output is not byte-identical to
+    // the input; the guarantee is a semantic round-trip (same definitions,
+    // names, indexInDefinition, and payload bytes after reload). names.bin is
+    // rewritten with recomputed offsets; unchanged name sets produce
+    // byte-identical names.bin output when its input size header is canonical.
+    // Historical undersized headers are normalized to the native stream length.
+    void setEntryData(size_t index, std::vector<uint8_t> data);
+    size_t addEntry(std::string definition, std::string name,
+                    std::vector<uint8_t> data);
+    // Append an exact donor payload under a unique, nonempty printable-ASCII
+    // name (up to 127 bytes). Existing canonical per-type ordinals are required;
+    // all prior slots, names and payloads stay unchanged. This mutates memory
+    // only; publishing the appended name pool and bank is the caller's job.
+    size_t cloneEntry(size_t donorIndex, std::string newName);
+    // Reserve a whole bank's numeric namespace without changing existing
+    // payloads. Shared record identities and name-pool prefixes must agree.
+    // Appended records retain their original slots and names retain offsets.
+    // Rejects incompatible layouts before mutating this File.
+    void extendStableLayout(const File& source);
+    // Requires headers from File::open(); a default-constructed planning bank
+    // cannot be serialized until its storage format has been established.
+    void save(const std::filesystem::path& namesPath,
+              const std::filesystem::path& binPath) const;
+
+private:
+    std::vector<Entry> entries_;
+    std::vector<uint8_t> binHeader_;                // 9 bytes, preserved
+    std::vector<uint8_t> namesHeader_;              // 20 bytes, preserved
+    std::vector<std::pair<uint32_t, std::string>> names_; // (crc, name) in order
+};
+
+// Decoded OBJECT_FAMILY payload: 9-byte header, u32 count,
+// count x (u32 objectDefIndex, f32 weight). Weights are per-mille;
+// objectDefIndex 0 means "no drop".
+struct FamilyMember {
+    uint32_t objectIndex = 0;
+    float weight = 0.0f;
+};
+struct ObjectFamily {
+    uint32_t entryIndex = 0;
+    std::string name;
+    std::vector<FamilyMember> members;
+};
+std::vector<ObjectFamily> decodeObjectFamilies(const File& file);
+
+// Decoded CContainerRewardHeroDef payload: 7-byte header, u32 count,
+// count x u32 objectFamilyEntryIndex.
+struct RewardDef {
+    uint32_t entryIndex = 0;
+    std::vector<uint32_t> familyIndices;
+};
+std::vector<RewardDef> decodeContainerRewards(const File& file);
+
+} // namespace forge::bin

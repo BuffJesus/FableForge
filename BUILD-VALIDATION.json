@@ -1,0 +1,155 @@
+{
+  "utc": "2026-10-19T13:57:06.869089+00:00",
+  "extractedSourceBuilds": [
+    {
+      "kind": "app",
+      "source": "<fresh extraction of supplied source archive>",
+      "startedUtc": "2026-10-19T13:53:31.841217+00:00",
+      "commands": [
+        {
+          "command": [
+            "cmake",
+            "-S",
+            ".",
+            "-B",
+            "build-app",
+            "-G",
+            "Ninja",
+            "-DCMAKE_BUILD_TYPE=Release",
+            "-DCMAKE_C_COMPILER=gcc",
+            "-DCMAKE_CXX_COMPILER=g++"
+          ],
+          "exitCode": 0
+        },
+        {
+          "command": [
+            "cmake",
+            "--build",
+            "build-app",
+            "--target",
+            "FableTextureExport",
+            "--parallel",
+            "4"
+          ],
+          "exitCode": 0
+        }
+      ],
+      "outputs": {
+        "build-app/FableTextureExport.exe": {
+          "sha256": "ae060a053782d1f143bfede54ebca3a86d49cbb9a720607dd4a3c22ff44ada61",
+          "bytes": 9815708
+        }
+      },
+      "success": true,
+      "finishedUtc": "2026-10-19T13:55:27.846348+00:00"
+    },
+    {
+      "kind": "runtime",
+      "source": "<fresh extraction of supplied source archive>",
+      "startedUtc": "2026-10-19T13:51:12.115685+00:00",
+      "commands": [
+        {
+          "command": [
+            "cmake",
+            "-S",
+            "tools/texture-runtime",
+            "-B",
+            "build-runtime",
+            "-G",
+            "Visual Studio 17 2022",
+            "-A",
+            "Win32"
+          ],
+          "exitCode": 0
+        },
+        {
+          "command": [
+            "cmake",
+            "--build",
+            "build-runtime",
+            "--config",
+            "Release",
+            "--target",
+            "TextureSizeFix",
+            "Archive4GB",
+            "--parallel",
+            "4"
+          ],
+          "exitCode": 0
+        }
+      ],
+      "outputs": {
+        "build-runtime/Release/TextureSizeFix.dll": {
+          "sha256": "6ddf1763931fc28e24e236e3e4bc2108bf574f94b9cec853b25a38a01e18a945",
+          "bytes": 142336
+        },
+        "build-runtime/Release/Archive4GB.dll": {
+          "sha256": "b3808375631be0dc7175be5efb092101305643d9044656a09d688fa33d82579f",
+          "bytes": 121856
+        }
+      },
+      "success": true,
+      "finishedUtc": "2026-10-19T13:51:22.336446+00:00"
+    }
+  ],
+  "binaryComparisons": {
+    "FableTextures.exe": {
+      "releaseSha256": "0162703f093eb7154e06695f40bab706e2d5c35f6ffb9977c1b67e85882022f0",
+      "rebuiltSha256": "3676831cc50d10aa5544d8274b3be7c27dcbb438a8ec3dceaccffca25e01318c",
+      "rebuiltBytes": 6478508,
+      "textSectionMatchesRelease": false,
+      "sectionComparisons": {
+        ".text": false,
+        ".data": false,
+        ".rdata": false,
+        "/4": true,
+        ".pdata": false,
+        ".xdata": false,
+        ".bss": true,
+        ".idata": false,
+        ".tls": true,
+        ".reloc": false
+      }
+    },
+    "runtime/TextureSizeFix.dll": {
+      "releaseSha256": "a40e7b189172bb97c551985e366a709c725bdf64c280df0dab76b31bdf951351",
+      "rebuiltSha256": "6ddf1763931fc28e24e236e3e4bc2108bf574f94b9cec853b25a38a01e18a945",
+      "rebuiltBytes": 142336,
+      "textSectionMatchesRelease": true,
+      "sectionComparisons": {
+        ".text": true,
+        ".rdata": false,
+        ".data": true,
+        ".fptable": true,
+        ".rsrc": true,
+        ".reloc": true
+      }
+    },
+    "runtime/Archive4GB.dll": {
+      "releaseSha256": "6d94484d9303d63a0423353f858e9787d099487de9b3928e5619b752f9832b52",
+      "rebuiltSha256": "b3808375631be0dc7175be5efb092101305643d9044656a09d688fa33d82579f",
+      "rebuiltBytes": 121856,
+      "textSectionMatchesRelease": true,
+      "sectionComparisons": {
+        ".text": true,
+        ".rdata": false,
+        ".data": true,
+        ".fptable": true,
+        ".rsrc": true,
+        ".reloc": true
+      }
+    }
+  },
+  "commandLineSmoke": {
+    "arguments": [
+      "--compression",
+      "invalid"
+    ],
+    "expectedExitCode": 2,
+    "actualExitCode": 2,
+    "stderr": "Use --compression fast, balanced or smallest",
+    "passed": true
+  },
+  "scope": "Offline source completeness, compilation, stripping and safe CLI argument-validation check. No game launch or installation changes.",
+  "bitIdenticalBuildClaim": false
+}

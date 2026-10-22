@@ -1,0 +1,62 @@
+FABLE TEXTURES 0.3.0-dev1 - NEXUS SOURCE REVIEW
+
+Contents: portable texture exporter/importer, shared FableForge parser/writer
+sources, bundled third-party headers and C sources, and TextureSizeFix / Archive4GB
+game DLL sources with their Python header generators. No game installation,
+retail assets, executable, save data, credentials, or compiled binaries are included.
+
+APPLICATION BUILD (64-bit Windows)
+Prerequisites: CMake 3.20 or newer; Ninja; a 64-bit MinGW-w64 C/C++20 toolchain.
+The release used WinLibs GCC 15.2.0, x86_64 UCRT POSIX SEH.
+Put that toolchain's bin directory, CMake and Ninja on PATH. In PowerShell, change
+to the extracted directory containing this file and run:
+
+  cmake -S . -B build-app -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++
+  cmake --build build-app --target FableTextureExport --parallel 4
+  Copy-Item build-app/FableTextureExport.exe build-app/FableTextures.exe
+  strip --strip-unneeded build-app/FableTextures.exe
+
+FableTextureExport is the historical internal target name. The shipped filename
+is FableTextures.exe. The copy/strip steps match the release packaging behavior.
+To exercise the importer, put the separately built DLLs beside the EXE under
+runtime/TextureSizeFix.dll and runtime/Archive4GB.dll. Opening the app does not
+require the game DLLs. The app can export PNGs and import edited textures back
+into the user-selected installation using backups and transactional file updates.
+
+GAME DLL BUILD (32-bit, separate build directory)
+Prerequisites: Visual Studio 2022 with Desktop development with C++, the Windows
+SDK, CMake, and Python 3 on PATH. No Python packages are needed for header generation.
+
+  cmake -S tools/texture-runtime -B build-runtime -G "Visual Studio 17 2022" -A Win32
+  cmake --build build-runtime --config Release --target TextureSizeFix Archive4GB --parallel 4
+
+Outputs:
+  build-runtime/Release/TextureSizeFix.dll
+  build-runtime/Release/Archive4GB.dll
+
+The DLLs use C++20 and the static MSVC runtime (/MT). They must be Win32 because
+Fable TLC is a 32-bit process, while the standalone app is 64-bit. CMake invokes
+the included Python scripts to generate the Archive4GB hook headers.
+
+BEHAVIOR RELEVANT TO REVIEW
+TextureSizeFix preserves the displayed HUD/menu size when imported textures are
+larger. Archive4GB corrects signed archive seeking/offset handling for banks
+between 2 and 4 GiB. These DLLs are loaded by the user's game mod loader, validate
+the supported executable and patch sites, and modify their own game process.
+Their memory-protection / memory-write APIs implement these game hooks.
+The standalone app copies and registers the runtime DLLs when import needs them;
+it does not patch Fable.exe on disk. Review tools/texture-export/import.cpp,
+tools/texture-runtime/texture_size_fix.cpp, archive_4g.cpp and local_code_memory.hpp.
+
+PROVENANCE AND LIMITS
+provenance/RELEASE_AND_SOURCE.json lists shipped EXE/DLL hashes and source hashes.
+All seven app source hashes recorded in the frozen release match this bundle.
+Other sources are the current working-tree snapshot, with individual hashes.
+The review root CMakeLists.txt retains the original shared-library definitions
+and app target, omitting unrelated editor/CLI/test targets. The original root
+CMakeLists.txt is retained in provenance/Original-CMakeLists.txt. No source-code
+behavior has been edited for this bundle. Runtime CMakeLists.txt is unchanged.
+This is a buildable source-review package, not a claim of byte-identical builds.
+See BUILD-VALIDATION.json for the actual extracted-source build results.
+
+License: LICENSE and THIRD-PARTY-NOTICES.txt; bundled dependencies retain notices.

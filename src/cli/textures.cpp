@@ -1,0 +1,303 @@
+#include <algorithm>
+#include <array>
+#include <cctype>
+#include <charconv>
+#include <chrono>
+#include <cstdio>
+#include <cstdlib>
+#include <cmath>
+#include <cstring>
+#include <filesystem>
+#include <fstream>
+#include <functional>
+#include <map>
+#include <set>
+#include <string>
+#include <string_view>
+#include <vector>
+
+#include "forge/minimapframe.hpp"
+#include "forge/wld.hpp"
+#include "forge/big.hpp"
+#include "forge/env.hpp"
+#include "forge/meshpreview.hpp"
+#include "forge/lev.hpp"
+#include "forge/lzo.hpp"
+#include "forge/stb.hpp"
+#include "forge/stbbake.hpp"
+#include "forge/stbheightbake.hpp"
+#include "forge/wad.hpp"
+#include "effects.hpp"
+#include "foliageexport.hpp"
+#include "meshimport.hpp"
+#include "stbterrain.hpp"
+#include "thingsexport.hpp"
+#include "terrainexport.hpp"
+#include "worldedit.hpp"
+#include "overworld.hpp"
+#include "gtg.hpp"
+#include "texturebrowse.hpp"
+#include "textureproject.hpp"
+#include <nlohmann/json.hpp>
+#include "leveledit.hpp"
+#include "stbrelocate.hpp"
+#include "stitch.hpp"
+#include "backups.hpp"
+#include "lodbake.hpp"
+#include "dxt1.hpp"
+#include "forge/stbinfo.hpp"
+
+namespace fs = std::filesystem;
+namespace te = albion::terrainexport;
+#include "cli/common.hpp"
+
+namespace albion::cli {
+
+// forge CLI: textures.big and ground themes
+std::optional<int> runTextures(const std::string& cmd, const Args& args) {
+    if(cmd=="texture-setup") {
+        if(args.size()!=3 || args[1]!="--install") {std::fprintf(stderr,"Usage: forge texture-setup --install <root>\n");return 2;}
+        std::printf("%s\n",nlohmann::json(textureproject::inspectSetup(args[2])).dump(2).c_str());return 0;
+    }
+    if(cmd=="texture-project") {
+        try {
+            if(args.size()<3) throw std::runtime_error("Usage: forge texture-project export|review|apply|pack <folder> --install <root> [options]; or match|prepare-images <folder> --images <folder> [--bank <bank>] [--out <new-folder> --token <match-token>]");
+            std::string root,bank,filter,token,pack,images,output,archiveName="textures.big"; textureproject::Options options;
+            for(size_t i=3;i<args.size();++i) {
+                if(args[i]=="--image-size") { options.imageSize=true; continue; }
+                const auto key=args[i];
+                if(i+1==args.size()) throw std::runtime_error("Missing value for "+key);
+                const auto value=args[++i];
+                if(key=="--archive" && args[1]=="export" && (value=="textures.big" || value=="frontend.big")) archiveName=value;
+                else if(key=="--install") root=value;
+                else if(key=="--bank") bank=value;
+                else if(key=="--filter") filter=value;
+                else if(key=="--token") token=value;
+                else if(key=="--pack") pack=value;
+                else if(key=="--images") images=value;
+                else if(key=="--out") output=value;
+                else if(key=="--limit" && (value=="512" || value=="2048")) options.maxDimension=value=="512"?512:2048;
+                else throw std::runtime_error("Unknown option or value: "+key+" "+value);
+            }
+            textureproject::Result r;
+            if(args[1]=="match" || args[1]=="prepare-images") {
+                if(images.empty()) throw std::runtime_error("Choose replacement images with --images <folder>");
+                if(args[1]=="match") r=textureproject::matchReplacements(args[2],images,bank);
+                else {
+                    if(output.empty()) throw std::runtime_error("Choose a new project folder with --out <folder>");
+                    r=textureproject::prepareReplacements(args[2],images,output,token,bank);
+                }
+            } else {
+            const auto install=findInstall(root); if(!install.valid) throw std::runtime_error("Choose a Fable installation with --install");
+            const auto archive=install.root/(args[1]=="export"?(std::filesystem::path("data/graphics/pc")/archiveName):textureproject::projectArchiveRelative(args[2]));
+            if(args[1]=="export") r=textureproject::exportProject(archive,args[2],bank,filter);
+            else if(args[1]=="review") r=pack.empty()?textureproject::review(archive,args[2],options):textureproject::reviewPack(archive,args[2],pack,options);
+            else if(args[1]=="apply") {
+                if(!allowInstallWrite(install)) return 1;
+                r=textureproject::apply(install.root,args[2],options,token);
+            } else if(args[1]=="pack") {
+                if(pack.empty()) throw std::runtime_error("Choose a destination with --pack");
+                r=textureproject::publishPack(archive,args[2],pack,options,token);
+            } else throw std::runtime_error("Unknown texture-project action: "+args[1]);
+            }
+            nlohmann::json report={{"ok",r.ok},{"error",r.error},{"exported",r.exported},{"changed",r.changed},
+                {"matched",r.matched},
+                {"unchanged",r.unchanged},{"removed",r.removed},{"missing",r.missing},{"skipped",r.skipped},{"beforeBytes",r.beforeBytes},
+                {"afterBytes",r.afterBytes},{"storedMipBytes",r.storedMipBytes},{"allocationBytes",r.allocationBytes},
+                {"token",r.token},{"details",r.details}};
+            std::printf("%s\n",report.dump(2).c_str()); return r.ok?0:1;
+        } catch(const std::exception& e) { std::fprintf(stderr,"texture project: %s\n",e.what()); return 2; }
+    }
+
+    if (cmd == "textures" || cmd == "texture-export" || cmd == "texture-replace" || cmd == "texture-add") {
+        // textures [filter] [--bank <bank>] [--install root]        list textures.big entries
+        // texture-export <name> <out.png> [--install root]           first mip as PNG
+        // texture-replace <name> <image> [--install root]            same slot, same format (backup once; refused while the game runs)
+        // texture-add <name> <image> [--bank GBANK_MAIN_PC] [--format dxt1|dxt3|argb8888] [--install root]
+        std::string installArg, bankArg, formatArg;
+        std::vector<std::string> pos;
+        for (size_t i = 1; i < args.size(); ++i) {
+            const auto& option = args[i];
+            if (option == "--install" || option == "--bank" || option == "--format") {
+                if (i + 1 == args.size() || args[i + 1].empty() || args[i + 1].rfind("--", 0) == 0) {
+                    std::fprintf(stderr, "%s needs a value\n", option.c_str()); return 2;
+                }
+                if ((option == "--bank" && cmd != "textures" && cmd != "texture-add") ||
+                    (option == "--format" && cmd != "texture-add")) {
+                    std::fprintf(stderr, "%s does not support %s\n", cmd.c_str(), option.c_str()); return 2;
+                }
+                if (option == "--install") installArg = args[++i];
+                else if (option == "--bank") bankArg = args[++i];
+                else formatArg = args[++i];
+            } else if (option.rfind("--", 0) == 0) {
+                std::fprintf(stderr, "unknown option %s\n", option.c_str()); return 2;
+            } else pos.push_back(option);
+        }
+        if (cmd == "textures" ? pos.size() > 1 :
+            (pos.size() != 2 || pos[0].empty() || pos[1].empty())) {
+            std::fprintf(stderr, "%s expects %s\n", cmd.c_str(),
+                         cmd == "textures" ? "at most one filter" : "exactly one texture name and one file path");
+            return 2;
+        }
+        const Install install = findInstall(installArg);
+        if (!install.valid) { std::fprintf(stderr, "no Fable install (use --install)\n"); return 2; }
+        if ((cmd == "texture-replace" || cmd == "texture-add") && !allowInstallWrite(install)) return 1;
+        const fs::path big = install.root / "data" / "graphics" / "pc" / "textures.big";
+        std::string err;
+        if (cmd == "textures") {
+            const auto rows = albion::texbrowse::listTextures(big, err);
+            if (rows.empty()) { std::fprintf(stderr, "error: %s\n", err.empty() ? "no textures" : err.c_str()); return 1; }
+            const std::string filter = pos.empty() ? "" : pos[0];
+            size_t shown = 0;
+            for (const auto& r : rows) {
+                if (!bankArg.empty() && r.bank != bankArg) continue;
+                if (!filter.empty() && r.name.find(filter) == std::string::npos && r.label.find(filter) == std::string::npos) continue;
+                std::printf("%6u  %-44s %5dx%-5d %-9s %2d mips  %8u bytes  %s%s%s\n", r.id, r.label.c_str(), r.width, r.height, r.format.c_str(), r.mips, r.bytes, r.bank.c_str(), r.label == r.name ? "" : "   ", r.label == r.name ? "" : r.name.c_str());
+                ++shown;
+            }
+            std::printf("%zu of %zu textures\n", shown, rows.size());
+            return 0;
+        }
+        std::vector<std::string> notes;
+        bool ok = false;
+        if (cmd == "texture-export") ok = albion::texbrowse::exportPng(big, pos[0], pos[1], err);
+        else if (cmd == "texture-replace") ok = albion::texbrowse::replaceTexture(install.root, pos[0], pos[1], notes, err);
+        else { uint32_t id = 0; ok = albion::texbrowse::addTexture(install.root, bankArg, pos[0], pos[1], formatArg, id, notes, err); if (ok) std::printf("new texture id %u\n", id); }
+        for (const auto& n : notes) std::printf("  %s\n", n.c_str());
+        if (!ok) { std::fprintf(stderr, "error: %s\n", err.c_str()); return 1; }
+        if (cmd == "texture-export") std::printf("wrote %s\n", pos[1].c_str());
+        return 0;
+    }
+    if (cmd == "minimap-bake") {   // minimap-bake <map> <out.png> [--region R | --framing s,ox,oy] [--install root]: the minimap a new region gets, as a PNG (nothing written to the install)
+        std::string installArg, regionArg, framingArg; std::vector<std::string> pos;
+        for (size_t i = 1; i < args.size(); ++i) {
+            const auto& option = args[i];
+            if (option == "--install" || option == "--region" || option == "--framing") {
+                if (i + 1 == args.size() || args[i + 1].empty() || args[i + 1].rfind("--", 0) == 0) {
+                    std::fprintf(stderr, "%s needs a value\n", option.c_str()); return 2;
+                }
+                if (option == "--install") installArg = args[++i];
+                else if (option == "--region") regionArg = args[++i];
+                else framingArg = args[++i];
+            } else if (option.rfind("--", 0) == 0) {
+                std::fprintf(stderr, "unknown option %s\n", option.c_str()); return 2;
+            } else pos.push_back(option);
+        }
+        if (pos.size() != 2 || pos[0].empty() || pos[1].empty()) { std::fprintf(stderr, "usage: forge minimap-bake <map> <out.png> [--region <name> | --framing scale,offX,offY] [--install <root>]\n"); return 2; }
+        if (!regionArg.empty() && !framingArg.empty()) { std::fprintf(stderr, "use either --region or --framing, not both\n"); return 2; }
+        forge::minimapframe::Framing frame;
+        if (!framingArg.empty()) {
+            std::string_view remaining = framingArg;
+            const std::array<float*, 3> values{&frame.scale, &frame.offsetX, &frame.offsetY};
+            bool valid = true;
+            for (size_t i = 0; i < values.size(); ++i) {
+                const auto comma = remaining.find(',');
+                if ((i < 2) != (comma != std::string_view::npos)) { valid = false; break; }
+                auto value = remaining.substr(0, comma);
+                if (!value.empty() && value.front() == '+') {
+                    value.remove_prefix(1);
+                    if (!value.empty() && value.front() == '-') { valid = false; break; }
+                }
+                if (value.empty()) { valid = false; break; }
+                const auto parsed = std::from_chars(value.data(), value.data() + value.size(), *values[i]);
+                if (parsed.ec != std::errc{} || parsed.ptr != value.data() + value.size() || !std::isfinite(*values[i])) { valid = false; break; }
+                if (comma != std::string_view::npos) remaining.remove_prefix(comma + 1);
+            }
+            if (!valid || frame.scale <= 0) { std::fprintf(stderr, "--framing needs three complete finite numbers scale,offX,offY with positive scale\n"); return 2; }
+        }
+        const Install install = findInstall(installArg);
+        if (!install.valid) { std::fprintf(stderr, "no Fable install (use --install)\n"); return 2; }
+        LevelWorkspace tempLev;
+        const fs::path lev = resolveLevel(pos[0], install, tempLev);
+        std::ifstream in(lev, std::ios::binary);
+        const std::vector<uint8_t> bytes((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+        std::string name = fs::path(pos[0]).stem().string(), err;
+        te::Image img;
+        forge::minimapframe::Framing* given = nullptr;
+        if (!framingArg.empty()) {
+            given = &frame;
+        } else if (!regionArg.empty()) {
+            const auto world = forge::wld::File::parse(install.root / "data" / "Levels" / "FinalAlbion.wld");
+            const forge::wld::Region* r = world.findRegion(regionArg);
+            if (!r) { std::fprintf(stderr, "no region %s\n", regionArg.c_str()); return 2; }
+            frame.scale = r->minimapScale; frame.offsetX = r->miniMapOffsetX; frame.offsetY = r->miniMapOffsetY;
+            given = &frame;
+        }
+        forge::minimapframe::Framing used = frame;
+        if (!albion::editor::bakeMinimapImage(install.root, name, bytes, given, &used, img, err)) { std::fprintf(stderr, "error: %s\n", err.c_str()); return 1; }
+        if (!given) frame = used;
+        std::printf("framing: MiniMapScale %.2f, MiniMapOffsetX %.0f, MiniMapOffsetY %.0f%s\n", double(frame.scale), double(frame.offsetX), double(frame.offsetY), given ? "" : " (centred)");
+        if (!te::writePng(img, pos[1], err)) { std::fprintf(stderr, "error: %s\n", err.c_str()); return 1; }
+        std::printf("wrote %s (%ux%u)\n", pos[1].c_str(), img.width, img.height);
+        return 0;
+    }
+    if (cmd == "theme-add") {   // theme-add <png> <NAME> [--donor <ENGINE_THEME>] [--cliff <png>] [--install <root>]: a ground theme from your own texture
+        if (args.size() < 3) { std::fprintf(stderr, "usage: forge theme-add <png> <NAME> [--donor <ENGINE_THEME>] [--cliff <png>] [--install <root>]\n"); return 2; }
+        std::string installArg; albion::editor::CustomThemeRequest req;
+        req.png = args[1]; req.name = args[2];
+        for (size_t i = 3; i < args.size(); ++i) {
+            if (args[i] == "--install" && i + 1 < args.size()) installArg = args[++i];
+            else if (args[i] == "--donor" && i + 1 < args.size()) req.donor = args[++i];
+            else if (args[i] == "--cliff" && i + 1 < args.size()) req.cliffPng = args[++i];
+            else { std::fprintf(stderr, "unknown option %s\n", args[i].c_str()); return 2; }
+        }
+        const Install install = findInstall(installArg);
+        if (!install.valid) { std::fprintf(stderr, "no Fable install (use --install)\n"); return 2; }
+        if (!allowInstallWrite(install)) return 1;
+        albion::editor::CustomThemeResult out; std::string err;
+        if (!albion::editor::createCustomTheme(install.root, req, out, err)) { std::fprintf(stderr, "error: %s\n", err.c_str()); return 1; }
+        for (const auto& n : out.notes) std::printf("  %s\n", n.c_str());
+        std::printf("theme %s ready: def index %u, texture %u -- paint it from the editor (Paint ground -> search the name)\n", req.name.c_str(), out.defIndex, out.baseTexture);
+        return 0;
+    }
+    if (cmd == "mesh-import") {   // mesh-import <model.glb|.gltf|.obj> <NAME> [--texture <png> | --texture-id <n>] [--donor <OBJECT_...>] [--stored] [--no-collision] [--install <root>]: a custom static object
+        if (args.size() < 3) { std::fprintf(stderr, "usage: forge mesh-import <model.glb|.gltf|.obj> <NAME> [--texture <png> | --texture-id <n>] [--donor <OBJECT_...>] [--stored] [--no-collision] [--install <root>]\n"); return 2; }
+        std::string installArg; albion::meshimport::ImportRequest req;
+        req.model = args[1]; req.name = args[2];
+        for (size_t i = 3; i < args.size(); ++i) {
+            if (args[i] == "--install" && i + 1 < args.size()) installArg = args[++i];
+            else if (args[i] == "--texture" && i + 1 < args.size()) req.texturePng = args[++i];
+            else if (args[i] == "--texture-id") {
+                if (i + 1 == args.size()) { std::fprintf(stderr, "--texture-id needs an unsigned decimal ID (0..4294967295)\n"); return 2; }
+                const auto& value = args[++i];
+                const auto parsed = std::from_chars(value.data(), value.data()+value.size(), req.textureId);
+                if (parsed.ec != std::errc{} || parsed.ptr != value.data()+value.size()) {
+                    std::fprintf(stderr, "--texture-id needs an unsigned decimal ID (0..4294967295)\n"); return 2;
+                }
+            }
+            else if (args[i] == "--donor" && i + 1 < args.size()) req.donor = args[++i];
+            else if (args[i] == "--stored") req.compress = false;
+            else if (args[i] == "--no-collision") req.collision = false;
+            else { std::fprintf(stderr, "unknown option %s\n", args[i].c_str()); return 2; }
+        }
+        const Install install = findInstall(installArg);
+        if (!install.valid) { std::fprintf(stderr, "no Fable install (use --install)\n"); return 2; }
+        if (!allowInstallWrite(install)) return 1;
+        albion::meshimport::ImportResult out; std::string err;
+        if (!albion::meshimport::importModel(install.root, req, out, err)) { std::fprintf(stderr, "error: %s\n", err.c_str()); return 1; }
+        for (const auto& n : out.notes) std::printf("  %s\n", n.c_str());
+        std::printf("%s ready: mesh %s id %u%s, def index %zu -- place it from the editor (Add an object -> search %s). Not yet seen in-game.\n",
+                    out.objectName.c_str(), out.meshName.c_str(), out.meshId, out.physicsId ? (", collision hull id " + std::to_string(out.physicsId)).c_str() : ", no collision hull", out.defIndex, out.objectName.c_str());
+        return 0;
+    }
+    if(cmd=="mesh-replace") {
+        if(args.size()<3) {std::fprintf(stderr,"usage: forge mesh-replace <model.glb|.gltf|.obj> <MESH_NAME|id> [--stored] [--install <root>]\n");return 2;}
+        albion::meshimport::ReplaceRequest req;req.model=args[1];req.target=args[2];std::string installArg;
+        for(size_t i=3;i<args.size();++i) {
+            if(args[i]=="--stored") req.compress=false;
+            else if(args[i]=="--install" && i+1<args.size()) installArg=args[++i];
+            else {std::fprintf(stderr,"unknown option %s\n",args[i].c_str());return 2;}
+        }
+        const Install install=findInstall(installArg);
+        if(!install.valid) {std::fprintf(stderr,"no Fable install (use --install)\n");return 2;}
+        if(!allowInstallWrite(install)) return 1;
+        albion::meshimport::ReplaceResult out;std::string error;
+        if(!albion::meshimport::replaceModel(install.root,req,out,error)) {std::fprintf(stderr,"error: %s\n",error.c_str());return 1;}
+        for(const auto& note:out.notes) std::printf("  %s\n",note.c_str());
+        std::printf("%s replaced at mesh ID %u: %zu vertices, %zu triangles. Original collision geometry retained.\n",out.meshName.c_str(),out.meshId,out.vertices,out.triangles);
+        return 0;
+    }
+    return std::nullopt;
+}
+
+}  // namespace albion::cli

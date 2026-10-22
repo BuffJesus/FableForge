@@ -1,0 +1,245 @@
+#include "forge/heightpen.hpp"
+
+#include <algorithm>
+#include <cmath>
+#include <limits>
+
+namespace forge::heightpen {
+namespace {
+
+constexpr float kDnz = 1.0e-4f;   // DNZ_FOR_HEIGHTS
+
+// GFFloatToLongNear: fistp in the default mode, round half to even
+int nearest(float v) { return int(std::nearbyint(v)); }
+
+float limit(float v) {   // GFLimit(v, 0, 2048 - DNZ): NaN passes through
+    if (0.0f > v) return 0.0f;
+    if (kMaxHeight < v) return kMaxHeight;
+    return v;
+}
+
+bool inside(const terrain::Heightfield& f, int x, int y) { return x >= 0 && y >= 0 && x < f.cellsX() && y < f.cellsY(); }
+
+bool inRoundedDisc(int bx, int by, int cx, int cy, float radius) {
+    const double dx = double(bx) - cx, dy = double(by) - cy;
+    const float d = float(std::sqrt(float(dx * dx + dy * dy)));
+    return radius > d - 0.5f;
+}
+
+template<class Visit>
+void visitHeightAddition(int cellsX, int cellsY, float x, float y, float radius, Visit visit) {
+    const int cx = nearest(x), cy = nearest(y);
+    const float span = 2.0f * radius + kDnz;
+    for (int j = 0; float(j) < span; ++j)
+        for (int i = 0; float(i) < span; ++i) {
+            const float px = float(cx) - radius + float(i), py = float(cy) - radius + float(j);
+            const float di = radius - float(i), dj = radius - float(j);
+            if (!(std::sqrt(dj * dj + di * di) < radius + kDnz)) continue;
+            // Truncation keeps (-1,0) at vertex zero. Reject out-of-map
+            // values before converting them so the query can stay bounded.
+            if (px <= -1.0f || py <= -1.0f || px >= float(cellsX) || py >= float(cellsY)) continue;
+            const int bx = int(px), by = int(py);
+            visit(bx, by);
+        }
+}
+
+} // namespace
+
+float sizeToRadius(float slider) { return std::pow(2.0f, slider) / 1.0f; }
+
+float speedToOpacity(float speed) {
+    return 1.0f - float(std::cos(double(std::clamp(speed, 0.0f, 1.0f) * 0.25f) * 6.2831854820251465));
+}
+
+std::vector<std::pair<int, int>> discFootprint(int cellsX, int cellsY, float x, float y, float radius) {
+    std::vector<std::pair<int, int>> vertices;
+    if (cellsX <= 0 || cellsY <= 0 || !std::isfinite(x) || !std::isfinite(y) ||
+        !std::isfinite(radius) || radius < 0.0f) return vertices;
+    // Reject discs beyond the map before rounding coordinates or bounds.
+    if (double(x) + radius + 1 < 0 || double(y) + radius + 1 < 0 ||
+        double(x) - radius - 1 > cellsX || double(y) - radius - 1 > cellsY) return vertices;
+    const double roundedX = std::nearbyint(double(x)), roundedY = std::nearbyint(double(y));
+    if (roundedX < std::numeric_limits<int>::min() || roundedX > std::numeric_limits<int>::max() ||
+        roundedY < std::numeric_limits<int>::min() || roundedY > std::numeric_limits<int>::max()) return vertices;
+    const int cx = int(roundedX), cy = int(roundedY);
+    const int x0 = int(std::clamp(std::floor(double(cx) - radius), 0.0, double(cellsX - 1)));
+    const int x1 = int(std::clamp(std::ceil(double(cx) + radius), 0.0, double(cellsX - 1)));
+    const int y0 = int(std::clamp(std::floor(double(cy) - radius), 0.0, double(cellsY - 1)));
+    const int y1 = int(std::clamp(std::ceil(double(cy) + radius), 0.0, double(cellsY - 1)));
+    for (int by = y0; by <= y1; ++by)
+        for (int bx = x0; bx <= x1; ++bx)
+            if (inRoundedDisc(bx, by, cx, cy, radius)) vertices.emplace_back(bx, by);
+    return vertices;
+}
+
+uint32_t lcgStep(uint32_t& seed) {
+    seed = seed * 0x24A1u + 0x24DFu;
+    seed = (seed >> 13) | (seed << 19);   // ror 13
+    return seed;
+}
+
+std::vector<std::pair<int, int>> smearFootprint(int cellsX, int cellsY, float x, float y, float radius) {
+    if (!std::isfinite(radius) || double(radius) > std::numeric_limits<int>::max()) return {};
+    const int r = int(std::max(radius, 1.0f));
+    return discFootprint(cellsX, cellsY, x, y, float(r) - 0.5f);
+}
+
+std::vector<std::pair<int, int>> heightAdditionFootprint(int cellsX, int cellsY, float x, float y, float radius) {
+    std::vector<std::pair<int, int>> vertices;
+    if (cellsX <= 0 || cellsY <= 0 || !std::isfinite(x) || !std::isfinite(y) ||
+        !std::isfinite(radius) || radius < 0.0f) return vertices;
+    if (double(x) < std::numeric_limits<int>::min() || double(x) > std::numeric_limits<int>::max() ||
+        double(y) < std::numeric_limits<int>::min() || double(y) > std::numeric_limits<int>::max()) return vertices;
+    visitHeightAddition(cellsX, cellsY, x, y, radius, [&](int bx, int by) { vertices.emplace_back(bx, by); });
+    std::sort(vertices.begin(), vertices.end(), [](const auto& a, const auto& b) {
+        return a.second < b.second || (a.second == b.second && a.first < b.first);
+    });
+    vertices.erase(std::unique(vertices.begin(), vertices.end()), vertices.end());
+    return vertices;
+}
+
+uint32_t random(uint32_t max, uint32_t& seed) {
+    lcgStep(seed);   // advances even when max is 0
+    return max ? seed % max : 0u;
+}
+
+float floatRandom(float max, uint32_t& seed) {
+    const double d = double(max) * 65536.0;
+    lcgStep(seed);
+    if (0.0001 < d) return float(std::fmod(double(seed), d) / 65536.0);
+    return 0.0f;
+}
+
+size_t changeHeight(terrain::Heightfield& field, float x, float y, float radius, float delta, std::vector<uint8_t>& altered) {
+    const size_t cells = size_t(field.cellsX()) * size_t(field.cellsY());
+    if (altered.size() != cells) altered.assign(cells, 0);
+    const int cx = nearest(x), cy = nearest(y);
+    const int x0 = int(std::floor(float(cx) - radius)), x1 = int(std::ceil(float(cx) + radius));
+    const int y0 = int(std::floor(float(cy) - radius)), y1 = int(std::ceil(float(cy) + radius));
+    size_t changed = 0;
+    for (int by = y0; by <= y1; ++by)
+        for (int bx = x0; bx <= x1; ++bx) {
+            if (!inside(field, bx, by)) continue;
+            if (!inRoundedDisc(bx, by, cx, cy, radius)) continue;
+            uint8_t& seen = altered[size_t(by) * field.cellsX() + bx];
+            if (seen) continue;
+            float& h = field.at(bx, by);
+            const float next = limit(h + delta);
+            seen = 1;
+            if (next != h) { h = next; ++changed; }
+        }
+    return changed;
+}
+
+size_t heightAddition(terrain::Heightfield& field, float x, float y, float radius, float amount) {
+    size_t changed = 0;
+    visitHeightAddition(field.cellsX(), field.cellsY(), x, y, radius, [&](int bx, int by) {
+        float& h = field.at(bx, by);
+        const float next = limit(h + amount);
+        if (next != h) { h = next; ++changed; }
+    });
+    return changed;
+}
+
+size_t paintHeight(terrain::Heightfield& field, float x, float y, float radius, float target, float opacity) {
+    const int cx = nearest(x), cy = nearest(y);
+    const int x0 = int(std::floor(float(cx) - radius)), x1 = int(std::ceil(float(cx) + radius));
+    const int y0 = int(std::floor(float(cy) - radius)), y1 = int(std::ceil(float(cy) + radius));
+    size_t changed = 0;
+    for (int by = y0; by <= y1; ++by)
+        for (int bx = x0; bx <= x1; ++bx) {
+            if (!inRoundedDisc(bx, by, cx, cy, radius)) continue;
+            if (!inside(field, bx, by)) continue;
+            float& h = field.at(bx, by);
+            float n = (target - h) * opacity + h;
+            n = target > h ? std::min(n, target) : std::max(n, target);   // never past the target
+            n = limit(n);
+            if (n != h) { h = n; ++changed; }
+        }
+    return changed;
+}
+
+size_t smear(terrain::Heightfield& field, float x, float y, float radius, float smoothness, float spikyness) {
+    static const int around[8][2] = {{0, -1}, {1, -1}, {1, 0}, {1, 1}, {0, 1}, {-1, 1}, {-1, 0}, {-1, -1}};   // MapAround8
+    const int r = int(radius > 1.0f ? radius : 1.0f);
+    const int cx = nearest(x), cy = nearest(y);
+    const int side = 2 * r;
+    const float t2 = spikyness * spikyness;
+    auto filtered = [&](int bx, int by) {
+        const float h0 = field.at(bx, by);
+        float mn = 1e30f, mx = -1e30f, sum = 0.0f;
+        int n = 0;
+        for (const auto& o : around) {
+            const int nx = bx + o[0], ny = by + o[1];
+            if (!inside(field, nx, ny)) continue;
+            const float h = field.at(nx, ny);
+            ++n;
+            if (h < mn) mn = h;
+            if (h > mx) mx = h;
+            sum += h;
+        }
+        const float avg = sum / float(n);
+        const float ratio = std::fabs(h0 - avg) / (mx - mn);
+        if (ratio > t2) {   // NaN (a flat neighbourhood equal to the block) stays
+            const float t = avg * smoothness;
+            return (1.0f - smoothness) * h0 + t;
+        }
+        return h0;
+    };
+    // pass 1 reads the unmodified heights (vanilla fills a buffer first), pass 2 writes
+    std::vector<float> buf(size_t(side) * side, 0.0f);
+    std::vector<uint8_t> in(size_t(side) * side, 0);
+    for (int j = 0; j < side; ++j)
+        for (int i = 0; i < side; ++i) {
+            const int bx = cx - r + i, by = cy - r + j;
+            if (!inside(field, bx, by)) continue;
+            if (!inRoundedDisc(bx, by, cx, cy, float(r) - 0.5f)) continue;
+            buf[size_t(j) * side + i] = filtered(bx, by);
+            in[size_t(j) * side + i] = 1;
+        }
+    size_t changed = 0;
+    for (int j = 0; j < side; ++j)
+        for (int i = 0; i < side; ++i) {
+            if (!in[size_t(j) * side + i]) continue;
+            const int bx = cx - r + i, by = cy - r + j;
+            const float v = limit(buf[size_t(j) * side + i]);
+            float& h = field.at(bx, by);
+            if (std::fabs(v - h) > kDnz) { h = v; ++changed; }
+        }
+    return changed;
+}
+
+size_t noise(terrain::Heightfield& field, float x, float y, float radius, float magnifier, uint32_t& seed) {
+    const int cx = nearest(x), cy = nearest(y);
+    const float r2 = radius * radius;
+    float sum = 0.0f;
+    uint32_t count = 0;
+    for (int bx = int(float(cx) - radius); float(bx) <= float(cx) + radius; ++bx)
+        for (int by = int(float(cy) - radius); float(by) <= float(cy) + radius; ++by) {
+            const float fx = float(bx - cx), fy = float(by - cy);
+            if (fx * fx + fy * fy <= r2 && inside(field, bx, by)) { sum += field.at(bx, by); ++count; }
+        }
+    if (count == 0 || !(double(sum) / double(count) > 0.01)) return 0;   // flat, sea-level ground: nothing
+    uint32_t n = random(count + 1, seed) + 1;
+    if (n & 1u) ++n;
+    float amp = floatRandom(float(double(magnifier) * 0.05), seed) + 0.01f;
+    const float rr = radius;
+    const uint32_t R = uint32_t(std::max(0.0f, std::ceil(rr)));   // GFFloatToLongCeil
+    size_t changed = 0;
+    for (uint32_t k = 0; k < n; ++k) {
+        int dx = int(random(R, seed)), dy = int(random(R, seed));
+        if (random(2, seed) == 0) dx = -dx;
+        if (random(2, seed) == 0) dy = -dy;
+        const int px = cx + dx, py = cy + dy;
+        if (!inside(field, px, py)) continue;
+        float& h = field.at(px, py);
+        float nh = h + amp;
+        if (nh < 0.0f) { amp = -nh; nh = 0.0f; }
+        if (nh != h) ++changed;
+        h = nh;
+        amp = -amp;   // the sign flips only after a poke that landed
+    }
+    return changed;
+}
+
+} // namespace forge::heightpen
