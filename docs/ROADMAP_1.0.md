@@ -1,4 +1,4 @@
-> Current development checkpoint, 2026-10-23: [Creature authoring continuation](HANDOFF_CREATURE_GUI_2026-10-23.md). The combined creature-placement archive passes 118 identities, 142 documentation links and four extracted workflows, including 50 import cases and 16 marker placements at both sizes. Pack material identity and custom-name class/owner routing are included. 145 workflows not run; two unrelated corpus skips. Whole-creature presentation and gameplay remain unverified; RC2 unchanged.
+> Current development checkpoint, 2026-10-23: [Creature placement profiles](HANDOFF_CREATURE_PROFILES_2026-10-23.md). The runtime-profile archive passes 119 identities, 145 documentation links and four extracted workflows: retail/GUI smoke, 16 metadata-profile placements and eight malformed-profile refusals. 146 workflows not run; two unrelated corpus skips. The unchanged import gate was not repeated. Whole-creature presentation and gameplay remain unverified; RC2 unchanged.
 
 # Albion Atlas -> 1.0: what it should do, what it can't, and how we get there
 

@@ -114,7 +114,7 @@ and missing Components at both sizes, requiring no document/file/recovery change
 Preparation-only receipts: placement-types-m9bie7kw and profile-refusal-ivlbjghy
 under the 20261023 C evidence root. Core decoder malformed-list tests and explicit
 Document profile/undo tests were added. Build is in progress; runtime acceptance
-is not claimed yet. A targeted C++ Context audit mode will compare all517 native
+is not claimed yet. A targeted C++ Context audit mode will compare all 517 native
 roots with the independent Python observation, without writing native files.
 
 
@@ -123,8 +123,8 @@ roots with the independent Python observation, without writing native files.
 Canonical receipt:
 `C:/Users/Cornelio/AppData/Local/FableForgeEvidence/20261023/rp-0izfcq1z/result.json`.
 Both affected executables pass: fableforge_defdecode_tests and fableforge_tests.
-The C++ Context audit agrees with the independent Python audit on all517 native
-roots, including344 VillageMember profiles. Original bank/map hashes remain exact.
+The C++ Context audit agrees with the independent Python audit on all 517 native
+roots, including 344 VillageMember profiles. Original bank/map hashes remain exact.
 Frozen candidate GUI SHA256:
 `89a5aa62a1e3be33bc8ead71ce44dc610d403c1fed5c1e2bea7390bddad7a23f`.
 
@@ -158,7 +158,7 @@ it passed. Receipt:
 It proves the unknown existing TNG block is byte-exact for both profile choices
 and undo restores the entire original text. No production code or GUI changed
 since the prior successful comparison; no GUI/native audit was repeated.
-All517 C++ audit rows have unique names and match all517 independent rows.
+All 517 C++ audit rows have unique names and match all 517 independent rows.
 Core/GUI source hashes still match the frozen candidate; only the added unit
 assertion differs from that snapshot's test source. Updated unit binary SHA is
 pinned in its receipt. CLI neighbor builds pass.
@@ -168,11 +168,62 @@ Unit lease released, Native availability queued as
 No owned runtime remains. New refusal workflow is registered in source/package
 gates; source docs describe metadata-based membership and place_refused.
 
-Acceptance now covers two affected unit executables, all517 read-only native
-profiles, the old membership negative control,16 positive placements,8 malformed
+Acceptance now covers two affected unit executables, all 517 read-only native
+profiles, the old membership negative control, 16 positive placements, 8 malformed
 profile refusals, exact recovery, and existing unknown-block preservation/undo.
 No source bank/asset writer changed. The retained immutable ZIP is unchanged and
 still has the old name heuristic. Next: record/push source correction, follow CI,
 and validate the new profile/refusal workflows in a distinct extracted checkpoint
 when batching the next authoring improvements. Whole-creature rendering remains
 unverified; do not repeat unrelated accepted import/native graph gates.
+
+
+## Runtime-profile checkpoint prepared
+
+Distinct archive prepared from clean 37c1ed1 after a no-work three-target shipping
+build check: `dist/development/20261023-creature-profiles/FableForge-0.18.1-dev-win64.zip`.
+SHA256 `485b985ee33202b0e9df792800817e06952a27023c82231b1579efa8905092d0`.
+Offline CRC/duplicate-member/inventory/hash verification passes 119 file identities;
+receipt `build/creature-profiles-archive-identity-20261023.json`. No executable ran
+for this archive gate. Previous archives remain unchanged.
+
+Planned extracted checks: gui, retail, definition_placement_types and
+creature_placement_profile_refusals. Do not rerun the unrelated unchanged full50
+import gate. Supervisor `build/run_creature_profiles_package_window_20261023.py`
+is prepared (240-second bound, inherited per-GUI lease/process guard).
+Texture Archive4GB owns the current shared lease, verified live python PID15444,
+start1792766194.58565. No new frontend launched; await fresh lease/process guard.
+Membership CI 39971393188 is in progress; no success claim yet.
+
+
+## Runtime-profile checkpoint extracted acceptance
+
+The new immutable archive passes four selected workflows: retail eight-map smoke,
+GUI smoke, 16 metadata-profile placements and eight malformed-profile refusals at
+both sizes. Placement/refusal drivers use the shipped schema and an unrelated
+cwd. 119 exact file identities and 145 local documentation links pass; 146 workflows
+not run, two unrelated missing-corpus skips. The unchanged 50-case import gate was
+not repeated. No full-suite, clean-machine, whole-creature assembly or gameplay
+claim follows from these focused checks.
+
+Receipt:
+`C:/Users/Cornelio/AppData/Local/FableForgeEvidence/20261023/mp-sd7yt8w5/package-smoke-vzpipwdd/result.json`.
+Inner placement `placement-types-j39j4ix6/result.json`; refusal
+`profile-refusal-pv8ln9bk/result.json`. Both pin stripped GUI SHA256
+`67ee4c1914c8308fbc0c1fd3ec7eb10d3ac2abd0559e2b62f8f7a1c47c270b0e`.
+Combined local receipt: `build/creature-profiles-checkpoint-20261023.json`.
+ZIP SHA256 remains 485b985ee33202b0e9df792800817e06952a27023c82231b1579efa8905092d0;
+archive prepared from clean 37c1ed1. Older archives remain unchanged.
+
+Texture run finished; Native then held a verified live hidden-vulkan capture.
+One claim correctly refused; peer readiness queued 01a16938-3a04-7a53-b2b7-c8c018ab58e7.
+After that owner exited, a fresh exclusive claim/process guard ran the extracted
+checks. No peer process or lease was reclaimed. All owned GUIs closed and lease
+released; receipt `mp-sd7yt8w5/released-runtime-lease.json`. Native availability
+queued 01a16939-3a0d-7f03-8b6a-8da15723c99a. No immediate further GUI launch planned.
+
+Next authoring gap remains whole-creature presentation/skin assembly and live
+compatibility. Reuse the existing native appearance/body evidence and establish
+which meshes/transforms the engine selects before changing scene algorithms.
+Do not repeat the accepted profile/import/native graph gates without a relevant
+change. Keep gameplay checks separate from marker/individual-model acceptance.

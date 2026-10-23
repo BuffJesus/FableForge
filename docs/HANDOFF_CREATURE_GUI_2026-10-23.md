@@ -496,7 +496,7 @@ SHA256 `c49bf3555d9f423bcf21714110e61ae3d889b6da3d5696ca333ed546068735e8`.
 Offline extraction gate passes118 identities,142 documentation links and the
 retail eight-map smoke. Receipt
 `C:/Users/Cornelio/AppData/Local/FableForgeEvidence/20261023/package-smoke-o1x_sutd/result.json`.
-One workflow run,148 not run,two unrelated missing-corpus skips. New archive is
+One workflow run,148 not run, two unrelated missing-corpus skips. New archive is
 immutable; prior checkpoints remain unchanged. Extracted GUI/placement/import
 workflows remain pending: immediate guard found an unrelated native definition
 block-cache test, no lease claimed or GUI launched. Readiness queued as
@@ -560,4 +560,11 @@ executables,517 native profile comparisons,16 placements/eight malformed-profile
 refusals and the additional unknown-block preservation/undo assertion pass.
 The immutable checkpoint is not replaced; it still uses the old membership
 name heuristic. Latest own runtime lease released with pu-2qfi4vr0 receipt and
-Native availability queued01a16931-32c3-7081-9df8-5c8563fb6cfa.
+Native availability queued 01a16931-32c3-7081-9df8-5c8563fb6cfa.
+
+
+A newer distinct runtime-profile checkpoint now passes its four extracted gates
+(retail/GUI, 16 profile placements, eight malformed-profile refusals), 119 identities
+and 145 docs links. See [profile acceptance](HANDOFF_CREATURE_PROFILES_2026-10-23.md).
+This supersedes the previous source-only membership limitation; older archives
+remain unchanged. No unrelated 50-case import rerun or live-game claim.
