@@ -363,3 +363,75 @@ chosen color group before drawing a replacement. Their exact thresholds,
 sorting and draw order still need instruction/oracle validation before a core
 appearance plan is integrated. Production reader/writer and renderer behavior
 remain unchanged; this audit does not claim whole-creature rendering.
+
+### Shared checked core reader
+
+`forge::creatureappearance::read` now represents all three body groups, per-model,
+per-body and global texture maps, skeletal rows, texture-group count, wound and
+expression boundaries. It verifies counts/allocation budgets, 12-byte map sizes,
+booleans and control tags before returning. Offsets retain original payload
+positions. The input and opaque Stats/tail bytes are never rewritten; skeletal
+names remain offsets until checked against the owning bank's pool.
+
+FMP prefix enumeration/lookup delegates to this reader instead of its previous
+independent fixed-size skips. Body/global texture keys and replacements are
+classified in the texture asset namespace, so equal game-entry/name numbers do
+not cause namespace relocation. Validated map sizes/counts are structural words.
+Malformed metadata remains fail-closed. No scene renderer or model selection
+algorithm is connected yet.
+
+Source acceptance:
+
+- Four affected unit executables pass: fmplinks, defrelocate, creaturevisualclone
+  and skinnedinput. The new complete-map unit covers populated body/global maps,
+  truncations, malformed counts/sizes/booleans and unchanged source bytes.
+- The optional `--creature-appearance-audit` mode of the relocation test reader
+  compares every exposed field and offset with the independent Python reader.
+  All 330 components match exactly, including component 10594's global table;
+  all original bank hashes remain unchanged. Receipt:
+  `C:/Users/Cornelio/AppData/Local/FableForgeEvidence/20261023/ca-tni66p7h/layout-core-comparison.json`.
+  This pins the audit executable/schema hashes and 330 exact row comparisons.
+- A follow-up namespace test proves body/global texture and mesh IDs survive
+  collisions with game-entry maps while only the intended skeletal name offset
+  changes. Updated fmplinks executable passes in `ad-vyn23vpj/0.log`.
+- GUI, forge and forge-tools shipping builds pass (`build/creature-appearance-shipping-build-20261023.log`).
+
+The first fmplinks run refused an old synthetic test that deliberately placed
+777 in a texture table's byte-size field. The new reader correctly rejected the
+invalid size, leaving the relocation scanner unable to classify that prefix.
+The fixture now uses the valid native size (24 for two rows) and still tests a
+candidate crossing that boundary. No scanner guard was weakened. Initial
+receipt/log: `ca-7oaz_tcx/0.log`; successful four-unit window `ca-tni66p7h`.
+
+Older synthetic authoring fixtures used one or two body groups followed by three
+empty body texture maps, unlike the actual native three-group contract. Their
+payloads now contain three groups, retaining empty groups explicitly. Existing
+body-model offsets and tested edit intent are unchanged. The old retained donor
+packet is preserved. A distinct regenerated packet from the updated reader is
+`C:/Users/Cornelio/AppData/Local/FableForgeEvidence/20261023/ad-vyn23vpj/skinned-input-donors-1a862nw7`.
+All five donors pass authored remap, stored/compressed independent skeleton
+readback and refusal checks; its receipt retains publication/Restore/Windows
+rollback checks. This regeneration is warranted by the changed fixture shape,
+not a new claim of whole-creature rendering or gameplay.
+
+The relevant 50-case GUI import regression passes at both sizes against the
+regenerated packet. Receipt:
+`C:/Users/Cornelio/AppData/Local/FableForgeEvidence/20261023/ai-w9lnk8f4/creature-import-ui-4nstujwj/result.json`.
+It pins candidate GUI SHA256
+`63155c0c4755700c29f5fae48275a967f1712aa9b092ed0fb84415aa9e20a06f`.
+All eight affected body-edit Save/stale-bank/stale-names/stale-graphics cases
+also pass at both sizes, preserving fixtures exactly and exercising Restore.
+Receipt under `ab-mck4uft3/creature-body-stale-ui-*/result.json`.
+No older donor packet or checkpoint archive was modified.
+
+Each source check window used a fresh process guard/exclusive RuntimeLease and
+queued release after owned checks/hidden GUIs closed. Final release receipt is
+`ab-mck4uft3/released-runtime-lease.json`, Native notification
+`01a1695f-92b2-75a1-a57b-c8d55d5e0dbc`. No Forge runtime remains or gap is reserved.
+Combined source hashes, binaries and receipts are pinned in
+`build/creature-appearance-source-acceptance-20261023.json`.
+The retained runtime-profile ZIP is still the previous immutable checkpoint;
+the new shared reader has source acceptance, not extracted-package acceptance.
+Do not repeat the accepted profile/placement gates for this unrelated change.
+Next is native-checked selection/draw ordering and assembly transforms, not a
+claim that the parsed layout already renders a complete NPC.

@@ -2,6 +2,13 @@
 
 # Albion Atlas -> 1.0: what it should do, what it can't, and how we get there
 
+Subsequent source work adds a shared checked Creature appearance-table reader:
+330 native components match an independent reader, including the populated
+global texture map previously refused. Four affected units, five donor fixtures,
+50 import GUI cases and eight body-edit cases pass. This is source acceptance;
+the retained ZIP above is unchanged. Whole-creature selection and assembly are
+still open. Evidence is in the linked Creature placement profiles handoff.
+
 Ordered dialogue-tag controls pass source checks at both window sizes and an
 independent retail-copy preservation/Restore check. Signed stored positions remain
 explicit; new tag names are bounded ASCII and original legacy names survive other

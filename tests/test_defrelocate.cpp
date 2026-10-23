@@ -1,6 +1,7 @@
 #include "forge/defrelocate.hpp"
 #include "forge/defdecode.hpp"
 #include "forge/fmplinks.hpp"
+#include "forge/creatureappearance.hpp"
 #include <cstdio>
 #include <iostream>
 #include <stdexcept>
@@ -98,6 +99,63 @@ int audit(char** argv) {
 }
 
 int main(int argc, char** argv) {
+    if(argc==4 && std::string_view(argv[1])=="--creature-appearance-audit") {
+        try {
+            using namespace forge;
+            using Json=nlohmann::json;
+            const auto folder=std::filesystem::path(argv[2])/"data"/"CompiledDefs";
+            const auto schema=defschema::Schema::load(argv[3]);
+            const auto source=bin::File::open(folder/"names.bin",folder/"game.bin");
+            std::map<uint32_t,std::string> names;
+            uint64_t offset=4;
+            for(const auto& [crc,name]:source.originalNames()) {
+                if(offset>UINT32_MAX)throw std::runtime_error("names offset overflow");
+                names.emplace(uint32_t(offset),name);offset+=name.size()+5;
+            }
+            const auto mapJson=[](const creatureappearance::TextureMap& map) {
+                auto rows=Json::array();
+                for(const auto& row:map.rows)rows.push_back({{"offset",row.offset},{"original",row.original},
+                    {"replacement",row.replacement},{"group",row.group}});
+                return Json{{"rows",rows},{"dirty",map.dirty}};
+            };
+            auto rows=Json::array();
+            for(size_t i=0;i<source.entries().size();++i) {
+                const auto& entry=source.entries()[i];if(entry.definition!="CCreatureDef")continue;
+                Json row{{"index",i},{"name",entry.name}};
+                try {
+                    const auto decoded=defdecode::decode(entry,schema);
+                    if(!decoded.clean() || defdecode::encode(decoded)!=entry.data)
+                        throw std::runtime_error("unclean component decode");
+                    const auto layout=creatureappearance::read(decoded.prefix);
+                    row["bodies"]=Json::array();row["body_texture_maps"]=Json::array();
+                    row["slots"]=Json::array();row["skeletal_morphs"]=Json::array();
+                    for(size_t body=0;body<layout.bodies.size();++body) {
+                        auto alternatives=Json::array();
+                        for(size_t alternative=0;alternative<layout.bodies[body].size();++alternative) {
+                            const auto& model=layout.bodies[body][alternative];
+                            alternatives.push_back({{"mesh",model.mesh},{"priority",model.priority},
+                                {"textures",mapJson(model.textures)}});
+                            row["slots"].push_back({{"body_part",body},{"alternative",alternative},
+                                {"offset",model.offset},{"id",model.mesh}});
+                        }
+                        row["bodies"].push_back(alternatives);
+                        row["body_texture_maps"].push_back(mapJson(layout.bodyTextures[body]));
+                    }
+                    for(const auto& morph:layout.skeletal) {
+                        const auto found=names.find(morph.nameOffset);
+                        if(found==names.end())throw std::runtime_error("skeletal name is not a pool boundary");
+                        row["skeletal_morphs"].push_back({{"key",morph.key},{"group",morph.group},
+                            {"name_offset",morph.nameOffset},{"name",found->second},{"allow_variation",morph.allowVariation}});
+                    }
+                    row["global_texture_map"]=mapJson(layout.globalTextures);
+                    row["texture_group_count"]=layout.textureGroupCount;
+                    row["stats_value_offset"]=layout.statsValueOffset;
+                }catch(const std::exception& e){row["refused"]=e.what();}
+                rows.push_back(std::move(row));
+            }
+            std::cout<<Json{{"records",rows}}.dump()<<'\n';return 0;
+        }catch(const std::exception& e){std::cerr<<e.what()<<'\n';return 1;}
+    }
     if(argc==4 && std::string_view(argv[1])=="--creature-body-audit") {
         try {
             const auto folder=std::filesystem::path(argv[2])/"data"/"CompiledDefs";

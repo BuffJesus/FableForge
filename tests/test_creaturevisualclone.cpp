@@ -219,8 +219,9 @@ int main(int argc,char** argv)try{
     {
         const auto bindingSchema=defschema::Schema::loadText(R"({"CCreatureDef":{"fields":[{"name":"InitialActions","type":"uint32"}]}})");
         Bytes payload{1,0,1};field(payload,"WoundMorphs",0);word(payload,0x01ab6cee);
-        field(payload,"RandomAppearanceMorph",1);word(payload,1);
+        field(payload,"RandomAppearanceMorph",3);word(payload,1);
         const size_t modelAt=payload.size();word(payload,10);word(payload,0);word(payload,0);word(payload,0);payload.push_back(0);
+        word(payload,0);word(payload,0);
         payload.insert(payload.end(),27,0);word(payload,0);payload.insert(payload.end(),13,0);
         field(payload,"Expressions",0);word(payload,0x01ab6d32);field(payload,"Stats",0);field(payload,"InitialActions",0);
         auto baseline=source;baseline.setEntryData(3,payload);

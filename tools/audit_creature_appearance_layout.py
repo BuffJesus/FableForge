@@ -10,6 +10,7 @@ import hashlib
 import json
 from pathlib import Path
 import struct
+import subprocess
 
 from audit_creature_body_models import body_slots
 from test_fmp_links import crc0, read_bank
@@ -156,6 +157,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--install', type=Path, required=True)
     parser.add_argument('--output', type=Path, required=True)
+    parser.add_argument('--reader', type=Path, help='Optional built C++ audit executable; run only in a coordinated test window')
+    parser.add_argument('--schema', type=Path, default=Path(__file__).resolve().parents[1]/'docs/re_reference/def_schema.json')
     args = parser.parse_args()
     native = args.install.resolve(strict=True)
     if args.output.resolve().is_relative_to(native):
@@ -191,12 +194,30 @@ def main():
         counts['nonempty_global_texture_maps'] += bool(layout['global_texture_map']['rows'])
         counts['nonzero_texture_group_count'] += bool(layout['texture_group_count'])
         rows.append(dict(index=index, name=record['name'], **layout))
+    core = None
+    if args.reader:
+        binary = args.reader.resolve(strict=True)
+        binary_hash = hashlib.sha256(binary.read_bytes()).hexdigest()
+        result = subprocess.run([str(binary), '--creature-appearance-audit', str(native),
+            str(args.schema.resolve(strict=True))], capture_output=True, text=True, timeout=120)
+        if result.returncode:
+            raise AssertionError(result.stderr)
+        actual = json.loads(result.stdout)['records']
+        expected = [{k:v for k,v in row.items() if k != 'legacy_refusal'} for row in rows]
+        if actual != expected:
+            mismatch = next(((a,e) for a,e in zip(actual,expected) if a != e), None)
+            raise AssertionError(('C++/independent appearance mismatch', len(actual), len(expected), mismatch))
+        if hashlib.sha256(binary.read_bytes()).hexdigest() != binary_hash:
+            raise AssertionError('C++ audit binary changed')
+        core = dict(reader=str(binary), sha256=binary_hash, compared=len(actual), exact_match=True,
+                    schema_sha256=hashlib.sha256(args.schema.read_bytes()).hexdigest())
     if any(hashlib.sha256(p.read_bytes()).hexdigest() != hashes[str(p)] for p in inputs):
         raise AssertionError('input banks changed')
     report = dict(input_hashes=hashes, input_hashes_unchanged=True,
                   producer_sha256=hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
                   boundary_checks=checks,
                   counts=dict(counts), records=rows, refused=refused,
+                  core_comparison=core,
                   scope='Read-only serialized appearance layout; selection/rendering unverified.')
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(report, indent=2)+'\n', encoding='utf-8')

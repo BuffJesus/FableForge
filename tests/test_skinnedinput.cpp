@@ -85,8 +85,9 @@ static int donorGate(char** argv) {
         field(bytes,"Components",0);field(bytes,"Self",donorRoot?1:0);field(bytes,"Other",99);return bytes;
     };
     Bytes body{1,0,1};field(body,"WoundMorphs",0);word(body,0x01ab6cee);
-    field(body,"RandomAppearanceMorph",1);word(body,1);
+    field(body,"RandomAppearanceMorph",3);word(body,1);
     for(uint32_t value:{id,0u,0u,0u}) word(body,value);body.push_back(0);
+    word(body,0);word(body,0);
     body.insert(body.end(),27,0);word(body,0);body.insert(body.end(),13,0);
     field(body,"Expressions",0);word(body,0x01ab6d32);field(body,"Stats",0);
     field(body,"Link",1);field(body,"Other",99);

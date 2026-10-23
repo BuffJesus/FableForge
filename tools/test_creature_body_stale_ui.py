@@ -25,8 +25,8 @@ def fixture(root, repo, model_id=10):
     def word(value):return struct.pack('<I',value)
     def field(name,value):return word(crc0(name))+word(value)
     payload=b'\x01\0\x01'+field('WoundMorphs',0)+word(0x01ab6cee)
-    payload+=field('RandomAppearanceMorph',1)+word(1)+struct.pack('<4I',model_id,0,0,0)+b'\0'
-    payload+=bytes(27)+word(0)+bytes(13)+field('Expressions',0)+word(0x01ab6d32)+field('Stats',0)
+    payload+=field('RandomAppearanceMorph',3)+word(1)+struct.pack('<4I',model_id,0,0,0)+b'\0'
+    payload+=word(0)+word(0)+bytes(27)+word(0)+bytes(13)+field('Expressions',0)+word(0x01ab6d32)+field('Stats',0)
     fields=json.loads((repo/'docs/re_reference/def_schema.json').read_text(encoding='utf-8'))['CCreatureDef']['fields']
     payload+=b''.join(field(f['name'],0) for f in fields)
     folder=root/'data/CompiledDefs';folder.mkdir(parents=True)
