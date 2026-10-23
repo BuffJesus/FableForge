@@ -1145,6 +1145,15 @@ startup SHA256 and refuses a driver change during execution. Pack material metad
 when the selected preview context resolves that texture. Clear the retained
 widget registry before asserting absence after a source switch.
 
+`definition_placement_types` runs two tiny loose-install GUI cases with eight
+placements each: custom and misleading names, Creature/Object/Building classes,
+Auto/explicit owners, undo/redo and the Actors Place button. An independent TNG
+reader checks class, owner and creature InitialPos. Definitions, texture and LEV
+stay exact; Restore retains only the byte-exact first-original TNG backup.
+The standalone driver's `--prepare-only` writes and verifies fixtures/scripts
+without launching an executable; that receipt explicitly does not claim a pass.
+These marker fixtures do not test whole-creature geometry or gameplay.
+
 `creature_clone_gui_retail_1440x900` and `_800x600` independently compare
 all prior retail records, verified self-only deltas, paired recovery and explicit
 Restore on owned outputs. Appearance/body/components remain shared.

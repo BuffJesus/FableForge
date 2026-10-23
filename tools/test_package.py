@@ -266,6 +266,8 @@ def main():
         '--gui', package / 'FableForge.exe', '--forge', package / 'forge.exe', '--cwd', cwd, '--work-root', work])
     run('creature_import_ui', [sys.executable, repo / 'tools/test_creature_import_ui.py',
         '--gui', package / 'FableForge.exe', '--forge', package / 'forge.exe', '--work-root', work])
+    run('definition_placement_types', [sys.executable, repo/'tools/test_definition_placement_types_ui.py',
+        '--gui', package/'FableForge.exe', '--forge', package/'forge.exe', '--work-root', work])
     for window_size in ('1440x900', '800x600'):
         run('creature_clone_gui_retail_' + window_size, [sys.executable, repo / 'tools/test_creature_clone_retail.py',
             '--install', args.root.resolve(), '--gui', package / 'FableForge.exe', '--forge', package / 'forge.exe',

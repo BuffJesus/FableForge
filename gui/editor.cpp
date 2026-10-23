@@ -2480,7 +2480,7 @@ void App::drawPlacementOptions(float width) {
 
 int App::ownerFor(const std::string& def) const {
     if (placeOwner_ >= 0) return std::min(placeOwner_, 4);
-    if (def.rfind("CREATURE_", 0) == 0) {
+    if (ctx_.definitionType(def) == "CREATURE") {
         if (const auto v = ctx_.defIntField(def, "DefaultOwner")) return int(*v);
         return 0;   // defs not readable: FableForge's old creature default
     }
@@ -2550,7 +2550,7 @@ bool App::placeDefinitionAt(const std::string& def, const float position[3], con
     if (code < 0 || modelId == 0) pushLog("editor: " + def + " has no mesh; it will appear as an editor marker", 1);
     forge::thingplacer::Placement p;
     p.definitionType = def;
-    p.thingType = def.rfind("BUILDING_", 0) == 0 ? "Building" : "Object";
+    p.thingType = ctx_.definitionType(def) == "BUILDING" ? "Building" : "Object";
     p.scriptName = scriptName;
     float at[3] = {position[0], position[1], position[2]};
     snapPlacementPoint(at);
@@ -2570,7 +2570,7 @@ bool App::placeDefinitionAt(const std::string& def, const float position[3], con
         if (fl > 1e-6f) p.forward = {fx / fl, fy / fl, 0.0f};
     }
     try {
-        const bool creature = def.rfind("CREATURE_", 0) == 0;
+        const bool creature = ctx_.definitionType(def) == "CREATURE";
         const float pos[3] = {p.position.x, p.position.y, p.position.z};
         const float fwd[2] = {p.forward.x, p.forward.y};
         const size_t n = creature ? doc_.placeCreature(pos, fwd, def, scriptName, p.player) : doc_.place(p);
@@ -4715,12 +4715,13 @@ void App::drawEditPanel(float pad, float inner, float cardInner) {
         theme::label("Creatures by group");
         ImGui::SetNextItemWidth(cardInner);
         ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(S(10), S(6)));
-        ImGui::InputTextWithHint("##actorsearch", "Search creatures (CREATURE_...)", defSearch_, sizeof defSearch_);
+        ImGui::InputTextWithHint("##actorsearch", "Search creatures", defSearch_, sizeof defSearch_);
         ImGui::PopStyleVar();
         auto_.registerWidget("input_actorsearch");
         drawDefPalette("##actorlist", {"CREATURE"}, cardInner, S(260));
-        const std::string actorLabel = placeDef_.rfind("CREATURE_", 0) == 0 ? "Place " + placeDef_ : std::string("Pick a creature above");
-        if (theme::ghostButton(actorLabel.c_str(), ImVec2(cardInner, S(30))) && placeDef_.rfind("CREATURE_", 0) == 0) placeDefinition(placeDef_);
+        const bool actorSelected = ctx_.definitionType(placeDef_) == "CREATURE";
+        const std::string actorLabel = actorSelected ? "Place " + placeDef_ : std::string("Pick a creature above");
+        if (theme::ghostButton(actorLabel.c_str(), ImVec2(cardInner, S(30))) && actorSelected) placeDefinition(placeDef_);
         auto_.registerWidget("btn_place_actor");
         drawRuleNotice("creature", cardInner);
         theme::endCard();

@@ -373,6 +373,8 @@ def main():
               [sys.executable, "tools/test_creature_clone_ui.py"], capture_output=True)
     ok &= run("Custom Creature GUI, reviewed source proofs, exact deltas and Restore",
               [sys.executable, "tools/test_creature_import_ui.py"], capture_output=True)
+    ok &= run("Definition class placement, owners, Actors button and exact recovery",
+              [sys.executable, "tools/test_definition_placement_types_ui.py"], capture_output=True)
     ok &= run("Creature visual graph synthetic ownership observations",
               [sys.executable, "tools/audit_creature_visual_graph.py"], capture_output=True)
     ok &= run("Creature visual navigation numeric names and malformed-reference UI refusal",

@@ -371,3 +371,109 @@ presentation follow-up. Next work is scratch placement/whole-creature presentati
 planning using existing editor paths; gameplay and assembled-creature behavior
 remain unverified. Do not repeat accepted full50/core/native gates without a
 relevant change.
+
+
+## Native window offered; offline placement investigation
+
+Peer requested a short Native window after our extracted-package release. Offer
+queued as `01a168f3-19a6-70f2-877d-b31ec0c5f828`: no owned Forge frontend remains,
+no Forge GPU work pending for this offered window, continue shared-lease/immediate
+process guards. No peer lease/process reclaimed or closed. Current Materials
+source CI run 39961421194 is in progress (730ea70); source gate remains accepted.
+
+Offline routing review found a concrete next candidate: placeDefinitionAt and
+ownerFor use a CREATURE_ name prefix, while private Creature cloning explicitly
+accepts generic ASCII names (the accepted GUI fixtures create GUI_ROOT). Context
+already retains the compiled record's definition type and enumerates by that
+identity. Before changing routing, prepare a scratch placement regression for a
+non-prefixed CREATURE plus a misleading prefix on another type; verify TNG thing
+class, owner and InitialPos/undo independently. This is source inspection only;
+no placement/runtime acceptance claim and no additional GUI launch while peer
+uses the offered window.
+
+
+Native requested the next gap before any further Forge comparison for one D3D
+real opening (~90 seconds; 420-second cold watchdog). Acknowledged by queue
+`01a168f5-e210-7af3-99e5-6573601a0d07`: no Forge GUI/GPU launch until peer's
+explicit release/notification, even if the shared lease temporarily disappears.
+Current peer gpu-vulkan-off1 lease was observed and left untouched. This explicit
+hold supersedes the earlier general available-window messages. Offline work may
+continue; no owned Forge GUI was running at acknowledgment.
+
+
+## Placement class routing prepared offline
+
+New regression `tools/test_definition_placement_types_ui.py` writes only tiny
+owned synthetic definitions, one texture and a valid loose LEV/TNG. It covers a
+non-prefixed CREATURE (`GUI_ROOT`), misleading CREATURE_ object name, unprefixed
+building, ordinary names, Auto and explicit owner, placement undo/redo, and the
+real Actors Place button. Independent TNG checks require AICreature/Object/
+Building classes, owner values and creature world-space InitialPos; Restore must
+recover exact original inventory. `--prepare-only` launches no executable and
+marks its receipt prepared_only=true, passed=false. Current prepared fixture:
+`C:/Users/Cornelio/AppData/Local/FableForgeEvidence/20261023/placement-types-_c_a4xmm`.
+Six identity rows independently parse; this is preparation, not GUI acceptance.
+
+Proposed source change exposes the immutable compiled class through the existing
+Context and uses it in placement, Auto ownership and the Actors Place button.
+The UI hint no longer implies that CREATURE_ is mandatory. It reuses existing
+Document serializers and changes no binary/TNG writer. Below-normal -j2 GUI build
+is in progress; no test frontend launched. Runtime acceptance must first compare
+old pinned Materials GUI against the candidate after explicit Native release.
+Do not claim whole-creature rendering/gameplay: this fixture deliberately uses
+editor markers, and Document's separate VILLAGER name heuristic remains outside
+this class-routing correction. Live-link spawning also retains its old prefix
+check and has not been exercised.
+
+Placement class-routing GUI build passed (including the final hint change).
+Frozen candidate `build\frozen\definition-placement-types-20261023\FableForge.exe`, SHA256 `7d9915a9938a4e3a57c7635c8181c5542e45314c9ca4caab46eb2470611a9384`.
+Provenance pins the three C++ sources and new driver. Prepared fixtures also
+independently verify complete ordered schema tag anchors and owner tags at both
+sizes. No GUI/runtime acceptance yet: Native explicit-release hold is active,
+and the coordination receipt now clears the stale prior-release flag. Materials
+source CI run 39961421194 completed success; placement candidate is newer.
+
+
+Own queue was inspected read-only (`queue_1.sqlite`, mode=ro, this thread only).
+Incoming `01a168f7-35cd-74b3-89ae-bd29b5ded43b` is a NEW explicit Native release:
+D3D real opening passed 60.3 seconds/nine dialogue tags; frontend closed and lease
+released; no need to hold indefinitely for the older request. Acknowledged by
+`01a168ff-8574-71d3-80d6-6d0c7ac13314`. Coordination receipt clears the explicit
+hold, but still requires a fresh exclusive claim and immediate process guards.
+
+Prepared placement-window supervisor refused an existing peer gpu-vulkan-off4
+lease before any GUI launch. Owner PID15076 is verified live as python.exe with
+process start1792762928.3455365. Lease/token left untouched. Supervisor and pinned
+baseline/candidate remain ready; wait for this actual process/window rather than
+repeating build/tests or treating the prior release as exclusive ownership.
+
+
+## Definition-class placement source acceptance
+
+Baseline independently saves GUI_ROOT as Object/owner4, CREATURE_DECOY as
+AICreature/owner0, and PLAIN_HOUSE as Object; Actors Place ignores GUI_ROOT.
+Receipt `C:/Users/Cornelio/AppData/Local/FableForgeEvidence/20261023/pt-evcljbni/baseline-independent-tng.json`;
+baseline original TNG explicitly Restored. Candidate passes all eight placements
+at both sizes (16 total), including Auto owners2/3, explicit owner1, ordinary names,
+real Actors button, undo/redo counts and independent TNG class/InitialPos checks.
+Canonical candidate receipt:
+`C:/Users/Cornelio/AppData/Local/FableForgeEvidence/20261023/pt-qkwy_fgp/placement-types-0dsrocc6/result.json`.
+GUI hash matches frozen 7d9915a9938a4e3a57c7635c8181c5542e45314c9ca4caab46eb2470611a9384.
+Driver pins startup GUI/driver hashes and refuses mutation during execution.
+
+An initial candidate passed its complete full-size GUI/TNG gate but the oracle
+wrongly expected Restore to remove an existing-file first-original backup. Current
+CLI defaults to keepBackup; reviewed backups::restore confirms this contract.
+Original files were all exact and only PlacementProbe.tng.forge-orig was added.
+Final gate strictly requires original inventory plus exactly that byte-identical
+first-original backup, and passes at both sizes. No recovery implementation or
+production guard changed. Initial receipt `pt-evcljbni/placement-types-_ga9vvaa`.
+All owned GUIs closed; released lease receipt `pt-qkwy_fgp/released-runtime-lease.json`,
+peer availability queued `01a16901-caad-7e33-babc-5a23f50ec008`. No immediate further
+GUI launch planned while source review/docs proceed.
+
+Regression is registered as definition_placement_types in source and package
+gates. No unchanged broad/core/import/native gate repeated. This corrects class
+routing for custom-named definitions; marker fixtures do not prove custom body
+assembly or live gameplay. Existing VILLAGER-name heuristic and live-link prefix
+check remain separate, unexercised follow-ups.

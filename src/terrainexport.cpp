@@ -593,6 +593,12 @@ std::optional<uint32_t> Context::definitionIndex(const std::string& name) const 
     return std::nullopt;
 }
 
+std::optional<std::string> Context::definitionType(const std::string& name) const {
+    if (!impl_ || !impl_->defs) return std::nullopt;
+    const auto* entry = impl_->defs->find(name);
+    return entry ? std::optional<std::string>(entry->definition) : std::nullopt;
+}
+
 std::vector<Context::GroupedDefinition> Context::groupedDefinitions(const std::vector<std::string>& types) const {
     std::vector<GroupedDefinition> out;
     if (!impl_ || !impl_->defs || !impl_->schema) return out;
