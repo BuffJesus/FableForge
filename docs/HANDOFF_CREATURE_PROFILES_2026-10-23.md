@@ -304,3 +304,62 @@ whole-creature preview/scene rendering. Do not concatenate every alternative,
 reset the seed independently per body part, or treat one imported model as a
 whole-creature result. Production rendering, native bank writers and retained
 checkpoint ZIPs are unchanged by this investigation.
+
+### Complete appearance layout evidence
+
+Follow-up targeted exports bring `byte-verification.json` to 23 distinct complete
+function ranges, all matching the original PE. Added evidence includes
+0252dba0 (seed assignment/rebuild), 0252e4e0 (unsigned `Seed` serialization),
+0252e660 (editor `RandomAppearanceSeed`), 0252d680 (constructor), 0289b010
+(skeletal amplitude), 018bac90 (float RNG), 0289b880 (appearance binary loader)
+and 028a55b0 (texture map loader). The constructor copies the current world seed
+into its stored seed and advances the world generator. A placed creature with
+no serialized Seed therefore cannot be presumed to have seed zero or a fixed
+appearance independent of world creation order. Retail StartOakValeWest TNG
+examples store signed decimal Seed values; preserve their uint32 bit patterns.
+
+The native loader asserts exactly three body groups. It reads each body
+alternative's mesh, priority and texture map, then three body-level texture maps,
+the skeletal table, a global texture map and the maximum texture-group ID.
+The map loader verifies its byte-size field against the resized map, reads its
+raw rows and restores a separate Dirty boolean. Original-PE and matching PDB
+queries establish 12-byte texture rows: original texture key, NewTexture and
+GroupID. `CBodyPartMesh` fields are MeshIndex, Priority and TextureMorphs;
+`CSkeletalMorph` contains GroupID, Name and AllowVariation. Query outputs are
+`CBodyPartMesh-pdb.txt`, `CTextureMorph-pdb.txt`, `CSkeletalMorph-pdb.txt` in the
+same evidence directory (FableWin.pdb GUID 0B63010E-1E75-49E7-ADDA-5E6B10298BAB,
+age 8). These are memory layouts corroborating the separately recovered
+serialized loader, not permission to memcpy complete runtime C++ objects.
+
+`tools/audit_creature_appearance_layout.py` is an independent, bounded read-only
+reader for this evidence. It validates counts, map byte sizes, booleans, names
+pool boundaries and terminal control markers before reporting the layout.
+`layout-independent-audit.json` passes all 330 retail CCreatureDef records,
+1,745 body slots and 75 skeletal rows, with game.bin/names.bin hashes unchanged.
+It agrees exactly with the previous body audit on 329 records. Component 10594
+has a four-row global texture map (source 214, alternatives 214/215/214/216)
+and was previously refused at its control marker because that reader skips an
+assumed empty global map. All body-level maps are empty in this corpus; 80
+components have nonzero texture-group counts. Every observed map byte size is
+12 times its row count, and every observed Dirty flag is false.
+
+The independent audit also passes a synthetic populated global map and refuses
+all 120 strict truncations and five malformed count/size/name inputs. Command:
+
+```text
+python tools/audit_creature_appearance_layout.py --install <retail-copy-or-read-only-install> --output <owned-evidence>/layout-independent-audit.json
+```
+
+The initial ad hoc `texture-map-census.json` was rejected: its Python cursor
+update evaluated before a count read and misaligned every record. The corrected
+exploratory report and the reusable audit agree on all 330 records. This was a
+probe bug, not a native data defect. Do not use the rejected report as evidence.
+
+Remaining selection details: key-zero skeletal entries use a conditional draw
+unless AllowVariation is true; nonzero skeletal groups draw before choosing a
+candidate. Selected varying skeletal morphs consume a float RNG draw. Texture
+selection groups rows by original-texture key and admits GroupID zero or the
+chosen color group before drawing a replacement. Their exact thresholds,
+sorting and draw order still need instruction/oracle validation before a core
+appearance plan is integrated. Production reader/writer and renderer behavior
+remain unchanged; this audit does not claim whole-creature rendering.
