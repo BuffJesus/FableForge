@@ -477,3 +477,14 @@ gates. No unchanged broad/core/import/native gate repeated. This corrects class
 routing for custom-named definitions; marker fixtures do not prove custom body
 assembly or live gameplay. Existing VILLAGER-name heuristic and live-link prefix
 check remain separate, unexercised follow-ups.
+
+
+## Combined checkpoint preparation
+
+Source correction committed/pushed as 91d284e; CI run39964147797 is in progress.
+Next distinct checkpoint destination is dist/development/20261023-creature-placement
+(previous immutable archives stay untouched). Owned GUI/forge/forge-tools are
+being rebuilt at below-normal priority/-j2. Placement package workflow now passes
+an unrelated cwd and the archive's schema explicitly, avoiding an implicit repo
+working-directory dependency. Source driver defaults are unchanged. Extracted
+runtime acceptance for this combined checkpoint is still pending.

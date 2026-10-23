@@ -88,6 +88,8 @@ def main():
     parser.add_argument('--gui', type=Path, default=repo/'build/FableForge.exe')
     parser.add_argument('--forge', type=Path, default=repo/'build/forge.exe')
     parser.add_argument('--work-root', type=Path, default=repo/'build')
+    parser.add_argument('--cwd', type=Path, default=repo)
+    parser.add_argument('--schema', type=Path, default=repo/'docs/re_reference/def_schema.json')
     parser.add_argument('--prepare-only', action='store_true', help='Write and independently inspect fixtures/scripts without launching any executable')
     args = parser.parse_args()
     driver_hash = hashlib.sha256(Path(__file__).read_bytes()).hexdigest()
@@ -95,7 +97,7 @@ def main():
     args.work_root.mkdir(parents=True, exist_ok=True)
     work = Path(tempfile.mkdtemp(prefix='placement-types-', dir=args.work_root.resolve()))
     print('Evidence retained at', work, flush=True)
-    schema = json.loads((repo/'docs/re_reference/def_schema.json').read_text(encoding='utf-8'))
+    schema = json.loads(args.schema.resolve(strict=True).read_text(encoding='utf-8'))
     cases = []
     for size, scale in [('1440x900', 1), ('800x600', 1.5)]:
         case = work/size
@@ -121,7 +123,7 @@ def main():
             continue
         gui = args.gui.resolve(strict=True)
         result = subprocess.run([str(gui), '--install', str(root), '--size', size, '--auto', str(script)],
-            cwd=repo, capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=120,
+            cwd=args.cwd.resolve(strict=True), capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=120,
             env=dict(os.environ, FABLEFORGE_AUTOMATION_HIDDEN='1', APPDATA=str(case/'profile'), LOCALAPPDATA=str(case/'local')))
         (case/'output.log').write_text(result.stdout+result.stderr, encoding='utf-8')
         trace = Path(str(script)+'.log').read_text(encoding='utf-8')
