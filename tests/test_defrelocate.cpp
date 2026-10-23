@@ -99,7 +99,8 @@ int audit(char** argv) {
 }
 
 int main(int argc, char** argv) {
-    if(argc==4 && std::string_view(argv[1])=="--creature-appearance-audit") {
+    const bool selectionAudit=argc==4 && std::string_view(argv[1])=="--creature-appearance-selection-audit";
+    if(argc==4 && (std::string_view(argv[1])=="--creature-appearance-audit" || selectionAudit)) {
         try {
             using namespace forge;
             using Json=nlohmann::json;
@@ -127,6 +128,27 @@ int main(int argc, char** argv) {
                     if(!decoded.clean() || defdecode::encode(decoded)!=entry.data)
                         throw std::runtime_error("unclean component decode");
                     const auto layout=creatureappearance::read(decoded.prefix);
+                    if(selectionAudit) {
+                        for(const auto& morph:layout.skeletal)
+                            if(!names.contains(morph.nameOffset))throw std::runtime_error("skeletal name is not a pool boundary");
+                        const auto textures=[](const auto& values) {
+                            auto output=Json::array();
+                            for(const auto& value:values)output.push_back({value.original,value.replacement});
+                            return output;
+                        };
+                        for(uint32_t seed:{0u,1u,0x12345678u,0xffffffffu})for(bool decapitated:{false,true}) {
+                            const auto selected=creatureappearance::select(layout,seed,decapitated);
+                            auto parts=Json::array(),skeletal=Json::array();
+                            for(const auto& part:selected.parts)
+                                parts.push_back({{"mesh",part.mesh},{"textures",textures(part.textures)}});
+                            for(const auto& morph:selected.skeletal)
+                                skeletal.push_back({{"name_offset",morph.nameOffset},{"amount",morph.amount}});
+                            rows.push_back({{"index",i},{"seed",seed},{"decapitated",decapitated},
+                                {"selection",{{"seed",selected.seedAfter},{"parts",parts},{"skeletal",skeletal},
+                                    {"global_textures",textures(selected.globalTextures)}}}});
+                        }
+                        continue;
+                    }
                     row["bodies"]=Json::array();row["body_texture_maps"]=Json::array();
                     row["slots"]=Json::array();row["skeletal_morphs"]=Json::array();
                     for(size_t body=0;body<layout.bodies.size();++body) {

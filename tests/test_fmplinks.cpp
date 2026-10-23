@@ -54,6 +54,53 @@ int main() {
         try { action(); check(false, what); } catch (const std::runtime_error&) {}
     };
     {
+        using namespace forge::creatureappearance;
+        Prefix plan;
+        for(size_t body=0;body<3;++body) {
+            for(uint32_t alternative=0;alternative<2;++alternative) {
+                BodyModel model;model.mesh=uint32_t(10+10*body)+alternative;model.priority=1;
+                model.textures.rows={{0,100,200+alternative,0},{0,100,300+alternative,1},
+                                     {0,100,400+alternative,2}};
+                plan.bodies[body].push_back(model);
+            }
+            plan.bodyTextures[body].rows={{0,100,uint32_t(500+body),0}};
+        }
+        plan.globalTextures.rows={{0,100,600,0},{0,100,601,0}};
+        plan.textureGroupCount=2;
+        plan.skeletal={{0,0,0,4,false},{0,0,0,8,true}};
+        // Original-x86 oracle fixtures: first draws for seeds 32/43/114 are
+        // 49/50/51. Pin thresholds, layer order, amplitude and final seed.
+        const uint32_t seed=43;
+        const auto selected=select(plan,seed);
+        const auto headless=select(plan,seed,true);
+        check(selected.seedAfter==4167952974u && selected.parts.size()==3 &&
+              selected.parts[0].body==0 && selected.parts[0].alternative==0 && selected.parts[0].mesh==10 &&
+              selected.parts[0].textures.size()==2 && selected.parts[0].textures[0].replacement==300 &&
+              selected.parts[0].textures[1].replacement==500 && selected.globalTextures[0].replacement==600 &&
+              selected.skeletal.size()==2 && selected.skeletal[0].nameOffset==4 && selected.skeletal[0].amount==1 &&
+              selected.skeletal[1].nameOffset==8 && selected.skeletal[1].amount==0.541900634765625f && seed==43,
+              "native zero-key threshold, shared draws, exact amplitude and ordered texture layers");
+        check(headless.seedAfter==selected.seedAfter && headless.parts.size()==2 && headless.parts[0].body==1 &&
+              headless.parts[0].mesh==selected.parts[1].mesh && select(plan,32).skeletal.size()==1,
+              "decapitation consumes head draws and zero-key draw 49 is excluded");
+        plan.skeletal={{0,1,1,4,false},{0,1,1,8,true},{0,2,2,12,true}};
+        const auto grouped=select(plan,114);
+        check(select(plan,43).skeletal.empty() && grouped.seedAfter==3241426900u && grouped.skeletal.size()==2 &&
+              grouped.skeletal[0].amount==0.6214752197265625f && grouped.skeletal[1].amount==0.920989990234375f,
+              "native nonzero-key draw 50 is excluded and draw 51 selects a candidate");
+        const auto empty=select(Prefix{},seed,true);
+        check(empty.seedAfter==seed && empty.parts.empty() && empty.skeletal.empty() && empty.globalTextures.empty(),
+              "empty appearance consumes no draws");
+        auto invalid=plan;invalid.globalTextures.dirty=true;
+        rejects([&]{select(invalid,seed);},"unverified dirty-map tie order refuses");
+        invalid=plan;invalid.globalTextures.rows={{0,200,600,0},{0,100,601,0}};
+        rejects([&]{select(invalid,seed);},"unordered clean texture map refuses");
+        invalid=plan;invalid.globalTextures.rows={{0,100,600,999}};
+        rejects([&]{select(invalid,seed);},"incompatible global color group refuses without a partial selection");
+        invalid=plan;std::reverse(invalid.skeletal.begin(),invalid.skeletal.end());
+        rejects([&]{select(invalid,seed);},"unordered skeletal keys refuse");
+    }
+    {
         Bytes data{1,0,1};
         word(data,forge::defdecode::fieldTag("WoundMorphs"));word(data,0);word(data,0x01ab6cee);
         word(data,forge::defdecode::fieldTag("RandomAppearanceMorph"));

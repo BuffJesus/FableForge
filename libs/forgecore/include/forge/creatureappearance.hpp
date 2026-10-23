@@ -43,4 +43,23 @@ struct Prefix {
 // Name offsets still require validation against the owning bank's names pool.
 // This is a serialized layout, not a selected/assembled or animated creature.
 Prefix read(std::span<const uint8_t> bytes);
+
+struct TextureReplacement { uint32_t original = 0, replacement = 0; };
+struct BodyPart {
+    size_t body = 0, alternative = 0;
+    uint32_t mesh = 0;
+    std::vector<TextureReplacement> textures;
+};
+struct SkeletalValue { uint32_t nameOffset = 0; float amount = 1.0f; };
+struct Selection {
+    uint32_t seedAfter = 0;
+    std::vector<BodyPart> parts;
+    std::vector<SkeletalValue> skeletal;
+    std::vector<TextureReplacement> globalTextures;
+};
+// Deterministic native selection order from a supplied stored uint32 Seed.
+// Does not infer a world seed, resolve names/assets, skin vertices or animate.
+// Dirty/unsorted maps and unavailable color groups throw without mutating input.
+// Dirty-map sorting still needs a native tie-order contract before support.
+Selection select(const Prefix& prefix, uint32_t seed, bool decapitated = false);
 } // namespace forge::creatureappearance

@@ -2,6 +2,9 @@
 
 [Creature authoring history](HANDOFF_CREATURE_GUI_2026-10-23.md) retains the earlier import and material evidence; older checkpoint ZIPs remain unchanged.
 
+[Creature assembly continuation](HANDOFF_CREATURE_ASSEMBLY_2026-10-23.md) records the
+checked reader/selector source milestone and remaining presentation integration.
+
 # Navigation lane, 2026-09-27
 
 Checkout: `D:/Code/FableForge-nav`, branch `feat/nav-thing-lines`, starting commit

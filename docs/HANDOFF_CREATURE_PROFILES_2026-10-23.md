@@ -435,3 +435,7 @@ the new shared reader has source acceptance, not extracted-package acceptance.
 Do not repeat the accepted profile/placement gates for this unrelated change.
 Next is native-checked selection/draw ordering and assembly transforms, not a
 claim that the parsed layout already renders a complete NPC.
+
+Selection continuation now lives in [Creature assembly](HANDOFF_CREATURE_ASSEMBLY_2026-10-23.md):
+the pure core selector matches 2,640 original-native corpus results, with 56 native
+edge probes and two scoped units passing. Rendering/assembly is not connected yet.

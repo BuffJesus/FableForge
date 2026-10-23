@@ -9,6 +9,11 @@ global texture map previously refused. Four affected units, five donor fixtures,
 the retained ZIP above is unchanged. Whole-creature selection and assembly are
 still open. Evidence is in the linked Creature placement profiles handoff.
 
+The subsequent pure selector matches 2,640 original-native corpus selections;
+56 native edge probes and two scoped units pass. See
+[Creature assembly continuation](HANDOFF_CREATURE_ASSEMBLY_2026-10-23.md).
+It is not connected to scene rendering or animation yet.
+
 Ordered dialogue-tag controls pass source checks at both window sizes and an
 independent retail-copy preservation/Restore check. Signed stored positions remain
 explicit; new tag names are bounded ASCII and original legacy names survive other
