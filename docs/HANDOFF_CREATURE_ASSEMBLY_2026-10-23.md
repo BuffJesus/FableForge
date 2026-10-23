@@ -290,3 +290,41 @@ Next: verify weighted combination with original instructions and implement the
 mapping/application to mesh skeleton bones. Continue scene/Assets integration
 through the shared ownership resolver and runtime-profile checks. Do not present
 undeformed joined parts as the selected complete Creature.
+
+## Positive scale arithmetic and mesh mapping evidence
+
+`tools/audit_bone_scale_math.py` now executes the original vector subtraction,
+scalar multiplication, in-place addition, constructor and constructor thunk in
+bounded Unicorn x86. It uses no container, parameter or arithmetic bridges. All
+3,048 comparisons pass: the 254 referenced source rows, four weights (0, float32
+0.1, 0.5, 1) and three accumulated XYZ scales. Output float32 bits match the
+recovered expression with separate float32 storage after subtraction,
+multiplication and addition. This verifies an arithmetic update, not complete
+CombineMorph container execution, multiple-parameter control flow or skinning.
+
+Receipt: `C:/Users/Cornelio/AppData/Local/FableForgeEvidence/20261023/bm-frz06g7y/result.json`.
+That directory retains the census and producer; the report pins producer/input
+hashes and all original instruction ranges. The native executable and census
+stay unchanged. Original code executes in an emulator inside the offline Python
+tool; no frontend/game/test executable was launched and no runtime lease claimed.
+
+Read-only `bone-application-*` and `bone-mapping-*` exports bring the original-byte
+verification list to 56 functions. PeekCombinedMorph (0321c960) visits stored
+parameters in order, using the positive target for nonnegative current values
+and the negative target with negated magnitude for negative values. The present
+random-appearance selector only supplies nonnegative values; do not generalize
+its target handling to other morph producers.
+
+InitialiseBoneScalings (02e79430) obtains the combined target, sizes an array to
+the mesh's bone count, then walks local bone slots and resolves each mesh bone's
+name CRC through GetBoneScaling (0321d210). That lookup uses binary search of the
+sorted target keys and writes identity XYZ when a key is absent. GetBoneScalings
+(02d7b8a0) caches this array by mesh ID; without a skeletal morph it returns null.
+This confirms mapping by bone name CRC, not by target row number or global
+animation-track ID. Actual use in skeleton transforms/vertex skinning remains
+unverified.
+
+Next: implement positive selected-target combination with explicit float32
+rounding and stable parameter order, validate C++ against the arithmetic oracle,
+map combined values into decoded mesh bone slots, then trace and implement their
+application to bind/animation transforms. Whole-Creature presentation remains open.
