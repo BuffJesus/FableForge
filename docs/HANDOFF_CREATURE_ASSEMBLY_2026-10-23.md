@@ -229,3 +229,34 @@ A read-only census of all 75 stored skeletal references finds 15 unique resource
 names, all present under retail `data/Bones`; their file hashes are retained in
 `build/creature-assembly-native-20261023/bone-resource-census.json`. This validates
 resource availability, not parsing, pose or complete rendering.
+
+## Bone scale continuation
+
+Read-only `bone-combine-*` and `bone-keys-*` exports bring the original-byte
+verification list to 51 functions. The vector methods invoked by CombineMorph
+are explicit subtraction (019072b0), scalar multiplication (018c0af0) and
+in-place addition (01ded8a0). Caller disassembly at 0321cf35 loads the incoming
+bone's scale at +0xc, subtracts identity, multiplies by the supplied amount and
+adds it to the accumulated bone scale. A newly inserted bone starts at identity.
+The recovered rule is `accumulated += (incoming - 1) * amount`, componentwise;
+it is not multiplication of the incoming scale vectors. Float storage/rounding
+and complete original-machine combination probes remain to be checked.
+
+Target Initialise (0321ccc0) excludes rows whose three components are all exactly
+one, then sorts. Bone construction (0321cba0) stores CCharString::GetCRC at +8;
+CompareCRCs (0321cc20) compares that field as unsigned. GetCRC (0186d2a0) passes
+the raw string byte length/data and initial CRC zero to CCRC::Calc. This is a
+name-keyed target, not a direct local skeleton index. Ties/collisions and actual
+bone application are not yet supported by a new implementation.
+
+`bone-config-shape-census.json` independently checks the 15 referenced retail
+resources: 254 named XYZ rows, six exact identity rows, finite float32 values,
+and no repeated bone CRC within a target. Each has the observed CRLF start marker
+and semicolon-separated row shape. Hashes/source order remain recorded. This is
+an offline grammar census, not execution of CStringParser or a core reader.
+
+Next: implement a bounded read-only reader for this verified subset, retain its
+source names/rows separately from prepared target rows, refuse duplicate CRCs
+until native tie behavior is known, compare all 15 resources with independent
+readback, then verify weighted combination and skeleton application. Do not
+present undeformed joined parts as the selected complete Creature.
