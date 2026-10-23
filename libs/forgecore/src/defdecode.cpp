@@ -162,6 +162,17 @@ Decoded decode(const bin::Entry& entry, const defschema::Schema& schema) {
     return decode(entry.data, *def);
 }
 
+std::vector<uint32_t> runtimeComponentNameOffsets(const DecodedField& field) {
+    auto fail=[] { throw std::invalid_argument("invalid or unsupported runtime Components list"); };
+    if(field.name!="Components" || !field.tagOk || field.tag!=fieldTag("Components") || field.value.size()<8) fail();
+    const auto count=rd32(field.value,0);
+    if(count>4096 || count>(field.value.size()-8)/9 || field.value.size()!=8+size_t(count)*9) fail();
+    if(rd32(field.value,4+size_t(count)*9)!=0x01ab6cce) fail();
+    std::vector<uint32_t> result;result.reserve(count);
+    for(size_t i=0;i<count;++i) result.push_back(rd32(field.value,4+i*9));
+    return result;
+}
+
 FieldMerge mergeFields(
     const Decoded& base,
     const std::vector<std::pair<std::string, Decoded>>& versions,

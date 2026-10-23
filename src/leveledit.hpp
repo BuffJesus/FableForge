@@ -353,11 +353,11 @@ public:
     size_t placeFishingSpot(const float pos[3], const std::string& reward = "", const std::string& scriptName = "");
     // A creature (NPC, animal, guard...) as the retail AICreature thing: a
     // CTCPhysicsNavigator frame, targetable/talk blocks, VillageMember 0 for
-    // villager defs, and the world-space InitialPos the engine reads (map
+    // definitions whose verified runtime profile contains it, and world-space InitialPos (map
     // origin from FinalAlbion.wld). Position/forward are map-local.
     // `player`: the .tng Player field (the vanilla owner combo; App resolves Auto to the def's DefaultOwner).
     size_t placeCreature(const float pos[3], const float forward[2], const std::string& definition,
-                         const std::string& scriptName = "", int player = 0);
+                         bool villageMember, const std::string& scriptName = "", int player = 0);
     // A village: the retail `Village` thing (CTCVillage + enemy/opinion blocks,
     // ThingGamePersistent) for a VILLAGE_* def. Buildings, markers and
     // creatures join it through their CTCVillageMember.VillageUID.

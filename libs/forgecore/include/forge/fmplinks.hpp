@@ -28,6 +28,10 @@ enum class Destination { GameEntry, NameOffset, NameCrc, MeshEntry, TextureEntry
                          OptionalObjectEntry };
 struct Location { size_t offset, part; Destination destination; };
 struct CreaturePrefixLayout {
+    struct BodyModel { size_t bodyPart, alternative, offset; };
+    // RandomAppearanceMorph model words only, not facial-expression meshes.
+    // Indices preserve empty body parts and the native alternative order.
+    std::vector<BodyModel> bodyModels;
     std::vector<Location> references;
     std::vector<size_t> structuralWords; // validated four-byte tags/counts
 };

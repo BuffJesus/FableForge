@@ -63,6 +63,16 @@ struct Bone {
     // fourth row is padding; the reader sets it to (0,0,0,1).
     std::array<float,16> inverseBind{};
 };
+// Decoded donor spans, before preview normalization. A skinned composer must
+// retain the full records (including matrix padding and bind-pose TRS), not
+// reconstruct them from the rendering-oriented Bone structure.
+struct SkeletonBlocks {
+    std::vector<uint8_t> indices;       // u16 global IDs, 2 bytes per bone
+    std::vector<uint8_t> names;         // counted NUL-terminated names
+    std::vector<uint8_t> bones;         // C3DBone records, 60 bytes per bone
+    std::vector<uint8_t> keyframes;     // bind-pose TRS, 48 bytes per bone
+    std::vector<uint8_t> inverseBinds;  // raw matrices, 64 bytes per bone
+};
 struct PrimitiveInfo {
     uint32_t vertexCount = 0;
     uint32_t indexCount = 0;
@@ -84,6 +94,7 @@ struct Geometry {
     std::vector<Material> materials;
     std::vector<Helper> helpers;
     std::vector<Bone> bones;
+    std::optional<SkeletonBlocks> skeletonBlocks; // absent when BoneCount is zero
     std::vector<PrimitiveInfo> primitives;
     uint32_t boneCount = 0;
     uint32_t primitiveCount = 0;

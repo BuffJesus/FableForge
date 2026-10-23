@@ -2838,13 +2838,28 @@ void testDayNightSections() {
     CHECK(!twin.setDayNight(0, 1) && twin.sectionOf(0) == "NULL");
     // placed creatures and villages carry the owner the combo resolved
     const float pos[3] = {1.0f, 2.0f, 3.0f}, fwd[2] = {0.0f, 1.0f};
-    const size_t c = doc.placeCreature(pos, fwd, "CREATURE_PRISON_GUARD", "", 2);
+    const size_t c = doc.placeCreature(pos, fwd, "CREATURE_PRISON_GUARD", false, "", 2);
     const size_t v = doc.placeVillage(pos, "VILLAGE_TEST");
     auto player = [&](size_t i) {
         for (const auto& r : doc.propertiesOf(i)) if (r.ctc.empty() && r.key == "Player") return r.value;
         return std::string("none");
     };
     CHECK(player(c) == "2" && player(v) == "4");
+    ed::Document profiled;
+    const std::string profileSource="Version 2;\r\nXXXSectionStart NULL;\r\n"
+        "NewThing Object;\r\nUID 88;\r\nDefinitionType \"OBJECT_OPAQUE\";\r\n"
+        "UnclassifiedProperty 73;\r\nStartCTCUnknown;\r\nValue \"keep\";\r\nEndCTCUnknown;\r\n"
+        "EndThing;\r\nXXXSectionEnd;\r\n";
+    CHECK(profiled.openText("Profiled", profileSource, err));
+    const auto untouchedProfileBlock=profiled.file().thingBlockText(0);
+    profiled.placeCreature(pos,fwd,"CUSTOM_NPC",true,"",2);
+    CHECK(profiled.text().find("StartCTCVillageMember;")!=std::string::npos);
+    CHECK(profiled.file().thingBlockText(0)==untouchedProfileBlock);
+    profiled.undo();CHECK(profiled.text()==profileSource);
+    profiled.placeCreature(pos,fwd,"CREATURE_VILLAGER_DECOY",false,"",0);
+    CHECK(profiled.text().find("StartCTCVillageMember;")==std::string::npos);
+    CHECK(profiled.file().thingBlockText(0)==untouchedProfileBlock);
+
     // Section names use a delimited native string, so numeric names and spaces
     // stay supported. A new header cannot contain statement/line delimiters.
     for (const std::string name : {std::string(""), std::string(" "), std::string("\t"),
@@ -4189,6 +4204,17 @@ void testGroundNavigation(const fs::path& dir) {
 }
 
 int main(int argc, char** argv) {
+    if(argc==3 && std::string_view(argv[1])=="--creature-component-profiles") {
+        albion::terrainexport::Context context;std::string error;
+        if(!context.loadDefs(argv[2],error)) {std::cerr<<error<<'\n';return 1;}
+        json rows=json::array();bool okay=true;
+        for(const auto& row:context.groupedDefinitions({"CREATURE"})) {
+            const auto member=context.definitionHasRuntimeComponent(row.name,"CTCVillageMember",error);
+            rows.push_back({{"name",row.name},{"member",member ? json(*member) : json(nullptr)},{"error",error}});
+            okay&=member.has_value();
+        }
+        std::cout<<rows.dump()<<'\n';return okay && !rows.empty() ? 0 : 1;
+    }
     if (argc==3 && std::string_view(argv[1])=="--effects-bank") {
         const auto bank=forge::big::File::open(argv[2]);
         size_t count=0,complete=0;

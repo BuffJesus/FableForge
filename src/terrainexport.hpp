@@ -214,6 +214,12 @@ public:
     struct GroupedDefinition { std::string name, type, group; };
     // A def's game.bin entry index (the value LEV palettes store); nullopt when absent.
     std::optional<uint32_t> definitionIndex(const std::string& name) const;
+    // The compiled game.bin class; custom definition names need no type prefix.
+    std::optional<std::string> definitionType(const std::string& name) const;
+    // nullopt with a diagnostic for unavailable/malformed metadata; false only
+    // for a fully validated list that does not contain the named runtime CTC.
+    std::optional<bool> definitionHasRuntimeComponent(const std::string& name,
+        const std::string& component, std::string& error) const;
     std::vector<GroupedDefinition> groupedDefinitions(const std::vector<std::string>& types) const;
     // Defs only (names.bin + game.bin, no textures.big): enough for themeLibrary().
     bool loadDefs(const std::filesystem::path& gameRoot, std::string& error);

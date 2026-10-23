@@ -593,6 +593,41 @@ std::optional<uint32_t> Context::definitionIndex(const std::string& name) const 
     return std::nullopt;
 }
 
+std::optional<std::string> Context::definitionType(const std::string& name) const {
+    if (!impl_ || !impl_->defs) return std::nullopt;
+    const auto* entry = impl_->defs->find(name);
+    return entry ? std::optional<std::string>(entry->definition) : std::nullopt;
+}
+
+std::optional<bool> Context::definitionHasRuntimeComponent(const std::string& name,
+        const std::string& component, std::string& error) const {
+    error.clear();
+    if(!impl_ || !impl_->defs || !impl_->schema) {error="definition metadata is not loaded";return std::nullopt;}
+    std::lock_guard<std::mutex> lock(impl_->defMutex);
+    const auto* entry=impl_->defs->find(name);
+    if(!entry) {error="definition not found: "+name;return std::nullopt;}
+    try {
+        const auto decoded=forge::defdecode::decode(*entry,*impl_->schema);
+        const auto field=std::find_if(decoded.fields.begin(),decoded.fields.end(),[](const auto& f){return f.name=="Components";});
+        if(!decoded.clean() || field==decoded.fields.end()) throw std::runtime_error("runtime Components field is unavailable");
+        const auto offsets=forge::defdecode::runtimeComponentNameOffsets(*field);
+        std::map<uint32_t,std::string_view> names;
+        uint64_t nameOffset=4;
+        for(const auto& original:impl_->defs->originalNames()) {
+            if(nameOffset>0xffffffffULL) throw std::runtime_error("original names pool exceeds offset range");
+            names.emplace(uint32_t(nameOffset),original.second);
+            nameOffset+=original.second.size()+5;
+        }
+        bool found=false;
+        for(const auto offset:offsets) {
+            const auto it=names.find(offset);
+            if(it==names.end()) throw std::runtime_error("runtime component name is not an original pool boundary");
+            found|=it->second==component;
+        }
+        return found;
+    } catch(const std::exception& e) {error=e.what();return std::nullopt;}
+}
+
 std::vector<Context::GroupedDefinition> Context::groupedDefinitions(const std::vector<std::string>& types) const {
     std::vector<GroupedDefinition> out;
     if (!impl_ || !impl_->defs || !impl_->schema) return out;

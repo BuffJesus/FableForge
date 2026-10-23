@@ -10,6 +10,8 @@
 #include "texturebrowse.hpp"
 #include "meshimport.hpp"
 #include "forge/big.hpp"
+#include "forge/terraintex.hpp"
+#include "resolvedpath.hpp"
 
 namespace albion::gui {
 using theme::S;
@@ -457,7 +459,7 @@ bool App::selectModelById(uint32_t id) {
         pushLog("models: ambiguous mesh ID " + std::to_string(it->id),1); return false;
     }
     if (!ctx_.ready() || ctxFuture_.valid()) { pushLog("models: wait for assets to finish loading", 1); return false; }
-    modelReady_ = false; modelGeometry_ = {}; renderer_.clearModelPreview();
+    modelReady_ = false; modelGeometry_ = {}; modelSelectedTextureContext_.reset(); renderer_.clearModelPreview();
     modelId_ = it->id; modelName_ = it->name; modelError_.clear();
     modelYaw_ = 0.8f; modelPitch_ = 0.55f; modelZoom_ = 1;
     try {
@@ -465,7 +467,13 @@ bool App::selectModelById(uint32_t id) {
         std::vector<terrainexport::Image> images;
         std::map<uint32_t, int> textureIds;
         std::vector<std::string> warnings;
-        const auto mesh = foliageexport::makeMesh(modelId_, modelName_, modelName_, modelGeometry_, true, ctx_, images, textureIds, warnings);
+        const terrainexport::Context* textureContext=&ctx_;
+        if(!modelPreviewGraphics_.empty() && paths::resolvedPath(modelBankPath_)==modelPreviewGraphics_) {
+            if(!modelPreviewContext_) throw std::runtime_error("Pack model texture preview unavailable: "+modelPreviewContextError_);
+            modelSelectedTextureContext_=modelPreviewContext_;
+            textureContext=modelSelectedTextureContext_.get();
+        }
+        const auto mesh = foliageexport::makeMesh(modelId_, modelName_, modelName_, modelGeometry_, true, *textureContext, images, textureIds, warnings);
         modelReady_ = renderer_.setModelPreview(mesh, images);
         if (!modelReady_) modelError_ = "This model has no drawable geometry.";
         for (const auto& warning : warnings) pushLog("models: " + warning, 1);
@@ -608,13 +616,24 @@ void App::drawModelBrowser(float pad, float inner, float cardInner) {
     if (theme::ghostButton("Reset view", ImVec2(stackReset ? cardInner : resetWidth, S(28)))) { modelYaw_ = 0.8f; modelPitch_ = 0.55f; modelZoom_ = 1; }
     auto_.registerWidget("btn_model_reset");
     theme::hint("Drag the preview to orbit. Scroll to zoom.");
-    if (ImGui::CollapsingHeader("Materials", ImGuiTreeNodeFlags_DefaultOpen)) {
+    const bool materialsOpen=ImGui::CollapsingHeader("Materials", ImGuiTreeNodeFlags_DefaultOpen);
+    auto_.registerWidget("header_model_materials");
+    if (materialsOpen) {
         for (size_t i = 0; i < modelGeometry_.materials.size(); ++i) {
             const auto& mat = modelGeometry_.materials[i];
             ImGui::PushID(int(i));
             ImGui::Text("Material %d", mat.id);
             auto link = [&](const char* label, uint32_t id) {
                 if (id == 0) return;
+                if(modelSelectedTextureContext_) {
+                    std::string name;
+                    forge::terraintex::TextureInfo info;
+                    if(modelSelectedTextureContext_->textureInfo(id,name,info)) {
+                        ImGui::TextWrapped("%s %u: %s (%u x %u)",label,id,name.c_str(),unsigned(info.frameWidth),unsigned(info.frameHeight));
+                        auto_.registerWidget(("model_preview_texture_"+std::to_string(i)+"_"+label).c_str());
+                    } else ImGui::TextDisabled("%s %u: absent from the model preview source",label,id);
+                    return;
+                }
                 std::string error;
                 const auto* row = texbrowse::findTextureRowById(texRows_, "GBANK_MAIN_PC", uint32_t(id), error);
                 const std::string caption = std::string(label) + " " + std::to_string(id);
