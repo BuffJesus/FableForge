@@ -88,6 +88,59 @@ reserved. Continue fresh claims for subsequent named test/GUI/game launches.
 
 ## Next required integration
 
+### Texture composition source continuation
+
+`composeTextures(part, global)` now produces one type-3 replacement per original
+texture ID, retaining first-source insertion order and the last replacement for
+that source. It does not chase replacement IDs or mix parts. An empty part map
+composes the globals for the ordinary base-mesh path. The selector's ordered
+output remains intact; composition is a separate, currently unused API.
+
+Original FableWin `UpdateMorphSet` (0252dbd0) adds global texture entries after
+each selected part's entries; with no substituted parts it adds globals to the
+base mesh morph set. `FindPEngineMorph` (01e5f4d0) compares the incoming original
+ID to the first word of each existing engine morph. `AddTextureMorph` (01e5f6d0)
+finds or creates that source entry, clears its blend list when the incoming blend
+type is 3, then appends the descriptor. The consequential branch is confirmed at
+01e5f743 (`cmp [eax+4],3`), 01e5f747 (skip clear for other types), 01e5f74f (clear)
+and 01e5f75e (append). This helper only represents these selected type-3 lists;
+it does not implement the general compositor's other blend types.
+
+Read-only exports and PE-byte comparisons are under
+`build/creature-assembly-native-20261023`: `composition-*`, `lookup-*`, individual
+address `.c` files, `texture-composition-disassembly.txt`, and
+`byte-verification.json` (37 verified function ranges). Executable identity is
+unchanged from the selector oracle above. This is static instruction evidence,
+not a newly executed native composition oracle or rendering acceptance.
+
+Material follow-up: both `GetDiffuseTexture` (02e73b40) and `GetBumpTexture`
+(02e810f0) consult `GetComposedTexture` (02ee4d10) using their original material
+texture ID. That routine performs one source-key map lookup. For a single blend
+entry it obtains `GetBaseTextureIndex` (02ee4f00), which returns the first blend
+descriptor's texture ID, and the caller loads that texture. `IsMultipleTextures`
+(02ee4ec0) tests whether the blend list has more than one entry. There is no
+recursive lookup of the returned replacement in this path. Therefore do not
+restrict the composition rule to diffuse IDs when adding material integration;
+the bump path uses it too. Other texture channels remain untraced. These exports
+are in `materials-*` and `single-texture-*` in the same evidence directory.
+
+The affected unit target builds (`build/creature-texture-composition-build-20261023.log`).
+Its added assertions distinguish duplicate-source override, identity override,
+cyclic destinations, part isolation and the no-parts global path. The first launch attempt
+refused active Native CPU tests before claiming a lease. After a clear guard,
+the scoped executable passed in a fresh bounded lease. Receipt:
+`C:/Users/Cornelio/AppData/Local/FableForgeEvidence/20261023/ct-m6nzxgb3/result.json`;
+executable SHA256 `63f65b3912576a57ed47d2ac6c2fa40508f52d1beb8e81f506c1a1c29b9de9a3`.
+The owned process closed and the lease released; availability queued
+01a16987-9cc3-7351-8979-62d4326cef22. No Forge reservation remains.
+
+The morphed animating-mesh constructor (01e0a8f0) forwards position/orientation,
+animation and scale inputs to the standard animating-mesh constructor (01e0aa00),
+which copies the interpolators. There is no added part-local transform in this
+wrapper. Confirm the shared caller arguments and skeletal application before
+using this observation to combine geometry. Material-channel lookup, skeletal
+deformation, renderer integration and representative complete previews remain open.
+
 Resolve CCreatureDef through the existing checked CDefs ownership graph and use
 the runtime component list to distinguish random-morph from ordinary animated
 appearance. Do not assume every Creature uses body substitution. Read an existing

@@ -91,6 +91,28 @@ int main() {
         const auto empty=select(Prefix{},seed,true);
         check(empty.seedAfter==seed && empty.parts.empty() && empty.skeletal.empty() && empty.globalTextures.empty(),
               "empty appearance consumes no draws");
+        const auto composed=composeTextures(selected.parts[0].textures,selected.globalTextures);
+        check(composed.size()==1 && composed[0].original==100 && composed[0].replacement==600 &&
+              selected.parts[0].textures.size()==2,
+              "global type-3 replacement supersedes model/body layers without mutating selection");
+        const std::vector<TextureReplacement> layers{{10,20},{20,30},{10,40},{40,10}};
+        const std::vector<TextureReplacement> globals{{20,50},{60,60},{10,10}};
+        const auto cycle=composeTextures(layers,{});
+        check(cycle.size()==3 && cycle[0].replacement==40 && cycle[1].replacement==30 &&
+              cycle[2].replacement==10,
+              "replacement destinations are not chased through other source keys or cycles");
+        const auto keyed=composeTextures(layers,globals);
+        check(keyed.size()==4 && keyed[0].original==10 && keyed[0].replacement==10 &&
+              keyed[1].original==20 && keyed[1].replacement==50 &&
+              keyed[2].original==40 && keyed[2].replacement==10 &&
+              keyed[3].original==60 && keyed[3].replacement==60,
+              "source keys retain insertion order, identity overrides and independent cyclic destinations");
+        const auto otherPart=composeTextures(std::vector<TextureReplacement>{{10,99}},{});
+        const auto baseOnly=composeTextures({},globals);
+        check(otherPart.size()==1 && otherPart[0].replacement==99 &&
+              baseOnly.size()==3 && baseOnly[0].original==20 && baseOnly[2].replacement==10 &&
+              composeTextures({},{}).empty(),
+              "part maps stay isolated and empty-part base appearance receives globals");
         auto invalid=plan;invalid.globalTextures.dirty=true;
         rejects([&]{select(invalid,seed);},"unverified dirty-map tie order refuses");
         invalid=plan;invalid.globalTextures.rows={{0,200,600,0},{0,100,601,0}};

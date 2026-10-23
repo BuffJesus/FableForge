@@ -62,4 +62,12 @@ struct Selection {
 // Dirty/unsorted maps and unavailable color groups throw without mutating input.
 // Dirty-map sorting still needs a native tie-order contract before support.
 Selection select(const Prefix& prefix, uint32_t seed, bool decapitated = false);
+// Compose selected type-3 replacements for one part, followed by globals.
+// Last entry for each original ID wins; replacement IDs are never chased.
+// Output retains first-source insertion order and does not mutate either input.
+// For an appearance with no substituted parts, pass an empty part map to obtain
+// the global replacements for the ordinary base mesh.
+std::vector<TextureReplacement> composeTextures(
+    std::span<const TextureReplacement> part,
+    std::span<const TextureReplacement> global);
 } // namespace forge::creatureappearance

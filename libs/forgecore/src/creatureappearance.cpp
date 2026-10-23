@@ -3,6 +3,7 @@
 #include <bit>
 #include <stdexcept>
 #include <string>
+#include <unordered_map>
 #include <utility>
 
 namespace forge::creatureappearance {
@@ -182,6 +183,25 @@ Selection select(const Prefix& prefix, uint32_t seed, bool decapitated) {
     }
     textures(prefix.globalTextures,0,result.globalTextures);
     result.seedAfter=seed;
+    return result;
+}
+std::vector<TextureReplacement> composeTextures(
+        std::span<const TextureReplacement> part,
+        std::span<const TextureReplacement> global) {
+    std::vector<TextureReplacement> result;
+    std::unordered_map<uint32_t, size_t> sources;
+    const auto append = [&](std::span<const TextureReplacement> layer) {
+        for (const auto& replacement : layer) {
+            const auto [entry, inserted] = sources.emplace(replacement.original, result.size());
+            if (inserted) result.push_back(replacement);
+            else result[entry->second].replacement = replacement.replacement;
+        }
+    };
+    // FableWin UpdateMorphSet (0252dbd0), FindPEngineMorph (01e5f4d0)
+    // and AddTextureMorph (01e5f6d0): key by original ID, clear the blend
+    // list on type 3, append the replacement. Global entries are added last.
+    append(part);
+    append(global);
     return result;
 }
 } // namespace forge::creatureappearance
