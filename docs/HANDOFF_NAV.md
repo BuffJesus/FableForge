@@ -1,4 +1,4 @@
-> Resumed at user request, 2026-10-23: [Creature custom-import GUI continuation](HANDOFF_CREATURE_GUI_2026-10-23.md). Reviewed private model/texture imports pass all 50 extracted GUI cases. The new immutable pack-texture checkpoint passes 118 identities, 142 documentation links and three focused workflows. A newer Materials identity correction passes ten focused source cases; the immutable ZIP retains its documented panel limitation. Gameplay remains unverified; RC2 unchanged. Custom-name placement now passes sixteen marker placements at both sizes using compiled classes and correct owners.
+> Current development checkpoint, 2026-10-23: [Creature authoring continuation](HANDOFF_CREATURE_GUI_2026-10-23.md). The combined creature-placement archive passes 118 identities, 142 documentation links and four extracted workflows, including 50 import cases and 16 marker placements at both sizes. Pack material identity and custom-name class/owner routing are included. 145 workflows not run; two unrelated corpus skips. Whole-creature presentation and gameplay remain unverified; RC2 unchanged.
 
 # Navigation lane, 2026-09-27
 

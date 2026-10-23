@@ -488,3 +488,54 @@ being rebuilt at below-normal priority/-j2. Placement package workflow now passe
 an unrelated cwd and the archive's schema explicitly, avoiding an implicit repo
 working-directory dependency. Source driver defaults are unchanged. Extracted
 runtime acceptance for this combined checkpoint is still pending.
+
+
+Combined checkpoint prepared from clean77eddec after GUI/forge/forge-tools build:
+`dist/development/20261023-creature-placement/FableForge-0.18.1-dev-win64.zip`,
+SHA256 `c49bf3555d9f423bcf21714110e61ae3d889b6da3d5696ca333ed546068735e8`.
+Offline extraction gate passes118 identities,142 documentation links and the
+retail eight-map smoke. Receipt
+`C:/Users/Cornelio/AppData/Local/FableForgeEvidence/20261023/package-smoke-o1x_sutd/result.json`.
+One workflow run,148 not run,two unrelated missing-corpus skips. New archive is
+immutable; prior checkpoints remain unchanged. Extracted GUI/placement/import
+workflows remain pending: immediate guard found an unrelated native definition
+block-cache test, no lease claimed or GUI launched. Readiness queued as
+`01a16907-ef2f-7f31-8013-866ebf1671b5`. Ready supervisor:
+`build/run_creature_placement_package_window_20261023.py`.
+
+
+## Combined immutable checkpoint acceptance
+
+The new creature-placement archive passes all four selected extracted workflows:
+retail eight-map smoke, GUI smoke,50 custom-import cases and16 marker placements
+at both sizes. Pack diffuse SRVs/metadata, Refresh/source switching, stale-source
+refusals, exact preservation/Restore and shipped-schema/unrelated-cwd placement
+all pass.118 file identities and142 local documentation links pass.145 workflows
+were not run; two unrelated missing controller/Aeon and F2 corpora remain explicit
+skips. No full-suite, clean-machine, whole-creature geometry or gameplay claim.
+
+Offline receipt: `package-smoke-o1x_sutd/result.json` under the 20261023 C evidence
+root. GUI receipt: `cp-iynr178j/package-smoke-wai5ad7z/result.json`; inner import
+`creature-import-ui-tdbm9g1m/result.json` and placement
+`placement-types-b0seid45/result.json`. Both pin the same stripped GUI SHA256
+`13e2f3949b331837e23d72c93e8b3b92c82b7f08793d5df065142f869454b542`.
+Combined receipt: `build/creature-placement-checkpoint-20261023.json`.
+Archive SHA256 remains
+`c49bf3555d9f423bcf21714110e61ae3d889b6da3d5696ca333ed546068735e8`,
+packaging checkout clean77eddec912a631be491f8c14b0f46ec94e06058d. Prior two
+checkpoint ZIP hashes independently rechecked unchanged. No archive overwritten.
+
+Inspected full-size pack model screenshot: textured triangle with Materials
+`Diffuse 8: GUI_TEXTURE (4 x 4)`. Compact placement screenshot shows the enabled
+`Place GUI_ROOT` button and the saved marker fixture; stacked fixture warnings
+obscure much of the tiny viewport, so this is not a geometry presentation claim.
+All owned GUIs closed; lease released with
+`cp-iynr178j/released-runtime-lease.json`. Native availability queued as
+`01a1690b-4ee9-72b0-9273-b90dbae6d55f`. Later peer claims remain independent and
+must not be removed. No immediate further GUI launch planned.
+
+Windows CI39964147797 for91d284e remains in progress, verified at the Windows
+Build step (Unit tests/WARP/package still pending). Do not infer success from
+local package acceptance or earlier green Materials CI. Next: finish draft-PR
+checkpoint documentation, then investigate the remaining creature presentation
+and placement-profile gaps with existing native evidence before new algorithms.
