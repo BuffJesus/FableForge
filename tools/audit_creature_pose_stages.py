@@ -3,7 +3,8 @@
 
 Only mesh count, local bone lookup and parent lookup are bridged. Quaternion,
 matrix, keyframe and vector operations execute original bytes. No game launches.
-This does not execute animation sampling, inverse-bind application or skinning.
+The transposed path also executes native inverse-bind composition. This does
+not execute animation sampling or vertex skinning.
 """
 import argparse
 import hashlib
@@ -78,10 +79,10 @@ def main():
 
     machine.hook_add(UC_HOOK_CODE,hook)
 
-    def call(entry,arguments):
+    def call(entry,arguments,this=None):
         data=struct.pack('<I',stop)+struct.pack('<'+'I'*len(arguments),*arguments)
         machine.mem_write(stack-len(data),data);machine.reg_write(UC_X86_REG_ESP,stack-len(data))
-        machine.reg_write(UC_X86_REG_ECX,manager)
+        machine.reg_write(UC_X86_REG_ECX,manager if this is None else this)
         machine.emu_start(entry,stop,timeout=2000000,count=200000)
         if machine.reg_read(UC_X86_REG_EIP)!=stop or machine.reg_read(UC_X86_REG_ESP)!=stack:
             raise AssertionError(f'bounded stage {entry:08x} failed to return')
@@ -127,7 +128,19 @@ def main():
             converted=actual if transposed else transpose(actual)
             if converted!=target:raise AssertionError(('post-scale',topology,rotation,cpu,transposed,i,converted,target))
             final.append(converted)
+        inverse_binds=[local_matrix(quaternions[(i+1)%4],(-i-1,2,3)) for i in range(count)]
+        skin=[]
+        if transposed:
+            for i in range(count):
+                machine.mem_write(0x10006000,struct.pack('<16f',*inverse_binds[i]))
+                call(0x02e8e0f0,[0x10006000],matrices+i*64)
+                actual=list(struct.unpack('<16f',machine.mem_read(matrices+i*64,64)))
+                target=multiply(final[i],inverse_binds[i])
+                if actual!=target:raise AssertionError(('inverse-bind order',topology,rotation,cpu,i,actual,target))
+                skin.append(actual)
         records.append(dict(parents=parents,rotation=rotation,identity=identity,cpu=cpu,transposed=transposed,
+                            frames=[dict(rotation=qs[i],position=positions[i]) for i in range(count)],
+                            scales=source_scales,inverse_binds=inverse_binds,skin=skin,
                             positions=expected_positions,hierarchy=hierarchy,final=final))
     if hashlib.sha256(args.exe.read_bytes()).hexdigest()!=digest:raise AssertionError('native input changed')
     ranges=[]

@@ -2,6 +2,10 @@
 
 # Albion Atlas -> 1.0: what it should do, what it can't, and how we get there
 
+Paused-session resume point: [Creature pose checkpoint](HANDOFF_CREATURE_POSE_2026-10-23.md).
+Native pose/inverse-bind fixtures pass; the new C++ pose target builds but has not
+been executed or connected to complete Creature rendering.
+
 Subsequent source work adds a shared checked Creature appearance-table reader:
 330 native components match an independent reader, including the populated
 global texture map previously refused. Four affected units, five donor fixtures,

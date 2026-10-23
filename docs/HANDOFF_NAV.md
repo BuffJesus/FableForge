@@ -5,6 +5,9 @@
 [Creature assembly continuation](HANDOFF_CREATURE_ASSEMBLY_2026-10-23.md) records the
 checked reader/selector source milestone and remaining presentation integration.
 
+Paused-session resume point: [Creature pose checkpoint](HANDOFF_CREATURE_POSE_2026-10-23.md).
+The pose target builds; execution and retail diagnostics remain pending.
+
 # Navigation lane, 2026-09-27
 
 Checkout: `D:/Code/FableForge-nav`, branch `feat/nav-thing-lines`, starting commit

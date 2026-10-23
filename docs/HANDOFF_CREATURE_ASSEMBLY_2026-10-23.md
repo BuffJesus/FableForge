@@ -1,5 +1,10 @@
 # Creature selection and assembly continuation
 
+Paused at the user's request. Resume from the
+[Creature pose checkpoint](HANDOFF_CREATURE_POSE_2026-10-23.md): native inverse-bind
+order is now verified; the new C++ pose target builds but its execution checks and
+retail bind diagnostics are pending. No Forge runtime lease remains.
+
 The checked core appearance reader now has a pure deterministic selection API,
 `forge::creatureappearance::select`. All 2,640 corpus selections match execution
 of the original native selection routines. It is not connected to scene/Models
