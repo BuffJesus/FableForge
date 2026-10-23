@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <charconv>
 #include <cmath>
+#include <map>
 #include <stdexcept>
 #include <unordered_set>
 
@@ -89,6 +90,58 @@ std::vector<Bone> prepare(const Config& config) {
         if(bone.scale!=std::array<float,3>{1,1,1})result.push_back(bone);
     }
     std::sort(result.begin(),result.end(),[](const Bone& a,const Bone& b){return a.crc<b.crc;});
+    return result;
+}
+namespace {
+void validateSorted(std::span<const Bone> rows) {
+    if(rows.size()>65536)fail("too many combined bones");
+    for(size_t n=0;n<rows.size();++n) {
+        validate(rows[n]);
+        if(n && rows[n-1].crc>=rows[n].crc)fail("expected unique CRC-sorted target rows");
+    }
+}
+}
+std::vector<Bone> combine(std::span<const WeightedTarget> targets) {
+    if(targets.size()>4096)fail("too many weighted targets");
+    size_t count=0;
+    std::map<uint32_t,Bone> accumulated;
+    for(const auto& target:targets) {
+        if(!std::isfinite(target.amount) || target.amount<0 || target.amount>1)
+            fail("unsupported selected-target amplitude");
+        validateSorted(target.rows);
+        if(target.rows.size()>65536-count)fail("too many source bones");
+        count+=target.rows.size();
+        for(const auto& bone:target.rows) {
+            auto [entry,inserted]=accumulated.try_emplace(bone.crc,bone);
+            if(inserted)entry->second.scale={1,1,1};
+            else if(entry->second.name!=bone.name)fail("cross-target bone CRC collision");
+            for(size_t axis=0;axis<3;++axis) {
+                // Each original vector method stores its result before the next
+                // call. Volatile float stores also prevent multiply-add fusion.
+                volatile float delta=bone.scale[axis]-1.0f;
+                volatile float weighted=delta*target.amount;
+                volatile float result=entry->second.scale[axis]+weighted;
+                if(!std::isfinite(result))fail("combined scale overflow");
+                entry->second.scale[axis]=result;
+            }
+        }
+    }
+    std::vector<Bone> result;
+    result.reserve(accumulated.size());
+    for(auto& entry:accumulated)result.push_back(std::move(entry.second));
+    return result;
+}
+std::vector<std::array<float,3>> mapScales(std::span<const Bone> combined,
+                                       std::span<const uint32_t> meshBoneCrcs) {
+    validateSorted(combined);
+    if(meshBoneCrcs.size()>65536)fail("too many mesh bones");
+    std::vector<std::array<float,3>> result;
+    result.reserve(meshBoneCrcs.size());
+    for(const auto crc:meshBoneCrcs) {
+        const auto found=std::lower_bound(combined.begin(),combined.end(),crc,
+            [](const Bone& bone,uint32_t key){return bone.crc<key;});
+        result.push_back(found!=combined.end() && found->crc==crc ? found->scale : std::array<float,3>{1,1,1});
+    }
     return result;
 }
 } // namespace forge::boneconfig

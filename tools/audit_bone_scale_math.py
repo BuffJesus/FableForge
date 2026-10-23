@@ -10,6 +10,7 @@ import hashlib
 import json
 from pathlib import Path
 import struct
+import subprocess
 
 import pefile
 from unicorn import Uc, UC_ARCH_X86, UC_MODE_32
@@ -26,8 +27,9 @@ def main():
     parser.add_argument('--exe', type=Path, required=True)
     parser.add_argument('--census', type=Path, required=True)
     parser.add_argument('--output', type=Path, required=True)
+    parser.add_argument('--reader', type=Path, help='Optional C++ boneconfig test; invoke inside a guarded lease')
     args = parser.parse_args()
-    if args.output.resolve() in [args.exe.resolve(), args.census.resolve()]:
+    if args.output.resolve() in [p.resolve() for p in [args.exe, args.census, args.reader] if p]:
         raise ValueError('output must differ from inputs')
     raw = args.exe.read_bytes()
     digest = hashlib.sha256(raw).hexdigest()
@@ -66,6 +68,7 @@ def main():
     weights = [0, f32(.1), .5, 1]
     bases = [(1,1,1),(.75,2,.25),(100000,-2,4)]
     samples = []
+    vectors = []
     for resource in census['resources']:
         for bone in resource['bones']:
             source = [f32(v) for v in bone['scale']]
@@ -81,6 +84,7 @@ def main():
                                                   for a,v in zip(base,source)])
                     if actual != expected:
                         raise AssertionError((resource['name'],bone['name'],weight,base,actual.hex(),expected.hex()))
+                    vectors.append(dict(source=source,weight=weight,base=base,result=actual.hex()))
                     if len(samples)<4:
                         samples.append(dict(source=source,weight=weight,base=base,result=actual.hex()))
                     cases += 1
@@ -93,6 +97,30 @@ def main():
             sha256=hashlib.sha256(pe.get_data(a-pe.OPTIONAL_HEADER.ImageBase,n)).hexdigest()) for a,n in ranges],
         samples=samples,inputs_unchanged=True,bridges=[],scope=__doc__)
     args.output.parent.mkdir(parents=True,exist_ok=True)
+    if args.reader:
+        binary_hash = hashlib.sha256(args.reader.read_bytes()).hexdigest()
+        vector_path = args.output.with_suffix('.vectors.json')
+        if vector_path.exists() or vector_path.resolve() in [args.exe.resolve(),args.census.resolve(),args.reader.resolve()]:
+            raise ValueError('comparison vector output must be fresh and differ from inputs')
+        vector_path.write_text(json.dumps([{k:v for k,v in item.items() if k!='result'}
+                                          for item in vectors])+'\n',encoding='utf-8')
+        # Caller owns the shared lease; repeat the conservative process guard
+        # immediately before this executable launch after offline emulation.
+        import psutil
+        active = [p.info for p in psutil.process_iter(['pid','name'])
+                  if any(key in (p.info['name'] or '').lower() for key in ['fable','xenia','v83'])]
+        if active:
+            raise RuntimeError(f'compiled comparison process guard refused: {active}')
+        child = subprocess.run([str(args.reader.resolve()),'--scale-math-audit',str(vector_path.resolve())],
+                               capture_output=True,text=True,check=True,timeout=30)
+        actual = json.loads(child.stdout)
+        if len(actual)!=len(vectors) or any(struct.pack('<3I',*row).hex()!=item['result']
+                                           for row,item in zip(actual,vectors)):
+            raise AssertionError('compiled positive scale combination differs from native arithmetic')
+        if hashlib.sha256(args.reader.read_bytes()).hexdigest()!=binary_hash:
+            raise AssertionError('compiled reader changed during audit')
+        report.update(compiled_comparisons=len(actual),reader_sha256=binary_hash,
+                      vector_sha256=hashlib.sha256(vector_path.read_bytes()).hexdigest())
     args.output.write_text(json.dumps(report,indent=2)+'\n',encoding='utf-8')
     print(f'Bone scale arithmetic: {cases} original-x86 comparisons passed; {args.output}')
 

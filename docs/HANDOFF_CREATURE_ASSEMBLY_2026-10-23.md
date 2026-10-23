@@ -324,7 +324,45 @@ This confirms mapping by bone name CRC, not by target row number or global
 animation-track ID. Actual use in skeleton transforms/vertex skinning remains
 unverified.
 
-Next: implement positive selected-target combination with explicit float32
-rounding and stable parameter order, validate C++ against the arithmetic oracle,
-map combined values into decoded mesh bone slots, then trace and implement their
-application to bind/animation transforms. Whole-Creature presentation remains open.
+## Positive combination and slot mapping source acceptance
+
+`boneconfig::combine` now combines prepared targets in parameter order with
+explicit float32 stores after subtraction, multiplication and addition. It
+supports selected random-appearance amplitudes in [0,1], retains first-source
+name/offset provenance and emits CRC-sorted combined rows. Zero weights retain
+identity entries, as the native insertion path does. Negative-target selection
+is outside this API. Nonfinite/unsupported amplitudes, unsorted/duplicate input,
+cross-target CRC/name collisions and overflow refuse without mutating inputs.
+Work is bounded to 4096 targets and 65536 total source rows.
+
+`mapScales` resolves the combined rows into supplied mesh-local CRC order, with
+identity for missing keys. Repeated mesh slots with the same CRC resolve to the
+same scale; target row number/global track ID is never used as a local slot.
+It does not apply scales to matrices or vertices yet.
+
+The affected unit target builds and passes. Cases distinguish additive deltas
+from multiplying scales, preserve non-associative float32 parameter order, retain
+zero-weight identities, map missing/repeated mesh keys and refuse malformed
+targets/collisions/overflow. The extended original-x86 oracle compares the C++
+helper on all 3,048 native arithmetic cases, matching output bits exactly.
+The C++ mode emits only computed bits from source/base/weight inputs; native
+expected results are not fed to it.
+
+Receipt: `C:/Users/Cornelio/AppData/Local/FableForgeEvidence/20261023/bs-afuxk45_/native-core.json`.
+`result.json` in that directory pins the source hashes; binary SHA256
+`4be6ee7f524440c9a2c047af21bd5c87a5fe0aa2bfd3de98da6144a7c840ab72`.
+Build log: `build/bone-config-combine-build-20261023.log`; source receipt:
+`build/bone-config-combine-acceptance-20261023.json`. This is positive arithmetic
+and slot-mapping acceptance, not complete native container/parameter execution,
+negative morph handling, mesh transform/animation or rendering acceptance.
+
+The fresh bounded lease released after owned checks closed; receipt:
+`bs-afuxk45_/released-runtime-lease.json`. Claim notification queued
+01a169a6-3cc4-7e61-963e-6871c0522522. Release notification failed twice because
+the peer queue reached its 100-submission limit; the actual lease is absent,
+and no Forge runtime or reservation remains. Do not retry-spam or mutate the
+queue database. The release is also reported in the user-facing turn.
+
+Next: trace and implement scale application to bind/animation transforms, wire
+selection/combination and decoded mesh bones through the shared Context/preview
+path, then qualify representative complete Creatures. Whole presentation remains open.
