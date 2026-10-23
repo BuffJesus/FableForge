@@ -269,6 +269,9 @@ def main():
     run('definition_placement_types', [sys.executable, repo/'tools/test_definition_placement_types_ui.py',
         '--gui', package/'FableForge.exe', '--forge', package/'forge.exe', '--work-root', work,
         '--cwd', cwd, '--schema', package/'docs/re_reference/def_schema.json'])
+    run('creature_placement_profile_refusals', [sys.executable, repo/'tools/test_creature_profile_refusal_ui.py',
+        '--gui', package/'FableForge.exe', '--work-root', work, '--cwd', cwd,
+        '--schema', package/'docs/re_reference/def_schema.json'])
     for window_size in ('1440x900', '800x600'):
         run('creature_clone_gui_retail_' + window_size, [sys.executable, repo / 'tools/test_creature_clone_retail.py',
             '--install', args.root.resolve(), '--gui', package / 'FableForge.exe', '--forge', package / 'forge.exe',

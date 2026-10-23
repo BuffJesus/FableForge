@@ -17,17 +17,17 @@ from test_texture_lookup import texture_bank
 from test_definition_edit_ui import click
 
 ROWS = [('CREATURE', 'GUI_ROOT', 2), ('OBJECT', 'CREATURE_DECOY', 4),
-        ('BUILDING', 'PLAIN_HOUSE', 4), ('CREATURE', 'CREATURE_NORMAL', 3),
+        ('BUILDING', 'PLAIN_HOUSE', 4), ('CREATURE', 'CREATURE_VILLAGER_DECOY', 3),
         ('OBJECT', 'OBJECT_NORMAL', 4), ('BUILDING', 'BUILDING_NORMAL', 4)]
 
 
-def fixture(root, schema):
+def fixture(root, schema, invalid=None):
     folder = root/'data/CompiledDefs'
     folder.mkdir(parents=True)
     pool, refs, table, offsets, payloads = bytearray(), {}, bytearray(), [], bytearray()
     counts = {}
     for kind, name, owner in ROWS:
-        for value in (kind, name):
+        for value in (kind, name, 'CTCVillageMember'):
             if value not in refs:
                 refs[value] = len(pool)+4
                 pool += struct.pack('<I', crc0(value))+value.encode('ascii')+b'\0'
@@ -36,8 +36,18 @@ def fixture(root, schema):
         body = bytearray(b'\x01\0\x01')
         for field in schema[kind]['fields']:
             assert field['name'], 'fixture requires named field anchors'
+            if field['name']=='Components' and name=='GUI_ROOT' and invalid=='missing':
+                continue
             body += struct.pack('<I', crc0(field['name']))
-            body += struct.pack('<IIIff', 0, 0, 0, 1, 0) if field['name']=='Graphic' else bytes(4)
+            if field['name']=='Components':
+                member = name=='GUI_ROOT'
+                count = 2 if member and invalid=='count' else int(member)
+                body += struct.pack('<I', count)
+                if member:
+                    body += struct.pack('<IIB', 0xffffffff if invalid=='name' else refs['CTCVillageMember'], 0, 0)
+                body += struct.pack('<I', 0 if member and invalid=='verify' else 0x01ab6cce)
+            else:
+                body += struct.pack('<IIIff', 0, 0, 0, 1, 0) if field['name']=='Graphic' else bytes(4)
         # DefaultOwner is retained as a tagged scalar in the reconstructed blob.
         if kind == 'CREATURE':
             body += struct.pack('<Ii', crc0('DefaultOwner'), owner)
@@ -71,6 +81,8 @@ def verify_tng(path):
         assert actual_type == wanted, (name, actual_type, wanted)
         assert f'DefinitionType "{name}";' in body
         assert f'Player {owner};' in body, (name, owner)
+        assert ('StartCTCVillageMember;' in body)==(name=='GUI_ROOT'), (name, 'runtime membership profile')
+        if name=='GUI_ROOT': assert 'VillageUID 0;' in body
         assert (f'ScriptName Probe{index};' if index<=len(ROWS) else 'ScriptName NULL;') in body
         for axis in 'XYZ':
             initial = re.search(r'\bInitialPos'+axis+r' ([^;]+);', body)

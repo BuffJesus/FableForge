@@ -501,7 +501,8 @@ Settings persistence is disabled under `--auto` so runs are deterministic.
 | `set_entrance` | the map's region entrance (FinalAlbion.gtg, this map's WLD slot) at the view centre, facing the camera (state `entrance` = `x,y,h` or `-`; widget `btn_set_entrance`) |
 | `preset_place <name>` / `preset_save <name>` | place a preset (shipped `presets/` or the user folder) at the view centre as a selected group; save the selection as a user preset (state `presets` = how many are listed) |
 | `select_toggle <index>` / `select_added` / `copy` / `paste` | Ctrl+click a thing into/out of the selection; select the first thing the Changes list reports as added; copy the selection as a fragment; paste it at the view centre (state `selection_count`) |
-| `place <DEFINITION> [scriptname]` | place a new thing at the camera focus, on the ground (`CREATURE_*` as the retail AICreature block) |
+| `place <DEFINITION> [scriptname]` | place a new thing at the camera focus, on the ground, using its compiled class and validated runtime component profile |
+| `place_refused <DEFINITION> [scriptname]` | require placement to refuse; malformed Creature profiles must leave the document and recovery files unchanged |
 | `set place_def <DEFINITION>` / `place_at <u> <v>` | choose the palette definition and place it at viewport-relative pointed terrain coordinates; Shift+click tests the actual input path |
 | `snapshot_frame` / `assert_selected_moved_xy` / `assert_selected_frame_same` / `assert_ground_offset_same` | capture a selected frame, then check XY movement, exact frame restoration, or preserved height above terrain |
 | `ground_place_carry.txt` | synthetic Shift+click placement, plain and Ctrl+Shift ground drag, Ctrl+D cursor carry, grouped undo, fixed height, lock refusal and Escape cancellation |
@@ -1152,7 +1153,13 @@ reader checks class, owner and creature InitialPos. Definitions, texture and LEV
 stay exact; Restore retains only the byte-exact first-original TNG backup.
 The standalone driver's `--prepare-only` writes and verifies fixtures/scripts
 without launching an executable; that receipt explicitly does not claim a pass.
-These marker fixtures do not test whole-creature geometry or gameplay.
+These marker fixtures do not test whole-creature geometry or gameplay. They also
+require village membership from runtime Components, independent of the name.
+`creature_placement_profile_refusals` adds eight malformed-count/name/sentinel/
+missing-field cases at both sizes, requiring an unchanged document and complete
+fixture inventory. The read-only C++ test mode `--creature-component-profiles
+<install>` reports Context membership for comparison with the independent audit.
+
 
 `creature_clone_gui_retail_1440x900` and `_800x600` independently compare
 all prior retail records, verified self-only deltas, paired recovery and explicit

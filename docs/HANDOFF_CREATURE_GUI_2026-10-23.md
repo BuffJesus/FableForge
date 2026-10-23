@@ -552,3 +552,12 @@ runtime components exactly. Eight targeted debug function byte ranges match the
 original PE; direct GetByteSize disassembly confirms nine-byte records and native
 TransferBinaryIn verifies0x01ab6cce. No production writer changed, no GPU launched,
 no native install bytes changed. The current immutable checkpoint remains exact.
+
+
+Runtime village-membership source correction is now accepted; see
+[profile handoff](HANDOFF_CREATURE_PROFILES_2026-10-23.md). Two affected unit
+executables,517 native profile comparisons,16 placements/eight malformed-profile
+refusals and the additional unknown-block preservation/undo assertion pass.
+The immutable checkpoint is not replaced; it still uses the old membership
+name heuristic. Latest own runtime lease released with pu-2qfi4vr0 receipt and
+Native availability queued01a16931-32c3-7081-9df8-5c8563fb6cfa.

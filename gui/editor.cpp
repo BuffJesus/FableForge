@@ -2544,6 +2544,14 @@ bool App::placeDefinition(const std::string& def, const std::string& scriptName)
 bool App::placeDefinitionAt(const std::string& def, const float position[3], const std::string& scriptName) {
     if (!documentLoaded()) { pushLog("editor: no level document", 1); return false; }
     if (!std::isfinite(position[0]) || !std::isfinite(position[1]) || !std::isfinite(position[2])) return false;
+    const bool creature=ctx_.definitionType(def)=="CREATURE";
+    bool villageMember=false;
+    if(creature) {
+        std::string error;
+        const auto profile=ctx_.definitionHasRuntimeComponent(def,"CTCVillageMember",error);
+        if(!profile) {pushLog("editor: cannot read creature placement profile: "+error,2);return false;}
+        villageMember=*profile;
+    }
     uint32_t modelId = 0;
     const int code = ctx_.graphicModelId(def, modelId);
     if (code == 0) { pushLog("editor: " + def + " is not in game.bin", 2); return false; }
@@ -2570,10 +2578,9 @@ bool App::placeDefinitionAt(const std::string& def, const float position[3], con
         if (fl > 1e-6f) p.forward = {fx / fl, fy / fl, 0.0f};
     }
     try {
-        const bool creature = ctx_.definitionType(def) == "CREATURE";
         const float pos[3] = {p.position.x, p.position.y, p.position.z};
         const float fwd[2] = {p.forward.x, p.forward.y};
-        const size_t n = creature ? doc_.placeCreature(pos, fwd, def, scriptName, p.player) : doc_.place(p);
+        const size_t n = creature ? doc_.placeCreature(pos, fwd, def, villageMember, scriptName, p.player) : doc_.place(p);
         selectedUid_ = doc_.uidOf(n);
         selectedThing_ = int(n);
         renderer_.selectedThing = selectedThing_;

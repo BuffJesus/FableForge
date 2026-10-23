@@ -3366,7 +3366,7 @@ size_t Document::placeCreatureGenerator(const float pos[3], const std::vector<st
     }
 }
 
-size_t Document::placeCreature(const float pos[3], const float forward[2], const std::string& definition, const std::string& scriptName, int player) {
+size_t Document::placeCreature(const float pos[3], const float forward[2], const std::string& definition, bool villageMember, const std::string& scriptName, int player) {
     if (!scriptName.empty() && !forge::tng::isScriptName(scriptName))
         throw std::invalid_argument("ScriptName must be an unquoted identifier");
     if (definition.empty()) throw std::invalid_argument("a creature needs a definition");
@@ -3378,7 +3378,7 @@ size_t Document::placeCreature(const float pos[3], const float forward[2], const
         float fx = forward[0], fy = forward[1];
         const float fl = std::sqrt(fx * fx + fy * fy);
         if (fl < 1e-6f) { fx = 0.0f; fy = 1.0f; } else { fx /= fl; fy /= fl; }
-        const bool villager = definition.find("VILLAGER") != std::string::npos;
+        // The caller resolves runtime Components before any document mutation.
         std::string b;
         b += "NewThing AICreature;" + eol;
         b += "Player " + std::to_string(player) + ";" + eol;
@@ -3400,7 +3400,7 @@ size_t Document::placeCreature(const float pos[3], const float forward[2], const
         b += "StartCTCTargeted;" + eol + "Targetable TRUE;" + eol + "EndCTCTargeted;" + eol;
         b += "StartCTCTalk;" + eol + "EndCTCTalk;" + eol;
         b += "StartCTCEditor;" + eol + "EndCTCEditor;" + eol;
-        if (villager) b += "StartCTCVillageMember;" + eol + "VillageUID 0;" + eol + "EndCTCVillageMember;" + eol;
+        if (villageMember) b += "StartCTCVillageMember;" + eol + "VillageUID 0;" + eol + "EndCTCVillageMember;" + eol;
         b += "Health 1.0;" + eol;
         b += "OverridingBrainName NULL;" + eol;
         b += "HasInformation FALSE;" + eol;

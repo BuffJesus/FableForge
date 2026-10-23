@@ -169,5 +169,29 @@ int main() {
     try { (void)forge::defdecode::mergeFields(base, {{"first",first}}, {}, {{3,"first"}}); }
     catch (const std::invalid_argument&) { refused = true; }
     check(refused, "invalid part index refuses rather than selecting another field");
+    {
+        forge::defdecode::DecodedField field;
+        field.name="Components";field.tag=forge::defdecode::fieldTag(field.name);field.tagOk=true;
+        auto word=[](std::vector<uint8_t>& bytes,uint32_t value) {
+            for(unsigned i=0;i<4;++i) bytes.push_back(uint8_t(value>>(8*i)));
+        };
+        word(field.value,2);word(field.value,17);word(field.value,99);field.value.push_back(0);
+        word(field.value,42);word(field.value,0);field.value.push_back(1);word(field.value,0x01ab6cce);
+        check(forge::defdecode::runtimeComponentNameOffsets(field)==std::vector<uint32_t>({17,42}),
+              "runtime component names use the recovered nine-byte stride");
+        for(int kind=0;kind<5;++kind) {
+            auto bad=field;
+            if(kind==0) bad.value[0]=3;
+            if(kind==1) bad.value.pop_back();
+            if(kind==2) bad.value.back()=0;
+            if(kind==3) bad.tagOk=false;
+            if(kind==4) for(int i=0;i<4;++i) bad.value[i]=0xff;
+            bool rejected=false;
+            try{(void)forge::defdecode::runtimeComponentNameOffsets(bad);}catch(const std::invalid_argument&){rejected=true;}
+            check(rejected,"malformed runtime component list refuses before use");
+        }
+        field.value.clear();word(field.value,0);word(field.value,0x01ab6cce);
+        check(forge::defdecode::runtimeComponentNameOffsets(field).empty(),"valid empty runtime component list");
+    }
     return failures ? 1 : 0;
 }

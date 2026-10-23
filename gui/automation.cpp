@@ -1401,9 +1401,10 @@ bool Automation::tick(App& app) {
     else if (cmd == "edit_tab") { app.setEditTab(std::atoi(rest.c_str())); note("ok   " + line); ++pc_; }   // 0 Objects 1 Terrain 2 Actors 3 Level
     else if (cmd == "dismiss_rule") { app.dismissRule(rest); note("ok   " + line); ++pc_; }   // what the notice's "Got it" does (the notice may sit below the panel fold)
     else if (cmd == "redo") { app.editRedo(); note("ok   " + line); ++pc_; }
-    else if (cmd == "place") {   // place <DEFINITION> [scriptname]
+    else if (cmd == "place" || cmd == "place_refused") {   // <DEFINITION> [scriptname]
         std::istringstream rs(rest); std::string def, sn; rs >> def >> sn;
-        if (!app.placeDefinition(def, sn)) fail("place failed: " + rest); else note("ok   " + line); ++pc_;
+        const bool okay=app.placeDefinition(def,sn);
+        if(okay!=(cmd=="place")) fail("unexpected placement result: "+rest); else note("ok   "+line);++pc_;
     }
     else if (cmd == "compact_stb") { if (!app.compactBank()) fail("compact_stb failed"); else note("ok   " + line); ++pc_; }
     else if (cmd == "compact_stb_refused") { if (app.compactBank()) fail("compact_stb unexpectedly started"); else note("ok   " + line); ++pc_; }
