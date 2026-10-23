@@ -369,8 +369,9 @@ path, then qualify representative complete Creatures. Whole presentation remains
 
 ## Native transform-stage continuation
 
-Source commit de80f2f CI run 39989492089 was inspected while its Windows job
-120537245636 was still building; no later CI success is claimed here. Native
+Source commit de80f2f CI run 39989492089 completed successfully: build, units,
+WARP GUI without an install and CLI usage passed; package/upload were skipped.
+This covers the combined core source, not assembled-Creature GUI acceptance. Native
 owned the shared runtime lease during this investigation. Forge stayed offline,
 with no frontend/test launch or lease claim. Peer release notification remains
 subject to the queue-capacity limitation recorded above.
@@ -412,3 +413,39 @@ root position, parent-scaled child displacement, rotated parents and independent
 post-hierarchy scale, plus transposed/nontransposed consistency and inverse-bind
 order. Then implement the corresponding Creature pose calculation, reusing the
 existing animation reader and skinning primitives where their contracts fit.
+
+## Executed native pose-stage fixture
+
+`tools/audit_creature_pose_stages.py` executes original displacement, parent and
+scaling stages plus actual quaternion/matrix/keyframe/vector callees. The original
+PE file stays unchanged; its mapped emulator image receives fixture data and CPU
+branch selection. Only mesh bone count, local-bone lookup and parent lookup are
+bridged. Receivers/indices are checked with distinct manager/mesh identities.
+Code bytes are not patched. Executed ranges and producer/input hashes are pinned.
+
+All 240 cases pass: one-/two-/three-bone chains, siblings and multiple roots;
+identity/nonuniform scales; six quaternion patterns including zero and non-unit;
+both matrix layouts and both selected CPU math branches. Exactly representable
+fixtures match numeric matrix values exactly (signed zero is ignored). Child
+displacement, hierarchy and independent final scaling are checked separately.
+Stored keyframe scaling is deliberately nonidentity (7,8,9) and remains intact;
+these 4x4 matrix routines ignore it.
+
+The first rotated probe exposed an incorrect quaternion sign convention in the
+initial independent model. Native ToMatrixTransposed (03382b80) confirms the
+off-diagonal signs and factor `2 / squared_norm`, with a norm-zero fallback.
+The corrected model passes the full matrix. The failed probe and resolution are
+retained; this was an oracle-model error, not an engine defect. Do not silently
+reuse the common glTF quaternion formula for raw native keyframes.
+
+Final packet: `C:/Users/Cornelio/AppData/Local/FableForgeEvidence/20261023/ps-muf0p5y6/result.json`.
+It retains the producer and first-probe diagnostic. Intermediate 160/240-case
+packets remain under ps-3v36ysp4 and ps-ii0pkvc9. Leaf exports (`pose-leaves-*`)
+bring PE-byte verification to 78 functions. These are offline emulated instructions;
+no frontend, game or named unit executable launched and no runtime lease claimed.
+
+The fixture does not execute animation sampling/blending, inverse-bind composition
+or vertex skinning. Next: pin inverse-bind matrix order with the actual native
+operation, then implement Creature pose calculation against these vectors,
+compare C++ and qualify representative decoded meshes. Keep raw native quaternion
+conventions explicit at the conversion boundary. Whole presentation remains open.
