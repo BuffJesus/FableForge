@@ -255,8 +255,38 @@ and no repeated bone CRC within a target. Each has the observed CRLF start marke
 and semicolon-separated row shape. Hashes/source order remain recorded. This is
 an offline grammar census, not execution of CStringParser or a core reader.
 
-Next: implement a bounded read-only reader for this verified subset, retain its
-source names/rows separately from prepared target rows, refuse duplicate CRCs
-until native tie behavior is known, compare all 15 resources with independent
-readback, then verify weighted combination and skeleton application. Do not
-present undeformed joined parts as the selected complete Creature.
+## Bone-config reader source acceptance
+
+`forge::boneconfig::read` now reads the verified CRLF subset into source-ordered
+names, CRCs, float32 XYZ scales and byte offsets. It locates exact start/end bone
+markers and leaves unknown header/group-setting text and the input untouched.
+The parser accepts one semicolon-terminated row per line, bounds input to 1 MiB,
+rows to 4096 and printable ASCII bone names to 255 bytes, and refuses malformed
+component counts, nonfinite/out-of-range decimals, NUL input and duplicate CRCs.
+It does not claim general CStringParser grammar compatibility.
+
+`prepare` separately validates the names/CRCs/scales, excludes exact identity
+rows, and sorts by unsigned CRC. Source rows, including identities and their
+offsets, stay intact. Duplicate keys/collisions refuse until native tie behavior
+is established. This is an unused read-only core API, not skeleton deformation.
+
+The new `fableforge_boneconfig_tests` target builds and passes, including malformed
+rows, identity pruning, source preservation, unsigned ordering and CRC collision
+refusals. All 15 referenced retail files match independent readback: 254 source
+rows and 248 prepared target rows, exact offsets, names, CRCs and float32 bits.
+Every resource hash stays unchanged. The acceptance packet is
+`C:/Users/Cornelio/AppData/Local/FableForgeEvidence/20261023/bc-nubgz_lw/result.json`;
+binary SHA256 `2e7817e06cc172fa5c377978f3f3acb70ce4525c15a6775d6c7d42e09e4b79fc`.
+Source hashes/receipt: `build/bone-config-reader-acceptance-20261023.json`.
+Build log: `build/bone-config-reader-build-20261023.log`. The test's read-only
+`--read file` mode emits both row sets for further independent comparisons.
+
+These checks exercised a fresh bounded guarded lease; all owned calls closed and
+the lease released. Availability queued 01a1699d-5f81-7813-b2a9-0d948a0b80af;
+receipt `bc-nubgz_lw/released-runtime-lease.json`. No Forge reservation remains.
+No shipping GUI or package was rebuilt for this unused core reader.
+
+Next: verify weighted combination with original instructions and implement the
+mapping/application to mesh skeleton bones. Continue scene/Assets integration
+through the shared ownership resolver and runtime-profile checks. Do not present
+undeformed joined parts as the selected complete Creature.

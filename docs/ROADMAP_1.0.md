@@ -14,6 +14,11 @@ The subsequent pure selector matches 2,640 original-native corpus selections;
 [Creature assembly continuation](HANDOFF_CREATURE_ASSEMBLY_2026-10-23.md).
 It is not connected to scene rendering or animation yet.
 
+The read-only bone-config reader now matches all 15 resources referenced by the
+stored skeletal choices: 254 source rows and 248 prepared rows, with source hashes
+unchanged. Its scoped unit passes. Weighted combination, skeleton application and
+complete Creature rendering remain open in the assembly continuation above.
+
 Ordered dialogue-tag controls pass source checks at both window sizes and an
 independent retail-copy preservation/Restore check. Signed stored positions remain
 explicit; new tag names are bounded ASCII and original legacy names survive other
