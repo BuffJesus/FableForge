@@ -1,4 +1,4 @@
-> Resumed at user request, 2026-10-23: [Creature custom-import GUI continuation](HANDOFF_CREATURE_GUI_2026-10-23.md). Custom body-slot/model/texture controls are connected to reviewed background publication. All 44 custom-import GUI cases pass against the immutable extracted checkpoint, with exact deltas and Restore. Three affected CTests and five focused extracted workflows pass; gameplay remains unverified. RC2 unchanged.
+> Resumed at user request, 2026-10-23: [Creature custom-import GUI continuation](HANDOFF_CREATURE_GUI_2026-10-23.md). Reviewed private model/texture imports pass all 50 extracted GUI cases. The new immutable pack-texture checkpoint passes 118 identities, 142 documentation links and three focused workflows. Its Materials panel still uses the base texture list; source correction is next. Gameplay remains unverified; RC2 unchanged.
 
 # Navigation lane, 2026-09-27
 

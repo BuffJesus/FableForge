@@ -249,3 +249,59 @@ prepare a distinct immutable development checkpoint, then exercise its extracted
 GUI under a new shared-lease window. The earlier ZIP remains untouched and still
 has its documented cache/texture-preview limitations. No gameplay or assembled
 creature claim follows from these per-mesh fixtures.
+
+
+## Texture-context checkpoint prepared
+
+Source correction committed and pushed as `65dba50d555f5d0204866a4ee80a526236642720`.
+Windows CI run 39959326852 is in progress; draft PR #2 records the source gate.
+New immutable package: `dist/development/20261023-pack-model-textures/FableForge-0.18.1-dev-win64.zip`,
+SHA256 `2e5addece0de168c4f4a7dec4c079e1115548b1bae59d6adcf4d577d36e31413`.
+It was prepared from the clean source commit with `package.py --no-check`;
+this is packaging, not an extracted-runtime acceptance claim.
+The old custom-import ZIP remains unchanged.
+
+A fresh extracted-window preflight found unrelated native particle tests,
+then definition-catalog tests. No lease was claimed or GUI launched, and those
+processes were left alone. Peer notified through queue message
+`01a168e4-5e19-7752-a3c3-549001b6c296`. The prepared bounded runner
+`build/run_pack_package_window_20261023.py` will claim the shared lease only
+when the immediate process guard is clear. Its scoped sitecustomize guard is
+inherited by child Python drivers and verifies token/live owner/processes before
+every FableForge launch. Planned extracted workflows: creature_import_ui, gui,
+and retail. No unchanged core gate is repeated.
+
+
+Offline extraction acceptance passes for the new ZIP: 118 file identities,
+142 local documentation links, and the eight-map retail export smoke.
+Receipt: `C:/Users/Cornelio/AppData/Local/FableForgeEvidence/20261023/package-smoke-9mmhqrzx/result.json`.
+This invocation ran one workflow, left 147 not run, and explicitly skipped two
+unrelated missing-corpus workflows. The remaining GUI window will select only
+`gui` and `creature_import_ui`; retail will not be repeated.
+
+
+## Extracted texture-preview checkpoint acceptance
+
+The new archive passes GUI smoke and all 50 custom-import cases at both sizes,
+including actual texture SRVs, Refresh/source switching, unchanged global world
+context, physical-alias refusals, exact preservation and Restore. Receipt:
+`C:/Users/Cornelio/AppData/Local/FableForgeEvidence/20261023/pk-1q8hw2fe/package-smoke-8r8legjw/result.json`;
+inner custom gate `creature-import-ui-4pcwvqs3/result.json`. Extracted GUI SHA256
+`697ad0d49496249d186d7c8ffe766f7a51764c11bb9bfeed73e32aa80b922ed0`.
+Combined with offline retail: three distinct workflows passed, 145 not run,
+two unrelated missing-corpus skips. Combined receipt:
+`build/pack-texture-checkpoint-20261023.json`.
+
+All owned GUIs closed; shared lease released and absence read back. Release
+receipt `pk-1q8hw2fe/released-runtime-lease.json`; peer availability queued as
+`01a168e9-6932-70e1-a36b-a986378c6a54`. An earlier attempt claimed/released
+without launching because Python could not resolve PowerShell's codex wrapper;
+the runner now uses the explicit codex.cmd path. No peer process was closed.
+
+Screenshot inspection found a separate presentation issue: the pack's diffuse
+texture visibly renders, but Materials still queries the base Textures list and
+reports texture ID 8 missing. This does not invalidate the actual SRV gate, but
+is a known UI limitation of this immutable archive. Next source correction should
+show material identity from the same context used by the model preview and avoid
+navigating into an unrelated base texture with a coincident ID. Keep this ZIP
+unchanged; no whole-creature assembly, placement or gameplay claim.
