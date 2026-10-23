@@ -227,3 +227,80 @@ compatibility. Reuse the existing native appearance/body evidence and establish
 which meshes/transforms the engine selects before changing scene algorithms.
 Do not repeat the accepted profile/import/native graph gates without a relevant
 change. Keep gameplay checks separate from marker/individual-model acceptance.
+
+## Offline appearance investigation
+
+Membership correction CI [39971393188](https://github.com/BuffJesus/FableForge/actions/runs/39971393188)
+completed successfully on 37c1ed1: build, unit tests, WARP GUI without an install
+and CLI usage passed. Package/upload steps were skipped. This does not add
+coverage to the separately retained extracted-checkpoint receipts above.
+
+No new Forge runtime claim was needed during Native's V84 night/hidden captures.
+The previously requested membership gap was explicitly cleared through the
+authorized Native queue; no Forge reservation remains. Continue using fresh
+guarded per-window claims for future runtime work.
+
+The next falsifiable question is which body meshes the engine selects for a
+random-appearance creature, rather than rendering its root Graphic alone or
+every alternative in its CCreatureDef. Evidence is retained in
+`build/creature-assembly-native-20261023/`. All exports used the existing FableWin
+Ghidra program with `-readOnly -noanalysis`; no import, analysis or project save.
+Executable SHA256 remains
+`a9d6d0977d9d7fc8242da4292ae7ed92e926ca80364a95c003d9b9f689e41845`.
+`byte-verification.json` independently matches all 14 complete function byte
+ranges to that PE. Clean C exports retain their original decompiler warnings;
+ported labels/types are interpretation aids, not an ABI contract.
+
+Observed paths:
+
+- 01d067f0, CTCGraphicAppearance::OnCreate, obtains animation and optional
+  CAppearanceDef lighting configuration; 01d09e20 returns the main graphic at
+  component offset 0x6c. 0263a9d0 checks that graphic is animating-mesh type 4.
+- 0252d9c0, CTCRandomAppearanceMorph::OnCreate, finds optional skeletal morph,
+  applies its stored seed and checks animating-mesh type 4. 0252dbd0 obtains
+  CCreatureDef's RandomAppearanceMorph, builds its morph set, transfers per-part
+  meshes/texture morphs, and applies skeletal morphs under the RAND identifier.
+- 0289ac90 calls skeletal selection, body selection, then global texture
+  selection with the same seed reference. 0289b110 loops exactly three body
+  groups, skips empty groups, and draws one alternative from each nonempty group.
+  It processes that mesh's texture table and the body group's texture table.
+  Decapitation suppresses group zero only after those selection steps. Direct
+  original-PE disassembly confirms the group bound, shared seed pointer,
+  alternative-count RNG call and conditional push. See 0289b110.disasm.txt.
+- 0252e720 iterates the resulting mesh parts and makes persistent primitives,
+  including an animation-from-file branch and a normal morphed animating-mesh
+  branch using the shared appearance/animation/position/orientation inputs.
+  Its recovered C has unreliable argument types; do not copy its guessed ABI
+  or infer attachment transforms without checking the relevant instructions.
+- 026c4230 requires CReplaceableMeshDef on the separate replaceable-mesh path.
+  This is not evidence that all creatures use that path.
+
+A read-only census (`component-census.json`) validated all 517 retail CREATURE
+runtime component lists and preserved game.bin/names.bin hashes. Counts overlap:
+516 CTCGraphicAppearance, 290 CTCRandomAppearanceMorph, 199
+CTCGraphicAppearanceAnimatedMesh, 191 CTCSkeletalMorph, and four each CTCHeroMorph
+and CTCHeroAttachableAppearanceModifiers. Root-only rendering therefore misses a
+widely used component path. These are definition counts, including templates,
+not counts of rendered or successfully assembled NPCs.
+
+The RNG primitive at 018cf370 updates a uint32 seed with multiply 0x24a1, add
+0x24df and rotate-right 13, then returns seed modulo bound (zero bound returns
+zero after still advancing the seed). Rotate thunk 0183fdab targets 018bad60.
+`tools/audit_creature_appearance_rng.py` pins the executable SHA and executes only
+these original x86 ranges in Unicorn, with 128-instruction/100ms bounds per call.
+32 seeds, 11 bounds and four consecutive draws pass all 1,408 comparisons;
+receipt `rng-original-x86.json` pins instruction hashes and unchanged executable.
+This is an RNG primitive oracle, not an engine process or rendering acceptance.
+Reproduce with pefile/unicorn installed:
+
+```text
+python tools/audit_creature_appearance_rng.py --exe <FableWin.exe> --output <owned-evidence>/rng-original-x86.json
+```
+
+Next: finish skeletal/texture selection ordering and original TNG Seed semantics,
+then expose a checked read-only appearance plan using existing creature-prefix
+abstractions. Validate selection against native execution before connecting
+whole-creature preview/scene rendering. Do not concatenate every alternative,
+reset the seed independently per body part, or treat one imported model as a
+whole-creature result. Production rendering, native bank writers and retained
+checkpoint ZIPs are unchanged by this investigation.
