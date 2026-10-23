@@ -919,6 +919,7 @@ void App::startContextLoad(const std::string& fromRoot) {
     modelsLoaded_ = modelUsersLoaded_ = modelReady_ = false;
     modelRows_.clear(); modelUsers_.clear(); modelName_.clear(); modelError_.clear();
     modelGeometry_ = {}; modelId_ = 0;
+    modelPreviewContext_.reset();modelPreviewGraphics_.clear();modelPreviewContextError_.clear();
     renderer_.clearModelPreview();
     renderer_.clearHeadPreview();
     dialogueHeadReady_=false;
@@ -1978,6 +1979,8 @@ std::vector<std::string> App::stateDump() const {
     v.push_back("models_filtered=" + std::to_string(modelFiltered_));
     v.push_back("model_selected=" + modelName_);
     v.push_back("model_ready=" + std::to_string(modelReady_));
+    v.push_back("model_textured_parts=" + std::to_string(renderer_.modelTexturedParts()));
+    v.push_back("asset_context_root=" + ctx_.gameRoot().generic_string());
     v.push_back("model_import_open=" + std::to_string(modelImportOpen_));
     v.push_back("mesh_name=" + std::string(meshName_[0] ? meshName_ : "-"));
     v.push_back("map_list_visible=" + std::to_string(settings_.showExplorer && !standaloneAssetPreview()));

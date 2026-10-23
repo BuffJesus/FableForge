@@ -21,19 +21,21 @@ def inventory(root):
 
 def main():
     repo = Path(__file__).resolve().parents[1]
+    driver_hash = hashlib.sha256(Path(__file__).read_bytes()).hexdigest()
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--gui', type=Path, default=repo/'build/FableForge.exe')
     parser.add_argument('--forge', type=Path, default=repo/'build/forge.exe')
     parser.add_argument('--fixtures', type=Path, default=os.environ.get('FABLEFORGE_CREATURE_FIXTURES'),
                         help='Retained tiny donor packet from test_skinned_input_donors.py')
     parser.add_argument('--work-root', type=Path, default=repo/'build')
-    modes = ('save', 'stored', 'cancel', 'missing-slot', 'existing', 'image', 'image-dxt3', 'image-argb8888', 'pack', 'pack-preview', 'close-review', 'stale-model', 'stale-sidecar', 'stale-image', 'stale-bank', 'stale-names', 'stale-graphics', 'stale-textures', 'stale-manifest', 'stale-model-alias', 'stale-destination-alias', 'destination', 'changed-draft')
+    modes = ('save', 'stored', 'cancel', 'missing-slot', 'existing', 'image', 'image-dxt3', 'image-argb8888', 'pack', 'pack-preview', 'pack-image-preview', 'pack-existing-preview', 'close-review', 'stale-model', 'stale-sidecar', 'stale-image', 'stale-bank', 'stale-names', 'stale-graphics', 'stale-textures', 'stale-manifest', 'stale-model-alias', 'stale-destination-alias', 'destination', 'changed-draft')
     parser.add_argument('--only', nargs='+', choices=modes)
     args = parser.parse_args()
     if args.fixtures is None:
         print('SKIP custom Creature GUI: supply --fixtures or FABLEFORGE_CREATURE_FIXTURES with a retained tiny donor packet')
         return
     fixtures = args.fixtures.resolve(strict=True)
+    assert json.loads((fixtures/'result.json').read_text())['passed'], 'donor fixture packet has no passed receipt'
     source = fixtures/'4521/source-install'
     before = inventory(fixtures)
     originals = read_bank(source)
@@ -55,7 +57,9 @@ def main():
     try:
         for size, scale in [('1440x900', 1), ('800x600', 1.5)]:
             for mode in args.only or modes:
-                has_image = mode.startswith('image') or mode == 'stale-image'
+                has_image = mode.startswith('image') or mode in ('stale-image', 'pack-image-preview')
+                preview = mode in ('pack-preview', 'pack-image-preview', 'pack-existing-preview')
+                existing_texture = mode in ('existing', 'pack-existing-preview')
                 case = work/(size+'-'+mode)
                 case.mkdir()
                 install = case/'install'
@@ -72,7 +76,8 @@ def main():
                 schema.parent.mkdir(parents=True)
                 shutil.copyfile(fixtures/'4521/schema.json', schema)
                 output = case/'output'
-                pack = mode in ('pack', 'pack-preview', 'stale-manifest')
+                pack = preview or mode in ('pack', 'stale-manifest')
+                save_folder = case/'separate-save-folder' if pack else output
                 manifest = None
                 if pack:
                     output.mkdir()
@@ -80,10 +85,10 @@ def main():
                     manifest.write_text(json.dumps({'version': 1, 'name': 'Creature UI'}))
                 original_manifest = manifest.read_bytes() if manifest else None
                 lines = ['wait_maps', 'wait_ready', f'set uiscale {scale}',
-                         f'set saveroot {output.as_posix()}']
+                         f'set saveroot {save_folder.as_posix()}']
                 if pack:
                     lines += [f'pack_dest {output.as_posix()}']
-                if mode == 'pack-preview':
+                if preview:
                     lines += ['assets_tab 1', 'model_select 4521', 'assert_state model_ready 1']
                 lines += ['assets_tab 6', 'wait_definitions',
                          'definition_select 1', 'frames 3']
@@ -98,7 +103,7 @@ def main():
                 for widget, text in [('input_definition_creature_model', str(inputs/'source.gltf')),
                                      ('input_definition_creature_mesh_name', 'MESH_GUI_MODEL')]:
                     lines += click(widget)+['input_text '+text, 'frames 3']
-                if mode == 'existing':
+                if existing_texture:
                     lines += click('input_definition_creature_texture_id')+['input_text 7', 'frames 3']
                 if has_image:
                     lines += click('input_definition_creature_texture')+['input_text '+str(inputs/'diffuse.png'), 'frames 3']
@@ -132,9 +137,18 @@ def main():
                             else:
                                 lines += ['assert_state definition_edit_failed 0', 'assert_state definition_editing 0',
                                     'assert_state definition_selected 6', f'screenshot {(case/"created.png").as_posix()}']
-                                if mode == 'pack-preview':
+                                if preview:
                                     lines += ['assets_tab 1', 'model_select 4522', 'assert_state model_selected MESH_GUI_MODEL',
-                                              'assert_state model_ready 1', 'assert_state model_vertices 3', 'assert_state model_triangles 1']
+                                              'assert_state model_ready 1', 'assert_state model_vertices 3', 'assert_state model_triangles 1',
+                                              f'screenshot {(case/"model-preview.png").as_posix()}']
+                                    lines += [f'assert_state model_textured_parts {1 if has_image or existing_texture else 0}']
+                                    lines += [f'assert_state asset_context_root {install.as_posix()}']
+                                    if mode == 'pack-image-preview':
+                                        lines += click('btn_model_refresh')+['model_select 4522', 'assert_state model_textured_parts 1',
+                                            f'assert_state asset_context_root {install.as_posix()}',
+                                            f'set saveroot {install.as_posix()}', 'frames 3', 'model_search MESH_GUI_MODEL', 'frames 3',
+                                            'assert_state models_filtered 0', 'model_select 4521', 'assert_state model_ready 1',
+                                            f'assert_state asset_context_root {install.as_posix()}']
                 lines += ['quit']
                 script = case/'import.txt'
                 script.write_text('\n'.join(lines)+'\n', encoding='utf-8')
@@ -178,7 +192,7 @@ def main():
                             process.wait(timeout=10)
                 trace = Path(str(script)+'.log').read_text(encoding='utf-8')
                 assert returncode == 0 and 'RESULT PASS' in trace and 'FAIL ' not in trace, trace[-8000:]
-                if mode in ('save', 'stored', 'existing', 'image', 'image-dxt3', 'image-argb8888', 'pack', 'pack-preview', 'close-review'):
+                if preview or mode in ('save', 'stored', 'existing', 'image', 'image-dxt3', 'image-argb8888', 'pack', 'close-review'):
                     actual = read_bank(output)
                     assert actual[:6] == originals and len(actual) == 9
                     old_bank = (source/'data/CompiledDefs/game.bin').read_bytes()
@@ -222,12 +236,15 @@ def main():
                         assert not (case/'other-output').exists()
                 if manifest:
                     assert manifest.read_bytes() == original_manifest+(b' ' if mode == 'stale-manifest' else b'')
+                    assert not save_folder.exists(), 'pack import wrote to the independent save folder'
                 cases.append({'size': size, 'mode': mode})
                 print(size, mode, 'PASS', flush=True)
     finally:
         assert inventory(fixtures) == before, 'fixture sources changed'
     assert hashlib.sha256(gui_source.read_bytes()).hexdigest() == gui_hash
+    assert hashlib.sha256(Path(__file__).read_bytes()).hexdigest() == driver_hash, 'test driver changed during the run'
     (work/'result.json').write_text(json.dumps({'passed': True, 'cases': cases, 'gui_sha256': gui_hash,
+        'driver_sha256': driver_hash,
         'schema_source': 'tiny donor fixture', 'runtime': 'byte-identical executable and adjacent DLL copies'}, indent=2)+'\n')
 
 

@@ -113,3 +113,139 @@ preview; the current pack fixture uses one folder for both. Preview texture
 context and whole-creature assembly remain separate from filesystem acceptance.
 Runtime/placement remain open; do not repeat the unchanged full native graph gate
 or write full native banks merely to test the UI.
+
+## F2Native coordination and offline preview preparation
+
+Cache fix committed/pushed as `1da1ab3`; draft PR 2 records the regression and
+newer-than-checkpoint limitation. Windows CI run 39954426240 now completed with
+success, independently read back at 06:52 Edmonton. The original implementation
+run was 39953743747; its outcome was not inferred from the successor. This CI
+does not cover the newer uncommitted texture-context candidate.
+
+F2Native thread `01a168a5-fbee-72f0-87fe-39450caddb64` requested a bounded hidden
+capture window. Responded with `codex queue` using message
+`01a168c3-eece-78f0-870f-b55c6088a0b1`, identifying the existing shared
+`D:/Documents/FableTLC/.agents/runtime-lease.json` and its exclusive-create/token
+helper in the texture checkout's `tools/ingame/runtime_lease.py`. It was absent at
+the readback, and no owned Forge GUI/test process was active. An unrelated native
+particle test was left alone. No games were stopped.
+
+The peer then explicitly required no GPU/game tests until a queued release.
+Acknowledged through queue message `01a168c5-7ab3-7550-86ee-c98d5055c42c`.
+**This supersedes the earlier timed window. Do not infer release from the clock,
+90-second estimate, 420-second watchdog, process disappearance or absent lease.**
+Wait for the explicit message, then recheck the shared lease and active games.
+Current local receipt: `build/runtime-coordination-20261023.json`. Overall Forge
+development remains active; source/docs work continues offline.
+
+Uncommitted preview work; GPU execution still deferred:
+
+- Pack fixtures now use a separate save folder and require it to remain absent.
+  `pack-image-preview` primes Models, imports an image into the pack, selects the
+  appended mesh, and captures its viewport at both sizes.
+- Renderer exposes a read-only count of model parts holding actual texture SRVs;
+  `model_textured_parts` reports it to automation. The new case requires one
+  textured part; untextured pack preview requires zero. This distinguishes
+  drawable geometry from successfully bound diffuse imagery.
+- Static tracing shows model preview uses `ctx_` for diffuse decoding while pack
+  completion deliberately retains the install context. New pack texture ID 8
+  cannot resolve in the tiny source bank containing only ID 7. This motivates
+  the regression, but it is not a runtime failure claim yet. Keep global world
+  context independent of undeployed pack contents when choosing the fix.
+
+CPU-only diagnostic GUI build passes at below-normal priority/j2. Frozen before
+the texture-context candidate at
+`build/frozen/pack-preview-diagnostics-20261023/FableForge.exe`, SHA256
+`40163fe36224f3f72f0ada0488135de95200b2bc9d63d538c568d1bbce2668cb`.
+Its `provenance.json` pins the executable and exact diagnostic source files
+beyond starting `1da1ab3`. It includes the SRV count but predates the subsequent
+`asset_context_root` state key; account for this when interpreting negative-control
+logs. No baseline GPU run has occurred during the hold.
+
+Read-only Python audit of retained native-donor output independently confirms
+mesh 4522 references texture 8; source bank has only 7 while pack bank has 7 and 8.
+All three input hashes remain unchanged. Receipt:
+`build/pack-preview-texture-source-audit-20261023.json`. No executable/GPU launch.
+
+Candidate source now prepares a separate Context after successful pack publication
+inside the existing import worker, choosing the appended bank or its exact source
+bank when no image was added. Completion retains that context only for the resolved
+physical graphics bank; Models uses it for diffuse lookup. The world `ctx_` stays
+unchanged. Normal context reload clears the model-only context. A preview-load
+failure remains separate from already-successful publication and blocks that
+pack's texture preview with its own diagnostic. `asset_context_root` additionally
+lets positive fixtures assert the original world root survives pack creation.
+Candidate compiled successfully below-normal/j2 with output in
+`build/pack-model-texture-context-build-20261023.log`; no runtime acceptance yet.
+Frozen candidate:
+`build/frozen/pack-preview-candidate-20261023/FableForge.exe`, SHA256
+`3ac5c5f9cbcc4a4b06b472eea1638c48f17181e721264c8a7f854d5a25782d49`.
+Its provenance records exact source hashes. Comparison receipt:
+`build/pack-preview-frozen-comparison-20261023.json`. The negative-control driver
+is a scratch copy of the GUI gate omitting only the newer world-context state key
+unavailable in the frozen diagnostic; it retains the renderer texture assertion
+and all source/output checks. The production positive gate keeps both assertions.
+Both Python drivers compile; whitespace check passes.
+
+After explicit release, recheck shared lease and game processes. Use the frozen
+diagnostic GUI for the pack-image negative control, then the candidate GUI for
+pack-preview/pack-image-preview and existing pack neighbors. Inspect the actual
+viewport, require the SRV count and unchanged world context, and retain exact
+delta/Restore/source preservation. Do not weaken the new SRV assertion or
+silently switch the global world context to the undeployed pack.
+
+Further offline driver preparation adds `pack-existing-preview`: a pack using
+source texture ID 7 must bind one texture without creating a new textures.big.
+The image-preview case also refreshes Models and reselects the imported mesh,
+then switches back to the original install and requires the new pack mesh to
+disappear from the model list while the original remains drawable. The world
+context root must stay at the original install throughout. Driver receipts now
+pin the driver's startup SHA256 and refuse if it changes during execution;
+supplied donor packets must have a passed result receipt. These additions are
+syntax/whitespace checked only; runtime acceptance remains pending. The earlier
+frozen negative-control driver remains intentionally unchanged.
+
+## Source acceptance after explicit F2Native release
+
+The peer explicitly released its hold. Immediate process/lease checks found no
+Fable/xenia/V83 process and an absent lease. A bounded supervisor acquired the
+existing RuntimeLease protocol, and each hidden GUI child repeated lease-token,
+live-owner and Fable/xenia/V83 process checks before launch. No user-owned process
+was closed. Both binaries were the pinned frozen snapshots above.
+
+Canonical successful window:
+`C:/Users/Cornelio/AppData/Local/FableForgeEvidence/20261023/pv-x1mr2v9q/result.json`.
+The baseline creates/selects the imported mesh successfully and fails only
+`model_textured_parts=0 != 1`; its four created outputs were removed with explicit
+Restore. Inner receipt: `creature-import-ui-fi5ozchh`.
+Candidate passes ten focused cases (`creature-import-ui-c1k034hm`) and the full
+50-case gate (`creature-import-ui-bdonedle`). The focused cases are a subset,
+not 60 distinct cases. Pack/source texture selection, actual SRV binding,
+refresh, source switching and unchanged world context all pass at both sizes.
+Exact definition/pool/identity/asset preservation and Restore remain intact;
+native donor fixture inventory stays unchanged. Inspected compact 800x600
+pack-image model viewport: the triangle is drawn with the red/green image's
+filtered colour, and the appended model is selected.
+
+All owned GUIs closed, and the supervisor released the lease with
+`pv-x1mr2v9q/released-runtime-lease.json`. Immediate process readback was empty;
+lease absence was verified. Peer availability queued as
+`01a168de-3d41-7591-90f2-0b03237ec025`. New GUI windows must claim the lease again;
+do not treat the peer's earlier release as permanent exclusive ownership.
+
+Two earlier runner attempts are retained. A deeply nested build scratch root
+refused recovery-marker preparation before publication; a shorter C evidence
+root succeeds without any production guard changes. That failed attempt is not
+the texture regression. A second attempt reached the intended texture failure,
+but the runner accidentally included a traceback's quoted `FAIL ` literal in
+its failure filter; fixed to match timestamped automation failure lines only.
+Its created outputs were independently removed with Restore. Successful canonical
+negative control now requires every automation failure to be the missing SRV.
+Logs: `build/pack-preview-window-svdvrnhu` and
+`C:/Users/Cornelio/AppData/Local/FableForgeEvidence/20261023/pv-5p1xve_x`.
+
+Source texture-context correction is accepted. Next: commit the scoped change,
+prepare a distinct immutable development checkpoint, then exercise its extracted
+GUI under a new shared-lease window. The earlier ZIP remains untouched and still
+has its documented cache/texture-preview limitations. No gameplay or assembled
+creature claim follows from these per-mesh fixtures.

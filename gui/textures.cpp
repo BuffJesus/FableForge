@@ -10,6 +10,7 @@
 #include "texturebrowse.hpp"
 #include "meshimport.hpp"
 #include "forge/big.hpp"
+#include "resolvedpath.hpp"
 
 namespace albion::gui {
 using theme::S;
@@ -465,7 +466,12 @@ bool App::selectModelById(uint32_t id) {
         std::vector<terrainexport::Image> images;
         std::map<uint32_t, int> textureIds;
         std::vector<std::string> warnings;
-        const auto mesh = foliageexport::makeMesh(modelId_, modelName_, modelName_, modelGeometry_, true, ctx_, images, textureIds, warnings);
+        const terrainexport::Context* textureContext=&ctx_;
+        if(!modelPreviewGraphics_.empty() && paths::resolvedPath(modelBankPath_)==modelPreviewGraphics_) {
+            if(!modelPreviewContext_) throw std::runtime_error("Pack model texture preview unavailable: "+modelPreviewContextError_);
+            textureContext=modelPreviewContext_.get();
+        }
+        const auto mesh = foliageexport::makeMesh(modelId_, modelName_, modelName_, modelGeometry_, true, *textureContext, images, textureIds, warnings);
         modelReady_ = renderer_.setModelPreview(mesh, images);
         if (!modelReady_) modelError_ = "This model has no drawable geometry.";
         for (const auto& warning : warnings) pushLog("models: " + warning, 1);

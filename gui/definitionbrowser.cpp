@@ -37,6 +37,10 @@ struct App::CreatureImportDraft {
     std::optional<creatureimport::TextureAppend> texture;
     forge::defschema::Schema schema;
     fs::path root,graphicsRelative,resolvedRoot;
+    bool packPreview=false;
+    std::shared_ptr<terrainexport::Context> previewContext;
+    fs::path previewGraphics;
+    std::string previewError;
     std::array<std::string,10> inputs;
     struct Target {fs::path path,resolved;std::string hash;bool present;};
     std::vector<Target> targets;
@@ -87,6 +91,7 @@ bool App::prepareCreatureImport() {
         draft->sources={definitionEditNames_,definitionEditBank_,
             read({"data/graphics/graphics.big","data/graphics/pc/graphics.big"}),read({"data/graphics/pc/textures.big"})};
         draft->root=destination.parent_path().parent_path().parent_path();draft->resolvedRoot=paths::resolvedPath(draft->root);
+        draft->packPreview=!packDest_.empty();
         draft->graphicsRelative=draft->sources.graphics.parent_path().filename()=="pc"?"data/graphics/pc/graphics.big":"data/graphics/graphics.big";
         draft->schema=definitionSchema_;
         const auto slot=definitionCreatureSlots_[*definitionCreatureSlot_];
@@ -140,6 +145,16 @@ bool App::saveCreatureImport() {
                 const auto result=creatureimport::publishMesh(draft->sources,draft->proof,draft->root,draft->graphicsRelative,
                     draft->schema,draft->request,draft->model,draft->materials,true,[draft]{draft->validate();},draft->texture?&*draft->texture:nullptr);
                 job.published=true;job.rootIndex=result.clones.rootIndex;
+                if(draft->packPreview) {
+                    // Publication is already complete. A preview load failure
+                    // must not be reported as a failed/rolled-back import.
+                    try {
+                        draft->previewGraphics=paths::resolvedPath(draft->root/draft->graphicsRelative);
+                        auto context=std::make_shared<terrainexport::Context>();
+                        const auto textures=draft->texture?draft->root/"data/graphics/pc/textures.big":draft->sources.textures;
+                        if(context->load(draft->root,textures,draft->previewError)) draft->previewContext=std::move(context);
+                    } catch(const std::exception& error) {draft->previewError=error.what();}
+                }
             } catch(const std::exception& error) {job.error=error.what();}
             return job;
         });definitionEditConfirm_=false;return true;
@@ -164,7 +179,12 @@ void App::pollCreatureImport() {
     defThumbs_.clear();defList_.clear();themeGroupOf_.clear();envDefs_.clear();soundDefs_.clear();familyNames_.clear();issuesRev_=~0ull;
     if(packDest_.empty() || (!ctx_.gameRoot().empty() && paths::resolvedPath(job.draft->root)==paths::resolvedPath(ctx_.gameRoot()))) {
         ctxError_.clear();reloadWhenContextReady_=true;startContextLoad(job.draft->root.string());
-    } else refreshModels();
+    } else {
+        modelPreviewContext_=job.draft->previewContext;modelPreviewGraphics_=job.draft->previewGraphics;
+        modelPreviewContextError_=job.draft->previewError;
+        if(!modelPreviewContextError_.empty()) pushLog("creature import completed; model texture preview: "+modelPreviewContextError_,1);
+        refreshModels();
+    }
     refreshTextures();rescanBackups();pushLog(definitionEditSuccess_,3);
 }
 std::pair<fs::path,fs::path> App::definitionPaths() const {

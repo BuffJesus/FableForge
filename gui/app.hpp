@@ -1064,6 +1064,11 @@ public:
     std::map<uint32_t, std::vector<std::string>> modelUsers_;
     bool modelsLoaded_ = false, modelUsersLoaded_ = false, modelReady_ = false, modelImportOpen_ = false;
     std::string modelRoot_, modelBankPath_, modelName_, modelError_;
+    // An undeployed pack may contain textures absent from the loaded world.
+    // Built by the import worker and used only for its physical graphics bank.
+    std::shared_ptr<terrainexport::Context> modelPreviewContext_;
+    std::filesystem::path modelPreviewGraphics_;
+    std::string modelPreviewContextError_;
     uint32_t modelId_ = 0;
     forge::meshpreview::Geometry modelGeometry_;
     char modelSearch_[96] = {};
