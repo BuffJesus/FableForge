@@ -366,3 +366,49 @@ queue database. The release is also reported in the user-facing turn.
 Next: trace and implement scale application to bind/animation transforms, wire
 selection/combination and decoded mesh bones through the shared Context/preview
 path, then qualify representative complete Creatures. Whole presentation remains open.
+
+## Native transform-stage continuation
+
+Source commit de80f2f CI run 39989492089 was inspected while its Windows job
+120537245636 was still building; no later CI success is claimed here. Native
+owned the shared runtime lease during this investigation. Forge stayed offline,
+with no frontend/test launch or lease claim. Peer release notification remains
+subject to the queue-capacity limitation recorded above.
+
+Read-only `scale-callers-*` / `scale-consumers-*` follow GetBoneScalings through
+thunk 017b3b12 to GetBoneTransformations (02e79140). That routine passes scales to
+CalcBlendedMeshTransformations, then applies each mesh bone's transposed
+object-to-bone transform. The matrix cache is per render frame. This is not a
+post-skin multiplication of exported vertex coordinates.
+
+`animation-scales-*`, `morph-stages-*` and `keyframe-scale-*` exports bring the
+PE-byte verification list to 68 functions. Both CalcMeshTransformations
+(0337de00) and CalcBlendedMeshTransformations (033800c0) use this order:
+
+1. Combine animation keyframes.
+2. ApplyBoneMorphDisplacement (033823a0), when morph scales exist.
+3. ApplyParentTransformations (033825f0).
+4. ApplyBoneMorphScaling (03382ed0), when morph scales exist.
+
+Displacement walks local bones. For a non-root bone it requires the parent slot
+to precede the child, then multiplies the child's local keyframe position
+componentwise by the immediate parent's morph scale. Root positions are left
+alone. The parent stage composes each local keyframe matrix with the already
+computed parent matrix. The inspected 4x4 keyframe wrappers call quaternion
+matrix conversion with the position; they do not explicitly apply stored scaling.
+Do not reuse the head-pose inverse-bind decomposition as native Creature TRS
+behavior without resolving this distinction.
+
+The final morph-scaling stage acts on each completed bone matrix separately.
+Its scalar path scales the upper 3x3 rows for ordinary native layout or columns
+for transposed layout; translation stays unchanged. The alternate aligned path
+also restores the saved translation components. Therefore putting these morph
+scales into local keyframe scale before hierarchy accumulation would incorrectly
+compound ancestor scales through descendants. These facts are static source/
+instruction evidence, not an executed complete pose fixture.
+
+Next required check: an original-instruction two-/three-bone fixture separating
+root position, parent-scaled child displacement, rotated parents and independent
+post-hierarchy scale, plus transposed/nontransposed consistency and inverse-bind
+order. Then implement the corresponding Creature pose calculation, reusing the
+existing animation reader and skinning primitives where their contracts fit.
