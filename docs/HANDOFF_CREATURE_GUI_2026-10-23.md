@@ -534,8 +534,21 @@ All owned GUIs closed; lease released with
 `01a1690b-4ee9-72b0-9273-b90dbae6d55f`. Later peer claims remain independent and
 must not be removed. No immediate further GUI launch planned.
 
-Windows CI39964147797 for91d284e remains in progress, verified at the Windows
+Windows CI 39964147797 for 91d284e remains in progress, verified at the Windows
 Build step (Unit tests/WARP/package still pending). Do not infer success from
 local package acceptance or earlier green Materials CI. Next: finish draft-PR
 checkpoint documentation, then investigate the remaining creature presentation
 and placement-profile gaps with existing native evidence before new algorithms.
+
+
+## Next profile correction recovered
+
+Placement CI 39964147797 completed success. Read-only native investigation now
+recovers a concrete VillageMember profile rule from runtime Components rather
+than definition spelling; [profile evidence and next steps](HANDOFF_CREATURE_PROFILES_2026-10-23.md).
+All 517 retail CREATURE records decode; 344 list CTCVillageMember, 173 do not.
+The name heuristic differs on 215 definitions. 32 sampled retail placements match
+runtime components exactly. Eight targeted debug function byte ranges match the
+original PE; direct GetByteSize disassembly confirms nine-byte records and native
+TransferBinaryIn verifies0x01ab6cce. No production writer changed, no GPU launched,
+no native install bytes changed. The current immutable checkpoint remains exact.

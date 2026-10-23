@@ -1,5 +1,7 @@
 > Current development checkpoint, 2026-10-23: [Creature authoring continuation](HANDOFF_CREATURE_GUI_2026-10-23.md). The combined creature-placement archive passes 118 identities, 142 documentation links and four extracted workflows, including 50 import cases and 16 marker placements at both sizes. Pack material identity and custom-name class/owner routing are included. 145 workflows not run; two unrelated corpus skips. Whole-creature presentation and gameplay remain unverified; RC2 unchanged.
 
+Read-only follow-up: [Creature placement-profile evidence](HANDOFF_CREATURE_PROFILES_2026-10-23.md) recovers runtime component membership for the next correction.
+
 # Navigation lane, 2026-09-27
 
 Checkout: `D:/Code/FableForge-nav`, branch `feat/nav-thing-lines`, starting commit
