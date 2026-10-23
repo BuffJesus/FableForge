@@ -425,29 +425,26 @@ size_t cloneEntry(bin::File& file,std::string_view donorName,std::string newName
     return file.cloneEntry(selected,std::move(newName));
 }
 
-CreatureVisualCloneResult cloneCreatureVisuals(bin::File& file,const defschema::Schema& schema,
-                      size_t donorIndex,std::string rootName,std::string bodyName,std::string appearanceName) {
+CreatureVisualGraph resolveCreatureVisuals(const bin::File& file,
+                      const defschema::Schema& schema,size_t donorIndex) {
     const auto& entries=file.entries();
-    // CSubDefInfo persists signed-long definition/original-parent indices.
-    if(entries.size()>size_t(INT32_MAX)-2u)
-        throw std::runtime_error("private creature clone: append indices exceed the signed reference domain");
     auto read=[](const auto& data,size_t offset) {
         if(offset>data.size() || data.size()-offset<4)
-            throw std::runtime_error("private creature clone: truncated component word");
+            throw std::runtime_error("creature visual graph: truncated component word");
         return uint32_t(data[offset]) | uint32_t(data[offset+1])<<8 |
                uint32_t(data[offset+2])<<16 | uint32_t(data[offset+3])<<24;
     };
     auto rootLayout=[&](size_t index) {
         if(index>=entries.size() || entries[index].definition!="CREATURE")
-            throw std::runtime_error("private creature clone: donor/original parent must be a Creature index");
+            throw std::runtime_error("creature visual graph: donor/original parent must be a Creature index");
         const auto& entry=entries[index];const auto decoded=defdecode::decode(entry,schema);
         if(!decoded.clean() || defdecode::encode(decoded)!=entry.data || entry.data.size()<5 ||
            decoded.fields.empty() || decoded.fields.front().name!="Components" ||
            std::any_of(decoded.fields.begin(),decoded.fields.end(),[](const auto& field){return !field.tagOk;}))
-            throw std::runtime_error("private creature clone: unverified Creature component layout");
+            throw std::runtime_error("creature visual graph: unverified Creature component layout");
         const size_t count=size_t(entry.data[3]) | size_t(entry.data[4])<<8;
         if(!count || decoded.prefixLen!=5+12*count)
-            throw std::runtime_error("private creature clone: empty or malformed Creature listing");
+            throw std::runtime_error("creature visual graph: empty or malformed Creature listing");
         return count;
     };
     const auto count=rootLayout(donorIndex);
@@ -462,17 +459,31 @@ CreatureVisualCloneResult cloneCreatureVisuals(bin::File& file,const defschema::
             ++matches;rows[k]=row;donors[k+1]=read(root.data,9+12*row);
         }
         if(matches!=1 || donors[k+1]>=entries.size() || entries[donors[k+1]].definition!=kinds[k])
-            throw std::runtime_error("private creature clone: requires one correctly typed "+std::string(kinds[k])+" row");
+            throw std::runtime_error("creature visual graph: requires one correctly typed "+std::string(kinds[k])+" row");
         const auto owner=read(root.data,13+12*rows[k]);
         const auto ownerCount=rootLayout(owner);size_t ownerMatches=0;
         for(size_t row=0;row<ownerCount;++row) if(read(entries[owner].data,5+12*row)==key) {
             ++ownerMatches;
             if(read(entries[owner].data,9+12*row)!=donors[k+1])
-                throw std::runtime_error("private creature clone: original parent has a different visual component");
+                throw std::runtime_error("creature visual graph: original parent has a different visual component");
         }
         if(ownerMatches!=1)
-            throw std::runtime_error("private creature clone: original parent visual row is missing or ambiguous");
+            throw std::runtime_error("creature visual graph: original parent visual row is missing or ambiguous");
     }
+    return {donorIndex,donors[1],donors[2],count,rows[0],rows[1]};
+}
+
+CreatureVisualCloneResult cloneCreatureVisuals(bin::File& file,const defschema::Schema& schema,
+                      size_t donorIndex,std::string rootName,std::string bodyName,std::string appearanceName) {
+    const auto& entries=file.entries();
+    // CSubDefInfo persists signed-long definition/original-parent indices.
+    if(entries.size()>size_t(INT32_MAX)-2u)
+        throw std::runtime_error("private creature clone: append indices exceed the signed reference domain");
+    const auto graph=resolveCreatureVisuals(file,schema,donorIndex);
+    const auto count=graph.componentCount;
+    const auto& root=entries[donorIndex];
+    const std::array<size_t,2> rows{graph.bodyRow,graph.appearanceRow};
+    const std::array<size_t,3> donors{graph.rootIndex,graph.bodyIndex,graph.appearanceIndex};
     std::array<std::string,3> names{std::move(rootName),std::move(bodyName),std::move(appearanceName)};
     std::array<uint32_t,3> keys{};
     for(size_t i=0;i<names.size();++i) {

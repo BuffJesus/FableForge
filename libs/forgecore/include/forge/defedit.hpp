@@ -96,6 +96,16 @@ size_t cloneCreature(bin::File& file, const defschema::Schema& schema,
 struct CreatureVisualCloneResult {
     size_t rootIndex, bodyIndex, appearanceIndex;
 };
+struct CreatureVisualGraph {
+    size_t rootIndex, bodyIndex, appearanceIndex;
+    size_t componentCount, bodyRow, appearanceRow;
+};
+// Resolve the two visual CDefs rows without mutation. Requires a clean CREATURE
+// root, exactly one correctly typed row per visual component, and an original
+// parent whose corresponding row points to the same component. This validates
+// graph ownership, not component payloads, runtime profile or asset availability.
+CreatureVisualGraph resolveCreatureVisuals(const bin::File& file,
+                     const defschema::Schema& schema, size_t rootIndex);
 // Append a private root/CCreatureDef/CAppearanceDef graph in memory. Explicit
 // names must be unique printable ASCII (127-byte maximum) and introduce no
 // compiled-name CRC ambiguity. Only the two selected visual CDefs rows receive

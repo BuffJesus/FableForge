@@ -12,6 +12,9 @@ passed build, unit tests, WARP GUI smoke and CLI usage. Package/upload were skip
 Earlier writer/GUI/checkpoint acceptance and original input identities are in
 [the profiles handoff](HANDOFF_CREATURE_PROFILES_2026-10-23.md).
 
+Selector CI 39982494520 subsequently passed build, units, WARP GUI smoke and
+CLI usage. Package/upload were skipped. This does not add rendering acceptance.
+
 ## Selected data and boundaries
 
 `select(prefix, storedSeed, decapitated)` returns chosen body/alternative indices,
@@ -88,6 +91,35 @@ reserved. Continue fresh claims for subsequent named test/GUI/game launches.
 
 ## Next required integration
 
+### Shared ownership resolver in progress
+
+`defedit::resolveCreatureVisuals` extracts the existing clone graph checks into
+a read-only API: root/body/appearance indices, selected CDefs row numbers and
+component count. The clone now consumes that proof. Original-parent and correctly
+typed unique-row requirements stay intact. Component payload cleanliness,
+runtime profile, selection, assets and relocation validity remain separate.
+
+The affected target builds (`build/creature-visual-resolver-build-20261023.log`).
+Direct unit assertions cover shared ownership, private-clone resolution and
+malformed roots/indices/owners. An unrelated untyped relocation candidate may
+pass graph resolution while still refusing clone, preserving that distinction.
+The unit and new `--visual-graph-audit` mode are pending execution. Texture
+finished its checkpoint, then Native completed/released its agreed three-capture
+gap (queue 01a1698d-aee9-7032-8623-a959046b538b). The immediate guard still found
+neighboring TLC regular-frame-timing/particle CPU tests, so Forge claimed no lease
+and launched nothing. Native was told to drop its courtesy hold (queue
+01a1698e-9622-73f1-93cb-fcbc7f87857b); no Forge reservation remains. Those CPU tests
+belong neighboring TLC work, not Native. Retry only a clear, fresh guarded window.
+
+`tools/audit_creature_visual_resolution.py` independently reads the serialized CDefs
+triples and original-parent rows. Its offline run finds 502 accepted and 15
+refused roots among all 517 retail Creatures, with input hashes unchanged:
+`build/creature-visual-graph-independent-20261023.json`. The refused set contains
+the null root, incomplete templates and cooperative spirit definitions; it must
+not be turned into a guessed complete NPC. Optional `--reader` compares every
+result with the compiled resolver and requires an already guarded launch window.
+The independent model checks graph structure; C++ also checks reflected decoding.
+
 ### Texture composition source continuation
 
 `composeTextures(part, global)` now produces one type-3 replacement per original
@@ -140,6 +172,25 @@ which copies the interpolators. There is no added part-local transform in this
 wrapper. Confirm the shared caller arguments and skeletal application before
 using this observation to combine geometry. Material-channel lookup, skeletal
 deformation, renderer integration and representative complete previews remain open.
+
+### Skeletal application trace
+
+Further read-only exports (`skeletal-*` in the native evidence directory) add
+three original-byte-matched functions, bringing that verification list to 40.
+`AddSkeletalMorph` (026625e0) stores a group/name/value entry and marks the cached
+morph dirty. `GetPSkeletalMorph` (02662c80) recalculates only while dirty, clears
+the flag and returns the cached counted pointer. `CalculateSkeletalMorph`
+(02662960) resets the combined object, resolves each stored name through
+`CSkeletalMorphResourceManager::GetMorphTarget`, constructs a parameter for that
+target, adds it, sets its current value, then notifies parameter updates. The
+random-appearance caller clears/adds only group `RAND` (0x52414e44), leaving
+other producers relevant to the final shape.
+
+This confirms that selected name/amplitude pairs need resolved target resources;
+they are not an extra shared object scale. Target loading, combination and bone
+application still need evidence and implementation. The next narrow native entry
+points are GetMorphTarget (023e36e0), PreloadBoneConfigs (023e3f10), and
+C3DSkeletalMorphTarget::CombineMorph (0321ce20). No rendering parity is claimed.
 
 Resolve CCreatureDef through the existing checked CDefs ownership graph and use
 the runtime component list to distinguish random-morph from ordinary animated

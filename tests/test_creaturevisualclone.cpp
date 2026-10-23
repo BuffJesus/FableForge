@@ -76,6 +76,21 @@ static int retail(char** argv){
 }
 int main(int argc,char** argv)try{
     using namespace forge;
+    if(argc==4&&std::string_view(argv[1])=="--visual-graph-audit") {
+        const auto folder=std::filesystem::path(argv[2])/"data"/"CompiledDefs";
+        const auto file=bin::File::open(folder/"names.bin",folder/"game.bin");
+        const auto schema=defschema::Schema::load(argv[3]);
+        auto rows=nlohmann::json::array();
+        for(size_t i=0;i<file.entries().size();++i) {
+            if(file.entries()[i].definition!="CREATURE")continue;
+            try {
+                const auto graph=defedit::resolveCreatureVisuals(file,schema,i);
+                rows.push_back({{"root",i},{"body",graph.bodyIndex},{"appearance",graph.appearanceIndex},
+                    {"count",graph.componentCount},{"body_row",graph.bodyRow},{"appearance_row",graph.appearanceRow}});
+            } catch(const std::runtime_error& error) {rows.push_back({{"root",i},{"refused",error.what()}});}
+        }
+        std::cout<<nlohmann::json{{"records",rows}}.dump()<<'\n';return 0;
+    }
     if(argc==9 && std::string_view(argv[1])=="--body-publish") {
         namespace fs=std::filesystem;
         const auto native=fs::weakly_canonical(fs::path(argv[2]));
@@ -124,6 +139,14 @@ int main(int argc,char** argv)try{
         require(candidate.originalNames()==pool,"private refusal changed loaded names");
     };
     auto clone=[&](bin::File& candidate){return defedit::cloneCreatureVisuals(candidate,schema,1,"NEW_ROOT","NEW_BODY","NEW_APPEARANCE");};
+    const auto graph=defedit::resolveCreatureVisuals(source,schema,1);
+    require(graph.rootIndex==1&&graph.bodyIndex==3&&graph.appearanceIndex==4&&
+            graph.componentCount==3&&graph.bodyRow==0&&graph.appearanceRow==1,
+            "read-only visual ownership graph differs");
+    require(source.originalNames()==oldPool&&read(namesPath)==oldNames&&read(bankPath)==oldBank,
+            "read-only visual resolution changed source files/pool");
+    refuses(source,[&](auto& candidate){defedit::resolveCreatureVisuals(candidate,schema,99);});
+    refuses(source,[&](auto& candidate){defedit::resolveCreatureVisuals(candidate,schema,3);});
     refuses(source,[&](auto& candidate){defedit::cloneCreatureVisuals(candidate,schema,99,"R","B","A");});
     refuses(source,[&](auto& candidate){defedit::cloneCreatureVisuals(candidate,schema,3,"R","B","A");});
     for(const auto& invalid:std::vector<std::string>{"","1","BAD\nNAME",std::string(128,'A'),std::string("BAD\xff",4)})
@@ -140,6 +163,10 @@ int main(int argc,char** argv)try{
         auto bad=source;auto data=root(true);
         if(mutation.first==3)data[3]=uint8_t(mutation.second);else put(data,mutation.first,mutation.second);
         bad.setEntryData(1,data);refuses(bad,clone);
+        if(mutation.first!=61)
+            refuses(bad,[&](auto& candidate){defedit::resolveCreatureVisuals(candidate,schema,1);});
+        else require(defedit::resolveCreatureVisuals(bad,schema,1).bodyIndex==3,
+                     "graph resolution must not claim relocation validation of unrelated fields");
     }
     auto bad=source;auto data=root(false);put(data,9,6);bad.setEntryData(0,data);refuses(bad,clone);
     bad=source;data=body();put(data,15,1);bad.setEntryData(3,data);refuses(bad,clone);
@@ -149,6 +176,9 @@ int main(int argc,char** argv)try{
 
     const auto original=source.entries();auto working=source;const auto result=clone(working);
     require(result.rootIndex==7&&result.bodyIndex==8&&result.appearanceIndex==9,"private append slots differ");
+    const auto privateGraph=defedit::resolveCreatureVisuals(working,schema,result.rootIndex);
+    require(privateGraph.bodyIndex==result.bodyIndex&&privateGraph.appearanceIndex==result.appearanceIndex,
+            "private clone ownership resolves through shared graph checks");
     auto rootExpected=root(true);put(rootExpected,9,8);put(rootExpected,13,7);put(rootExpected,21,9);put(rootExpected,25,7);put(rootExpected,53,7);
     auto bodyExpected=body();put(bodyExpected,7,7);auto appearanceExpected=appearance();put(appearanceExpected,7,7);
     require(working.entries()[7].data==rootExpected,"private root ownership/delta differs");
