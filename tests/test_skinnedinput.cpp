@@ -5,6 +5,7 @@
 #include "creaturepublish.hpp"
 #include "forge/temporarydirectory.hpp"
 #include "forge/texturewrite.hpp"
+#include "forge/modorder.hpp"
 #include "nlohmann/json.hpp"
 #include <bit>
 #include <algorithm>
@@ -493,6 +494,14 @@ int main(int argc,char** argv) {
         {std::ofstream out(dir/"skin.bin",std::ios::binary);out.write(reinterpret_cast<const char*>(f.data.data()),std::streamsize(f.data.size()));}
         {std::ofstream out(external);out<<f.doc.dump();}
         const auto gltf=albion::meshimport::loadSkinnedModel(external);require(gltf.skins[0].joints[0].inverseBind[12]==-1,"glTF sidecar skin metadata lost");++checks;
+        require(gltf.sourceFiles.size()==2,"skinned glTF must capture main file and external sidecar");
+        for(const auto& source:gltf.sourceFiles) {
+            require(source.resolved==fs::canonical(source.path),"source proof lost canonical identity");
+            require(source.sha256==forge::modorder::sha256Of(source.path),"source proof does not match consumed bytes");
+        }
+        const auto oldProof=gltf.sourceFiles[1].sha256;
+        {std::ofstream out(dir/"skin.bin",std::ios::binary|std::ios::app);out.put('\0');}
+        require(oldProof!=forge::modorder::sha256Of(dir/"skin.bin"),"sidecar mutation did not invalidate source proof");++checks;
         fs::remove_all(dir);std::cout<<"skinned input: "<<checks<<" shape, encoding, scene, bind, weight and static-boundary checks PASS\n";return 0;
     }catch(const std::exception& e) {std::cerr<<"skinned input: "<<e.what()<<"; evidence "<<dir<<'\n';return 1;}
 }

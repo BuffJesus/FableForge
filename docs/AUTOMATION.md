@@ -1116,6 +1116,25 @@ The distinct Creature mode uses `definition_clone_creature` or the real
 `definition_clone_creature_refused` checks preflight refusal;
 `definition_creature_cloning` distinguishes it from an exact clone draft.
 `creature_clone_ui` covers 36 synthetic cases across both window sizes.
+
+Private Creature custom import uses the real `check_definition_creature_mesh`,
+`combo_definition_creature_slot` / `definition_creature_slot_<ordinal>`,
+`input_definition_creature_model`, `input_definition_creature_mesh_name`,
+`input_definition_creature_texture`, `input_definition_creature_texture_name`,
+`input_definition_creature_texture_id`, `combo_definition_creature_format` /
+`definition_creature_format_<0|1|2>` and `check_definition_creature_stored`
+widgets. The existing Save button first reviews the import asynchronously;
+`wait_definitions` waits for review/publication and the confirmation button
+creates only the reviewed snapshot. `definition_cancel` refuses during workers.
+`creature_import_ui` exercises retained tiny donor fixtures at both sizes,
+including changed model/sidecar/image/bank/manifest and junction identities,
+exact definition/asset preservation, output Restore and close protection.
+Set `FABLEFORGE_CREATURE_FIXTURES` to the passed packet from
+`tools/test_skinned_input_donors.py`, or pass `--fixtures` directly to the test.
+Without that packet the workflow reports SKIP. Synthetic schema checks run
+byte-identical executable/DLL copies in an owned runtime directory; their cwd
+supplies the tiny schema, leaving packaged retail schemas untouched.
+
 `creature_clone_gui_retail_1440x900` and `_800x600` independently compare
 all prior retail records, verified self-only deltas, paired recovery and explicit
 Restore on owned outputs. Appearance/body/components remain shared.

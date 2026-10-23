@@ -1,4 +1,4 @@
-> Paused at user request: [Creature visual workflows and next-session entry point](HANDOFF_CREATURE_CLONE_2026-10-10.md). Last tested/pushed implementation 5a91d6f: coordinated skinned CLI import/Restore and 140 native graph plans pass. Four source files contain uncommitted, unbuilt GUI scaffolding; widgets and acceptance remain unfinished. Resume only when asked. Runtime compatibility unverified; RC2 unchanged.
+> Resumed at user request, 2026-10-23: [Creature custom-import GUI continuation](HANDOFF_CREATURE_GUI_2026-10-23.md). Custom body-slot/model/texture controls are connected to reviewed background publication. All 44 custom-import GUI cases pass against the immutable extracted checkpoint, with exact deltas and Restore. Three affected CTests and five focused extracted workflows pass; gameplay remains unverified. RC2 unchanged.
 
 # Albion Atlas -> 1.0: what it should do, what it can't, and how we get there
 

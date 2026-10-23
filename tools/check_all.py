@@ -371,6 +371,8 @@ def main():
               [sys.executable, "tools/test_creature_private_clone_cli.py"], capture_output=True)
     ok &= run("Creature clone controls, draft protection, stale sources and paired Restore",
               [sys.executable, "tools/test_creature_clone_ui.py"], capture_output=True)
+    ok &= run("Custom Creature GUI, reviewed source proofs, exact deltas and Restore",
+              [sys.executable, "tools/test_creature_import_ui.py"], capture_output=True)
     ok &= run("Creature visual graph synthetic ownership observations",
               [sys.executable, "tools/audit_creature_visual_graph.py"], capture_output=True)
     ok &= run("Creature visual navigation numeric names and malformed-reference UI refusal",

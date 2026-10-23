@@ -25,6 +25,7 @@
 #include "forge/defschema.hpp"
 #include "forge/meshpreview.hpp"
 #include "forge/terraintex.hpp"
+#include "forge/modorder.hpp"
 
 namespace fs = std::filesystem;
 using json = nlohmann::json;
@@ -55,7 +56,7 @@ Vec3 toFableDir(float x, float y, float z) { return {x, -z, y}; }
 
 // ---------------------------------------------------------------- glTF 2.0
 
-struct GltfBuffers { json doc; std::vector<std::vector<uint8_t>> buffers; };
+struct GltfBuffers { json doc; std::vector<std::vector<uint8_t>> buffers; std::vector<Model::SourceFile> sourceFiles; };
 
 size_t gltfInteger(const json& value, const char* key) {
     // glTF integer properties may use decimal/exponent JSON notation. Check
@@ -139,9 +140,16 @@ std::vector<uint8_t> decodeBufferUri(const std::string& uri) {
     return out;
 }
 
-GltfBuffers openGltf(const fs::path& path) {
+GltfBuffers openGltf(const fs::path& path,bool captureSources=false) {
     GltfBuffers g;
-    const auto bytes = readFile(path);
+    const auto readSource=[&](const fs::path& source) {
+        if(!captureSources) return readFile(source);
+        const auto resolved=fs::canonical(source);auto bytes=readFile(resolved);
+        g.sourceFiles.push_back({fs::absolute(source),resolved,forge::modorder::sha256OfBytes(
+            std::string_view(reinterpret_cast<const char*>(bytes.data()),bytes.size()))});
+        return bytes;
+    };
+    const auto bytes = readSource(path);
     std::vector<uint8_t> glbBin;
     const bool glb = bytes.size() >= 4 && std::memcmp(bytes.data(), "glTF", 4) == 0;
     if (glb) {
@@ -219,7 +227,7 @@ GltfBuffers openGltf(const fs::path& path) {
             } else {
                 const auto decoded=decodeUriEscapes(uri);
                 if(decoded.find('\0')!=std::string::npos) throw std::runtime_error("NUL in glTF buffer URI path");
-                g.buffers.push_back(readFile(path.parent_path() / fs::u8path(decoded)));
+                g.buffers.push_back(readSource(path.parent_path() / fs::u8path(decoded)));
             }
         } else {
             if(!glb || !g.buffers.empty() || glbBin.empty())
@@ -504,7 +512,8 @@ void readSkinAttributes(const GltfBuffers& g,const json& attributes,size_t count
 
 Model loadGltf(const fs::path& path,bool skinned=false) {
     Model model;
-    const GltfBuffers g = openGltf(path);
+    const GltfBuffers g = openGltf(path,skinned);
+    model.sourceFiles=g.sourceFiles;
     if(skinned && g.doc.contains("animations") && !g.doc.at("animations").empty())
         model.notes.push_back("glTF animation tracks are not imported; skin metadata retains the default joint transforms and inverse binds");
     for (const auto& extension : g.doc.value("extensionsUsed", json::array()))

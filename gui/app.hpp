@@ -594,8 +594,23 @@ public:
     bool saveDefinitionClone();
     bool setDefinitionEditValue(const std::string& value);
     bool saveDefinitionEdit();
-    bool definitionsBusy() const {return definitionFuture_.valid();}
+    bool definitionsBusy() const {return definitionFuture_.valid() || creatureImportFuture_.valid();}
 private:
+    struct CreatureImportDraft;
+    struct CreatureImportJob {std::shared_ptr<CreatureImportDraft> draft;std::string error;bool published=false;size_t rootIndex=0;};
+    std::future<CreatureImportJob> creatureImportFuture_;
+    std::shared_ptr<CreatureImportDraft> creatureImportDraft_;
+    bool definitionCreatureMesh_=false,definitionCreatureStored_=false;
+    char definitionCreatureModel_[2048]={},definitionCreatureTexture_[2048]={};
+    char definitionCreatureMeshName_[80]={},definitionCreatureTextureName_[80]={},definitionCreatureTextureId_[16]="0";
+    int definitionCreatureFormat_=0;
+    struct CreatureBodyChoice {size_t bodyPart,alternative;uint32_t modelId;};
+    std::vector<CreatureBodyChoice> definitionCreatureSlots_;
+    std::optional<size_t> definitionCreatureSlot_;
+    std::array<std::string,10> creatureImportInputs() const;
+    bool prepareCreatureImport();
+    bool saveCreatureImport();
+    void pollCreatureImport();
     struct DefinitionJob {
         std::filesystem::path names,bank;
         forge::bin::File file;

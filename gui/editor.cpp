@@ -4247,7 +4247,7 @@ void App::drawUnsavedPrompt() {
         }
         auto_.registerWidget("btn_unsaved_save");
         ImGui::SameLine(0, S(6));
-        ImGui::BeginDisabled(worldFuture_.valid() || recoveryFuture_.valid());
+        ImGui::BeginDisabled(worldFuture_.valid() || recoveryFuture_.valid() || creatureImportFuture_.valid());
         if (theme::dangerButton("Discard", ImVec2(w, S(32)))) {
             retireRecovery();
             if (closePending_) quit_ = true;

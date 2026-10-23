@@ -43,6 +43,8 @@ struct Model {
     std::vector<std::string> materialNames;             // per slot
     std::vector<std::string> notes;
     std::vector<SkinBinding> skins; // loadSkinnedModel only, parallel to prims
+    struct SourceFile {std::filesystem::path path,resolved;std::string sha256;};
+    std::vector<SourceFile> sourceFiles; // exact bytes consumed by skinned glTF loader, including sidecars
 };
 
 // .glb / .gltf (embedded or sidecar buffers; POSITION, NORMAL, TEXCOORD_0, indices;

@@ -713,7 +713,9 @@ bool Automation::tick(App& app) {
         if(app.saveDefinitionEdit()!=(cmd=="definition_save")) fail("definition save returned an unexpected result");else note("ok   "+line);++pc_;
     }
     else if(cmd=="definition_cancel") {
+        if(app.definitionsBusy()) {fail("cannot cancel a definition worker in progress");++pc_;return true;}
         app.definitionEditing_=false;app.definitionCloning_=false;app.definitionEditConfirm_=false;
+        app.definitionCreatureMesh_=false;app.creatureImportDraft_.reset();app.definitionCreatureSlots_.clear();app.definitionCreatureSlot_.reset();
         app.definitionCloneFile_={};app.definitionCloneNamesBytes_.clear();app.definitionCloneBankBytes_.clear();note("ok   "+line);++pc_;
     }
     else if(cmd=="wait_definitions") {
