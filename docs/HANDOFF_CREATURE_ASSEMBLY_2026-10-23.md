@@ -103,13 +103,16 @@ The affected target builds (`build/creature-visual-resolver-build-20261023.log`)
 Direct unit assertions cover shared ownership, private-clone resolution and
 malformed roots/indices/owners. An unrelated untyped relocation candidate may
 pass graph resolution while still refusing clone, preserving that distinction.
-The unit and new `--visual-graph-audit` mode are pending execution. Texture
-finished its checkpoint, then Native completed/released its agreed three-capture
-gap (queue 01a1698d-aee9-7032-8623-a959046b538b). The immediate guard still found
-neighboring TLC regular-frame-timing/particle CPU tests, so Forge claimed no lease
-and launched nothing. Native was told to drop its courtesy hold (queue
-01a1698e-9622-73f1-93cb-fcbc7f87857b); no Forge reservation remains. Those CPU tests
-belong neighboring TLC work, not Native. Retry only a clear, fresh guarded window.
+After the neighboring CPU tests closed, the scoped unit passed and the compiled
+`--visual-graph-audit` matched the independent reader on all 517 roots: 502 accepted
+and 15 refused. All source bank hashes stayed unchanged. Receipt:
+`C:/Users/Cornelio/AppData/Local/FableForgeEvidence/20261023/vg-g9shta90/result.json`;
+executable SHA256 `1e0da7013b333f8b020be529103836a14199a8da414f650cc12e80f52ec5be44`.
+`build/creature-visual-resolver-acceptance-20261023.json` pins source/schema hashes.
+The fresh bounded lease released after both owned calls closed; availability
+queued 01a16995-29f8-7b52-a87a-6db3ce8736ab. No Forge reservation remains. Earlier
+refusals occurred before claim; guard hits belonged neighboring TLC CPU work,
+not Native. Native's agreed three-capture gap was honored through explicit release.
 
 `tools/audit_creature_visual_resolution.py` independently reads the serialized CDefs
 triples and original-parent rows. Its offline run finds 502 accepted and 15
@@ -118,6 +121,8 @@ refused roots among all 517 retail Creatures, with input hashes unchanged:
 the null root, incomplete templates and cooperative spirit definitions; it must
 not be turned into a guessed complete NPC. Optional `--reader` compares every
 result with the compiled resolver and requires an already guarded launch window.
+The original `audit_creature_visual_graph.py` observation workflow is preserved;
+its synthetic checks pass.
 The independent model checks graph structure; C++ also checks reflected decoding.
 
 ### Texture composition source continuation
@@ -210,3 +215,17 @@ identity and transforms in owned scratch/leased GUI windows. Keep gameplay check
 separate. Dirty-map tie order remains an explicit unsupported selection case until
 native sorting behavior is established; reader/writer byte preservation is not a
 substitute for that selection contract.
+
+Resource follow-up exports (`skeletal-resources-*`, `bone-config-loader-*`) bring
+the original-byte verification list to 44 functions. GetMorphTarget resolves a
+name under the bone-config directory and caches the target; PreloadBoneConfigs
+enumerates `*.bncfg`. The actual target loader (0287d630) skips to the
+`#Start_Bone_data` section, reads bone names and three float components, and
+initializes the target from those rows. Earlier creature/group-setting text is
+not read as bone rows. Parser token/error behavior and scale combination still
+need instruction checks before a new core reader or deformation implementation.
+
+A read-only census of all 75 stored skeletal references finds 15 unique resource
+names, all present under retail `data/Bones`; their file hashes are retained in
+`build/creature-assembly-native-20261023/bone-resource-census.json`. This validates
+resource availability, not parsing, pose or complete rendering.
