@@ -164,7 +164,7 @@ void App::pollCreatureImport() {
     defThumbs_.clear();defList_.clear();themeGroupOf_.clear();envDefs_.clear();soundDefs_.clear();familyNames_.clear();issuesRev_=~0ull;
     if(packDest_.empty() || (!ctx_.gameRoot().empty() && paths::resolvedPath(job.draft->root)==paths::resolvedPath(ctx_.gameRoot()))) {
         ctxError_.clear();reloadWhenContextReady_=true;startContextLoad(job.draft->root.string());
-    }
+    } else refreshModels();
     refreshTextures();rescanBackups();pushLog(definitionEditSuccess_,3);
 }
 std::pair<fs::path,fs::path> App::definitionPaths() const {

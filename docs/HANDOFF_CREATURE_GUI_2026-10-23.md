@@ -91,7 +91,25 @@ No failed test was hidden or guard weakened. Combined receipt:
 143 not run and two unrelated missing controller/Aeon and F2 corpus skips.
 No full-suite, clean-machine, native filesystem custom-import or gameplay claim.
 
-Next: commit/push the scoped milestone and update the existing draft PR. Keep
-source work and RC2 separate. Runtime/placement and assembled-creature presentation
-remain open; do not repeat the unchanged full native graph gate or write full
-native banks merely to test the UI.
+Implementation committed/pushed as `687fa30`; draft PR 2 has been rewritten around
+the resulting authoring features and exact coverage. Windows CI run 39953743747
+was still running at the follow-up check. No merge or release publication.
+
+## Follow-up: pack model-list cache
+
+A new `pack-preview` case primes Models with the donor before importing into a
+pack, then selects the new mesh. It fails against `687fa30` because the cached
+model directory still contains the donor only: `creature-import-ui-pyeea_ti`.
+Pack completion now calls the existing `refreshModels` path when it does not
+reload the global context. Folder output retains its context reload. Six affected
+pack-preview/pack/folder cases pass at both sizes: `creature-import-ui-2_1bu4d8`.
+The appended mesh is independently selected with three vertices and one triangle;
+prior definition/asset preservation and Restore still pass. Owned GUI rebuild
+passes. This correction is newer than the immutable checkpoint above; that ZIP
+retains the known cached-list behavior and has not been silently replaced.
+
+Next: check pack output with a separate save folder and imported-texture model
+preview; the current pack fixture uses one folder for both. Preview texture
+context and whole-creature assembly remain separate from filesystem acceptance.
+Runtime/placement remain open; do not repeat the unchanged full native graph gate
+or write full native banks merely to test the UI.

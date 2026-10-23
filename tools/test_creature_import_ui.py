@@ -27,7 +27,7 @@ def main():
     parser.add_argument('--fixtures', type=Path, default=os.environ.get('FABLEFORGE_CREATURE_FIXTURES'),
                         help='Retained tiny donor packet from test_skinned_input_donors.py')
     parser.add_argument('--work-root', type=Path, default=repo/'build')
-    modes = ('save', 'stored', 'cancel', 'missing-slot', 'existing', 'image', 'image-dxt3', 'image-argb8888', 'pack', 'close-review', 'stale-model', 'stale-sidecar', 'stale-image', 'stale-bank', 'stale-names', 'stale-graphics', 'stale-textures', 'stale-manifest', 'stale-model-alias', 'stale-destination-alias', 'destination', 'changed-draft')
+    modes = ('save', 'stored', 'cancel', 'missing-slot', 'existing', 'image', 'image-dxt3', 'image-argb8888', 'pack', 'pack-preview', 'close-review', 'stale-model', 'stale-sidecar', 'stale-image', 'stale-bank', 'stale-names', 'stale-graphics', 'stale-textures', 'stale-manifest', 'stale-model-alias', 'stale-destination-alias', 'destination', 'changed-draft')
     parser.add_argument('--only', nargs='+', choices=modes)
     args = parser.parse_args()
     if args.fixtures is None:
@@ -72,7 +72,7 @@ def main():
                 schema.parent.mkdir(parents=True)
                 shutil.copyfile(fixtures/'4521/schema.json', schema)
                 output = case/'output'
-                pack = mode in ('pack', 'stale-manifest')
+                pack = mode in ('pack', 'pack-preview', 'stale-manifest')
                 manifest = None
                 if pack:
                     output.mkdir()
@@ -83,6 +83,8 @@ def main():
                          f'set saveroot {output.as_posix()}']
                 if pack:
                     lines += [f'pack_dest {output.as_posix()}']
+                if mode == 'pack-preview':
+                    lines += ['assets_tab 1', 'model_select 4521', 'assert_state model_ready 1']
                 lines += ['assets_tab 6', 'wait_definitions',
                          'definition_select 1', 'frames 3']
                 lines += click('btn_definition_clone_creature_private')
@@ -130,6 +132,9 @@ def main():
                             else:
                                 lines += ['assert_state definition_edit_failed 0', 'assert_state definition_editing 0',
                                     'assert_state definition_selected 6', f'screenshot {(case/"created.png").as_posix()}']
+                                if mode == 'pack-preview':
+                                    lines += ['assets_tab 1', 'model_select 4522', 'assert_state model_selected MESH_GUI_MODEL',
+                                              'assert_state model_ready 1', 'assert_state model_vertices 3', 'assert_state model_triangles 1']
                 lines += ['quit']
                 script = case/'import.txt'
                 script.write_text('\n'.join(lines)+'\n', encoding='utf-8')
@@ -173,7 +178,7 @@ def main():
                             process.wait(timeout=10)
                 trace = Path(str(script)+'.log').read_text(encoding='utf-8')
                 assert returncode == 0 and 'RESULT PASS' in trace and 'FAIL ' not in trace, trace[-8000:]
-                if mode in ('save', 'stored', 'existing', 'image', 'image-dxt3', 'image-argb8888', 'pack', 'close-review'):
+                if mode in ('save', 'stored', 'existing', 'image', 'image-dxt3', 'image-argb8888', 'pack', 'pack-preview', 'close-review'):
                     actual = read_bank(output)
                     assert actual[:6] == originals and len(actual) == 9
                     old_bank = (source/'data/CompiledDefs/game.bin').read_bytes()
