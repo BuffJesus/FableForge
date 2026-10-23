@@ -1067,6 +1067,8 @@ public:
     // An undeployed pack may contain textures absent from the loaded world.
     // Built by the import worker and used only for its physical graphics bank.
     std::shared_ptr<terrainexport::Context> modelPreviewContext_;
+    // Retain the selected mesh's actual texture snapshot for material metadata.
+    std::shared_ptr<terrainexport::Context> modelSelectedTextureContext_;
     std::filesystem::path modelPreviewGraphics_;
     std::string modelPreviewContextError_;
     uint32_t modelId_ = 0;

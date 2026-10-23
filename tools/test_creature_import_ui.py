@@ -143,11 +143,13 @@ def main():
                                               f'screenshot {(case/"model-preview.png").as_posix()}']
                                     lines += [f'assert_state model_textured_parts {1 if has_image or existing_texture else 0}']
                                     lines += [f'assert_state asset_context_root {install.as_posix()}']
+                                    if has_image or existing_texture:
+                                        lines += ['assert_widget model_preview_texture_0_Diffuse']
                                     if mode == 'pack-image-preview':
-                                        lines += click('btn_model_refresh')+['model_select 4522', 'assert_state model_textured_parts 1',
+                                        lines += click('btn_model_refresh')+['model_select 4522', 'reveal header_model_materials', 'frames 3', 'reveal header_model_materials', 'frames 3', 'reveal model_preview_texture_0_Diffuse', 'frames 3', 'reveal model_preview_texture_0_Diffuse', 'frames 3', 'clear_widget_registry', 'frames 2', 'assert_state model_textured_parts 1', 'assert_widget model_preview_texture_0_Diffuse',
                                             f'assert_state asset_context_root {install.as_posix()}',
                                             f'set saveroot {install.as_posix()}', 'frames 3', 'model_search MESH_GUI_MODEL', 'frames 3',
-                                            'assert_state models_filtered 0', 'model_select 4521', 'assert_state model_ready 1',
+                                            'assert_state models_filtered 0', 'model_select 4521', 'clear_widget_registry', 'frames 2', 'assert_state model_ready 1', 'assert_widget_absent model_preview_texture_0_Diffuse',
                                             f'assert_state asset_context_root {install.as_posix()}']
                 lines += ['quit']
                 script = case/'import.txt'

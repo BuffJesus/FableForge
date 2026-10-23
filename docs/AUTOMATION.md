@@ -1140,7 +1140,10 @@ supplies the tiny schema, leaving packaged retail schemas untouched.
 separate pack/save folders, require actual diffuse binding, retain the original
 world context, refresh Models, and switch back to the install. An existing-texture
 case also checks that no texture bank is created. The GUI driver's result pins its
-startup SHA256 and refuses a driver change during execution.
+startup SHA256 and refuses a driver change during execution. Pack material metadata registers
+`model_preview_texture_<material index>_<Diffuse|Bump|Reflection|Alpha>` only
+when the selected preview context resolves that texture. Clear the retained
+widget registry before asserting absence after a source switch.
 
 `creature_clone_gui_retail_1440x900` and `_800x600` independently compare
 all prior retail records, verified self-only deltas, paired recovery and explicit

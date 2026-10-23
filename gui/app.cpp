@@ -919,7 +919,7 @@ void App::startContextLoad(const std::string& fromRoot) {
     modelsLoaded_ = modelUsersLoaded_ = modelReady_ = false;
     modelRows_.clear(); modelUsers_.clear(); modelName_.clear(); modelError_.clear();
     modelGeometry_ = {}; modelId_ = 0;
-    modelPreviewContext_.reset();modelPreviewGraphics_.clear();modelPreviewContextError_.clear();
+    modelPreviewContext_.reset();modelSelectedTextureContext_.reset();modelPreviewGraphics_.clear();modelPreviewContextError_.clear();
     renderer_.clearModelPreview();
     renderer_.clearHeadPreview();
     dialogueHeadReady_=false;

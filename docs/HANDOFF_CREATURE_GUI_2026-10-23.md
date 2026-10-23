@@ -305,3 +305,69 @@ is a known UI limitation of this immutable archive. Next source correction shoul
 show material identity from the same context used by the model preview and avoid
 navigating into an unrelated base texture with a coincident ID. Keep this ZIP
 unchanged; no whole-creature assembly, placement or gameplay claim.
+
+
+## Materials identity follow-up prepared offline
+
+The selected pack model now retains the exact preview texture context and uses
+its textureInfo metadata for Materials. Pack/source-snapshot entries show their
+verified name and dimensions read-only, avoiding navigation to an unrelated base
+texture with the same numeric ID. Normal install material links keep existing
+behavior. Selection and context reload clear the retained selection snapshot.
+Focused driver assertions require the rendered metadata widget for image/existing
+pack textures, retain it after Refresh, and require it absent after switching to
+the original donor. GUI rebuild passes; source snapshot is pinned under
+`build/frozen/model-material-source-20261023`, SHA256
+`b340f5111a124839461ecb8aaf9ea139257a1df6f3a952e7b00ebb9ed1e545c8`.
+This correction is not runtime accepted yet. F2Native owns opening-vulkan1 lease;
+no GUI is launched while it exists. Peer readiness queued as
+`01a168ec-585d-7173-9376-27b1895a339f`.
+
+
+Materials follow-up diagnostics: the immutable checkpoint fails only the new
+metadata-widget assertion after successful actual texture binding; four outputs
+Restored. Negative receipt `mi-p_e_epfh/creature-import-ui-ubovo1ds` under the
+20261023 C evidence root. Initial candidate shows correct `Diffuse 8: GUI_TEXTURE
+(4 x 4)` in the screenshot, but a source-switch assertion mistakenly used the
+cumulative widget registry. Explicit clear fixes that assertion. Next compact
+attempts reveal a clipped Materials header: its children are not submitted by
+ImGui while offscreen, so revealing a child cannot scroll its parent into view.
+The final driver now reveals the registered Materials header first, then the
+metadata row, clears the registry, and requires the row on the current screen.
+The source-switch absence assertion also clears the registry. No metadata
+assertion or production guard was removed. All failed created outputs explicitly
+Restored; no owned GUI remains between windows. Retained attempts:
+`mi-p_e_epfh`, `mi-tgljwu1q`, `mi-7tg_rdw9`.
+
+Header-instrumented GUI rebuild passes. Frozen snapshot:
+`build/frozen/model-material-source-header-20261023/FableForge.exe`, SHA256
+`334ba3b7343e174f336e7ae872134d7d3e70fd5084afd2d1a45ac0434a39fed8`.
+A new claim correctly refused an existing peer lease before launching any GUI;
+waiting for a fresh clear window. Windows CI run 39959326852 for 65dba50 completed
+success; this does not cover the newer local Materials correction.
+
+
+## Materials identity source acceptance
+
+Final focused candidate gate passes all ten cases (five modes at both sizes):
+pack image/existing/no-texture preview plus folder image/save neighbors. Receipt:
+`C:/Users/Cornelio/AppData/Local/FableForgeEvidence/20261023/mi-pvwas_r7/creature-import-ui-5b27g5sg/result.json`.
+Candidate executable/source hashes match the pinned header-instrumented snapshot.
+Initial metadata, parent-first reveal after Refresh, current-screen metadata and
+source-switch absence pass. Texture SRVs, original world context, exact
+preservation and Restore still pass. Inspected full-size screenshot shows
+`Diffuse 8: GUI_TEXTURE (4 x 4)` with the textured triangle. Compact initial
+screenshot does not show the below-fold Materials panel; the refreshed compact
+metadata is verified by the current-screen registry assertion after parent reveal.
+
+All owned GUIs closed, lease released at 13:26:29 UTC, peer availability queued as
+`01a168f1-0bc6-7733-8e94-f458a8c4e405`; receipt
+`mi-pvwas_r7/released-runtime-lease.json`. Peer acquired a new token at 13:26:51;
+a later blanket lease-absence assertion correctly failed. Verified different
+owner/token and released own receipt, leaving peer lease untouched.
+This is a newer source-only correction; retained pack-texture ZIP still has its
+documented Materials limitation. No new package is required for this small
+presentation follow-up. Next work is scratch placement/whole-creature presentation
+planning using existing editor paths; gameplay and assembled-creature behavior
+remain unverified. Do not repeat accepted full50/core/native gates without a
+relevant change.
