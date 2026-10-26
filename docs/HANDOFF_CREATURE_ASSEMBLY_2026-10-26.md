@@ -86,3 +86,27 @@ Full suite after the assembler/GUI work: 62/62 CTest targets pass.
 1. Base-mesh (no-parts) appearance path from the CAppearanceDef graphic (8 Creatures).
 2. Animation sampling through the existing animation reader; keep bind-pose
    preview labelled as such.
+
+## Rigged export and the import V flip
+
+`skinnedexport` writes a single skinned retail mesh as a rigged glTF in metres:
+bones as nodes at bind, inverseBindMatrices = C^-1 * M * C (so meshimport's
+inverseBindInFable returns the mesh's own), JOINTS_0 local slots, WEIGHTS_0
+normalized bytes summing to 255 (largest remainder). The GUI's Export .glb uses
+it for any selected model with bones; Creature looks stay static (posed).
+
+`fableforge_skinnedexport_tests --retail <graphics.big> <out> <ids>` runs retail ->
+rigged .glb -> loadSkinnedModel -> mapSkinToDonor -> prepareSkinnedMesh (the real
+composer) -> decode. All 12 sampled body meshes: every bone, identical triangle
+counts, every composed vertex matched by position, weights within 0.02.
+
+It also exposed a V flip in model import. The composer stored `1 - v` ("the decoder
+yields 1-v"), but Forge's decoder yields stored v unchanged and the preview renders
+retail correctly with it; glTF and D3D share a top-left origin; EgoCore (in-game
+proven import) flips V on neither side. The round trip came back V-flipped versus
+retail. The flip dates from the first static import (c9ad03e) and hides on
+symmetric/uniform textures. Fixed in meshcompose (static writer, range check,
+skinned writer) and the clipping diagnostic; after the fix all 12 meshes match UVs
+modulo the packer's whole-tile offset. Pinned tests updated (test_export 3694,
+meshinput edge fixture). 62/62 CTest, 91 geometry/URI import checks pass.
+NOT yet seen in game: check an imported model with an asymmetric texture.

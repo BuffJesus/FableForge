@@ -200,7 +200,7 @@ Composed composeStatic(const std::string& name, const std::vector<Primitive>& pr
             putF32(vb, v.x); putF32(vb, v.y); putF32(vb, v.z);
             putU32(vb, packNormal(i < norms.size() ? norms[i] : Vec3{0, 0, 1}));
             putI16(vb, compressUv(uv.u));
-            putI16(vb, compressUv(1.0f - uv.v));            // the decoder yields 1-v: store it back
+            putI16(vb, compressUv(uv.v));                   // stored V is glTF V (top-left origin, as D3D)
         }
         lzoBlock(lod, vb, compress);
         std::vector<uint8_t> ib;
@@ -294,7 +294,7 @@ PreparedSkin prepareSkin(const SkinnedPrimitive& input,size_t boneCount,size_t m
     for(const auto& v:p.verts) if(!std::isfinite(v.x) || !std::isfinite(v.y) || !std::isfinite(v.z))
         throw std::invalid_argument("non-finite skinned position");
     for(const auto& n:p.normals) (void)packNormal(n);
-    for(const auto& uv:p.uvs) {(void)compressUv(uv.u);(void)compressUv(1.f-uv.v);}
+    for(const auto& uv:p.uvs) {(void)compressUv(uv.u);(void)compressUv(uv.v);}
     for(const auto& f:p.faces) for(uint32_t index:f) if(index>=p.verts.size()) throw std::invalid_argument("skinned face index out of range");
     std::vector<std::vector<Influence>> skin=input.skin;
     std::vector<uint8_t> palette;
@@ -408,7 +408,7 @@ Composed composeSkinned(const std::string& name,const std::vector<SkinnedPrimiti
             const auto& v=p.verts[i];putF32(vb,v.x);putF32(vb,v.y);putF32(vb,v.z);
             skinBytes(vb,preparedPrimitive.skin[i],blocks[block].palette);++within;
             putU32(vb,packNormal(p.normals[i]));const auto uv=p.uvs.empty()?Vec2{}:p.uvs[i];
-            putI16(vb,compressUv(uv.u));putI16(vb,compressUv(1.f-uv.v));
+            putI16(vb,compressUv(uv.u));putI16(vb,compressUv(uv.v));
         }
         lzoBlock(lod,vb,compress);std::vector<uint8_t> ib;ib.reserve(p.faces.size()*6);
         for(const auto& f:p.faces) {putU16(ib,uint16_t(f[0]));putU16(ib,uint16_t(f[2]));putU16(ib,uint16_t(f[1]));}

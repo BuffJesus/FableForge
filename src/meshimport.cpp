@@ -922,7 +922,7 @@ static void appendUvNotes(Model& model) {
     for (size_t part=0;part<model.prims.size();++part) {
         size_t clipped=0;
         for (const auto& uv:model.prims[part].uvs)
-            if (forge::meshcompose::uvNeedsClamping(uv.u) || forge::meshcompose::uvNeedsClamping(1.0f-uv.v))
+            if (forge::meshcompose::uvNeedsClamping(uv.u) || forge::meshcompose::uvNeedsClamping(uv.v))
                 ++clipped;
         if (clipped) model.notes.push_back("model part "+std::to_string(part+1)+": texture coordinates exceed the supported range on "+
             std::to_string(clipped)+" vertices; import clips these coordinates. Reduce texture tiling to preserve the mapping.");

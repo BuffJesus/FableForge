@@ -3691,7 +3691,7 @@ void testMeshCompose() {
         for (size_t i = 0; i < 5; ++i) {
             CHECK(std::fabs(g.vertices[i].x - p.verts[i].x) < 1e-6f && std::fabs(g.vertices[i].y - p.verts[i].y) < 1e-6f && std::fabs(g.vertices[i].z - p.verts[i].z) < 1e-6f);
             CHECK(std::fabs(g.vertices[i].u - (p.uvs[i].u + 8.0f)) < 1e-3f);            // the decoder keeps the +8 bias
-            CHECK(std::fabs(g.vertices[i].v - ((1.0f - p.uvs[i].v) + 8.0f)) < 1e-3f);   // stored as 1-v
+            CHECK(std::fabs(g.vertices[i].v - (p.uvs[i].v + 8.0f)) < 1e-3f);            // glTF V stored unchanged
         }
         for (size_t i = 0; i < 6; ++i) CHECK(g.triangles[i].a == p.faces[i][0] && g.triangles[i].b == p.faces[i][1] && g.triangles[i].c == p.faces[i][2]);
         // the apex normal points up

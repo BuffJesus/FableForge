@@ -30,7 +30,7 @@ struct Vec2 { float u = 0, v = 0; };
 struct Primitive {
     std::vector<Vec3> verts;                 // required
     std::vector<std::array<uint32_t, 3>> faces;   // required, CCW
-    std::vector<Vec2> uvs;                   // per vertex; empty = (0,0). v is glTF/Blender-convention (stored as 1-v)
+    std::vector<Vec2> uvs;                   // per vertex; empty = (0,0). v is glTF/Blender-convention, stored unchanged (D3D shares the top-left origin)
     std::vector<Vec3> normals;               // per vertex; empty = accumulated face normals
     int material = 0;                        // slot into Composed::materials
 };

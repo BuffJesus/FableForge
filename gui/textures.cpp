@@ -16,6 +16,7 @@
 #include "resolvedpath.hpp"
 #include "windowsprocess.hpp"
 #include "forge/defschema.hpp"
+#include "skinnedexport.hpp"
 
 namespace albion::gui {
 using theme::S;
@@ -599,15 +600,21 @@ std::string App::exportModelGlb() {
         auto mesh = foliageexport::makeMesh(modelId_, modelName_, modelName_, modelGeometry_, true, *textures,
                                             scene.images, textureIds, scene.warnings);
         mesh.instanceCount = 1;
-        scene.meshes.push_back(std::move(mesh));
-        // 100 mesh units = 1 m: the same 0.01 scale the importer undoes.
-        foliageexport::Instance at; at.mesh = 0; at.prim = 0; at.scale = 0.01f;
-        scene.instances.push_back(at);
-        foliageexport::writeModelGlb(scene, out);
+        // A single skinned retail mesh keeps its skeleton and weights (Blender
+        // edits re-import against the same donor); posed looks stay static.
+        const bool rigged = !look && !modelGeometry_.bones.empty();
+        if (rigged) skinnedexport::write(mesh, scene.images, out);
+        else {
+            scene.meshes.push_back(std::move(mesh));
+            // 100 mesh units = 1 m: the same 0.01 scale the importer undoes.
+            foliageexport::Instance at; at.mesh = 0; at.prim = 0; at.scale = 0.01f;
+            scene.instances.push_back(at);
+            foliageexport::writeModelGlb(scene, out);
+        }
         for (const auto& warning : scene.warnings) pushLog("model export: " + warning, 1);
         const auto written = out.u8string();
         const std::string shown(written.begin(), written.end());
-        modelExportStatus_ = "Saved " + shown;
+        modelExportStatus_ = std::string(rigged ? "Saved rigged " : "Saved ") + shown;
         pushLog("model export: " + shown, 0);
         return shown;
     } catch (const std::exception& e) {

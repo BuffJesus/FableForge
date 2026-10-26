@@ -58,7 +58,7 @@ target_include_directories(forgecore_slice PUBLIC
 set(FORGE_VERSION_SUFFIX "-dev")
 add_compile_definitions(ALBION_VERSION="${PROJECT_VERSION}${FORGE_VERSION_SUFFIX}")
 add_library(fableforge STATIC src/terrainexport.cpp src/foliageexport.cpp src/thingsexport.cpp src/stbterrain.cpp src/effects.cpp src/leveledit.cpp src/vanilla_props.cpp src/worldedit.cpp src/overworld.cpp src/stbrelocate.cpp src/lodbake.cpp src/stitch.cpp src/livelink.cpp src/backups.cpp src/navlines.cpp src/worldtiles.cpp
-    src/stbcompact.cpp src/presets.cpp src/gtg.cpp src/texturebrowse.cpp src/meshimport.cpp src/modpack.cpp)
+    src/stbcompact.cpp src/presets.cpp src/gtg.cpp src/texturebrowse.cpp src/meshimport.cpp src/modpack.cpp src/skinnedexport.cpp)
 target_include_directories(fableforge PUBLIC src)
 target_link_libraries(fableforge PUBLIC forgecore_slice)
 target_sources(fableforge PRIVATE src/particlepreview.cpp)
@@ -108,6 +108,8 @@ add_test(NAME fableforge_creaturepose_tests COMMAND fableforge_creaturepose_test
 add_executable(fableforge_creatureassembly_tests tests/test_creatureassembly.cpp)
 target_link_libraries(fableforge_creatureassembly_tests PRIVATE forgecore_slice)
 add_test(NAME fableforge_creatureassembly_tests COMMAND fableforge_creatureassembly_tests)
+add_executable(fableforge_skinnedexport_tests tests/test_skinnedexport.cpp)
+target_link_libraries(fableforge_skinnedexport_tests PRIVATE fableforge)
 add_executable(fableforge_defrelocate_tests tests/test_defrelocate.cpp)
 target_link_libraries(fableforge_defrelocate_tests PRIVATE forgecore_slice)
 add_test(NAME fableforge_defrelocate_tests COMMAND fableforge_defrelocate_tests)
