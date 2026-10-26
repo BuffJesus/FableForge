@@ -48,10 +48,41 @@ tall+fat 141.5/38.3/200.5; weak 127.1/35.3/186.9; strong changes limb
 cross-sections only (max vertex delta 0.52). Renders show the three parts
 joining seamlessly in the shared space: `build/creature-assembly-retail-20261026/`.
 
+## GUI: Creature looks
+
+`creatureassembly::merge` joins the posed parts into one preview geometry and
+retargets each part's material diffuse/bump IDs through its composed map (from the
+authored ID; no chasing). Retail sweep at 0x12345678: 1,105 materials, 446
+retextured across 143 Creatures; the 22 Creatures with replacements but no change
+carry identity rows (627->627) or IDs the mesh does not use (verified per part).
+
+`Context::assembleCreature` resolves CREATURE -> CCreatureDef through
+`defedit::resolveCreatureVisuals`, the names pool and `<gameRoot>/data/Bones`. It
+needs the full `docs/re_reference/def_schema.json`: the embedded schema has no
+CCreatureDef (first GUI run refused "no schema for CCreatureDef"). The GUI loads
+it with the Definitions browser's lookup (bundled copy wins).
+
+Assets > Models > **Creature looks** lists CREATUREs carrying
+CTCRandomAppearanceMorph; pick one, type a Seed or press New look. Guide page:
+`docs/guide/creature-looks.md`. `tests/ui/creature_looks.txt` (`creature_look`
+command) passes against the retail install; screenshots of CREATURE_BANDIT_GRUNT
+seeds 7 and 3 show different textured head/torso/arm sets joined seamlessly.
+
+`--roots` over all 517 CREATURE roots (seed 7): 290 carry CTCRandomAppearanceMorph
+and 282 of those assemble; 8 refuse with no substituted parts. No root without the
+component has parts (212 base-mesh, 15 graph refusals), so those Creatures draw
+their ordinary model. The base-mesh gap affects 8 entries in the GUI list.
+
+Model export: Assets > Models > **Export .glb (Blender)** (and `model_export`)
+writes the previewed model or Creature look to the Export tab's output folder via
+`foliageexport::writeModelGlb` (terrain-less, same mesh/texture path as map GLBs).
+The UI script exports MESH_OBJECT_BARREL and CREATURE_BANDIT_GRUNT seed 3; both
+parse with all indices in range, embedded textures (1 and 5), Y-up.
+
+Full suite after the assembler/GUI work: 62/62 CTest targets pass.
+
 ## Next
 
-1. GUI: Assets/Definitions preview of an assembled Creature with a seed control,
-   textures resolved per part through the composed replacements.
-2. Base-mesh (no-parts) appearance path from the CAppearanceDef graphic.
-3. Animation sampling through the existing animation reader; keep bind-pose
+1. Base-mesh (no-parts) appearance path from the CAppearanceDef graphic (8 Creatures).
+2. Animation sampling through the existing animation reader; keep bind-pose
    preview labelled as such.

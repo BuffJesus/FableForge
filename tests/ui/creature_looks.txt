@@ -1,0 +1,29 @@
+wait_maps
+wait_ready
+assets_tab 1
+frames 4
+creature_look CREATURE_BANDIT_GRUNT 7
+frames 4
+assert_state model_ready 1
+model_orbit 0.3 0.15 1
+clear_toasts
+reveal btn_creature_look_roll
+frames 3
+screenshot build/ui/creature_looks_seed7.png
+creature_look CREATURE_BANDIT_GRUNT 3
+frames 4
+assert_state model_ready 1
+model_orbit 0.3 0.15 1
+frames 3
+screenshot build/ui/creature_looks_seed3.png
+set outdir build/ui/model_export
+model_export
+model_select MESH_OBJECT_BARREL
+frames 3
+model_export
+creature_look CREATURE_BANDIT_GRUNT 3
+frames 3
+click btn_creature_look_roll
+frames 4
+assert_state model_ready 1
+quit

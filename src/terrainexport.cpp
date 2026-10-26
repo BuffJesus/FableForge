@@ -21,7 +21,9 @@
 #include "forge/big.hpp"
 #include "forge/bin.hpp"
 #include "forge/defdecode.hpp"
+#include "forge/defedit.hpp"
 #include "forge/defschema.hpp"
+#include "forge/meshpreview.hpp"
 #include "forge/terraintex.hpp"
 #include "forge/wld.hpp"
 #define MINIZ_HEADER_FILE_ONLY   // the implementation is vendor/third_party/miniz/miniz.c (forgecore_slice)
@@ -583,6 +585,53 @@ std::vector<std::pair<std::string, std::string>> Context::definitions(const std:
     }
     std::sort(out.begin(), out.end());
     return out;
+}
+
+forge::creatureassembly::Assembly Context::assembleCreature(const std::string& name, uint32_t seed,
+                                                            const fs::path& graphicsBig,
+                                                            const forge::defschema::Schema* schema) const {
+    if (!impl_ || !impl_->defsReady || !impl_->defs || !impl_->schema)
+        throw std::runtime_error("definitions are not loaded");
+    if (!schema) schema = impl_->schema.get();
+    std::vector<uint8_t> prefix;
+    std::map<uint32_t, std::string> names;
+    {
+        std::lock_guard<std::mutex> lock(impl_->defMutex);
+        const auto& entries = impl_->defs->entries();
+        const auto root = std::find_if(entries.begin(), entries.end(),
+                                       [&](const auto& e) { return e.name == name && e.definition == "CREATURE"; });
+        if (root == entries.end()) throw std::runtime_error("no CREATURE named " + name);
+        const auto graph = forge::defedit::resolveCreatureVisuals(*impl_->defs, *schema,
+                                                                  size_t(root - entries.begin()));
+        const auto& body = entries[graph.bodyIndex];
+        const auto* type = forge::defdecode::resolveType(*schema, body.definition, body.data);
+        if (!type) throw std::runtime_error("no schema for " + body.definition);
+        const auto decoded = forge::defdecode::decode(body.data, *type);
+        if (!decoded.clean() || forge::defdecode::encode(decoded) != body.data)
+            throw std::runtime_error("CCreatureDef does not round-trip");
+        prefix = decoded.prefix;
+        // names.bin pool offsets: a 4-byte header, then CRC + NUL-terminated name.
+        uint64_t offset = 4;
+        for (const auto& [crc, text] : impl_->defs->originalNames()) {
+            if (offset > UINT32_MAX) break;
+            names.emplace(uint32_t(offset), text);
+            offset += text.size() + 5;
+        }
+    }
+    const fs::path bones = impl_->gameRoot / "data" / "Bones";
+    const forge::creatureassembly::Sources sources{
+        [&](uint32_t at) {
+            const auto found = names.find(at);
+            if (found == names.end()) throw std::runtime_error("skeletal morph name is not a names.bin boundary");
+            return found->second;
+        },
+        [&](const std::string& file) {
+            std::ifstream in(bones / file, std::ios::binary);
+            if (!in) throw std::runtime_error("missing bone config data/Bones/" + file);
+            return std::string(std::istreambuf_iterator<char>(in), {});
+        },
+        [&](uint32_t id) { return forge::meshpreview::readLod0(graphicsBig, id); }};
+    return forge::creatureassembly::assemble(prefix, seed, false, sources);
 }
 
 std::optional<uint32_t> Context::definitionIndex(const std::string& name) const {

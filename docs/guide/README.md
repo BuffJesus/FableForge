@@ -11,6 +11,7 @@ objects, sculpting and writing a level into the game.
 | Make a filler map meet the maps around it | [Fit to neighbours](fit-to-neighbours.md) |
 | Combine mods, order them and resolve conflicts | [Mod packs and load order](mod-packs.md) |
 | Change how a character's mouth moves on a line | [Dialogue lip sync](dialogue-lip-sync.md) |
+| See which head, body and shape a villager's seed gives | [Creature looks](creature-looks.md) |
 | Install Aeon Edition with Controller Support | [Aeon/controller walkthrough](../walkthrough/aeon-controller/index.html) |
 
 Before writing anything, read the [engine rules](../ENGINE_RULES.md). They cover

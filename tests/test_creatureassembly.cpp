@@ -1,4 +1,5 @@
 #include "forge/creatureassembly.hpp"
+#include <algorithm>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -8,6 +9,7 @@
 #include <nlohmann/json.hpp>
 #include "forge/bin.hpp"
 #include "forge/defdecode.hpp"
+#include "forge/defedit.hpp"
 #include "forge/defschema.hpp"
 
 using namespace forge;
@@ -29,7 +31,10 @@ static void writeObj(const fs::path& path,const creatureassembly::Assembly& asse
 }
 int main(int argc,char** argv)try {
     // --retail <install> <schema> [seed] [obj-dir]: assemble every CCreatureDef read-only.
-    if(argc>=4&&std::string_view(argv[1])=="--retail") {
+    // --roots <install> <schema> [seed]: per CREATURE root, whether it carries
+    // CTCRandomAppearanceMorph and what assembling its visual graph does.
+    const bool roots=argc>=4&&std::string_view(argv[1])=="--roots";
+    if(argc>=4&&(roots||std::string_view(argv[1])=="--retail")) {
         const fs::path root=argv[2];const auto folder=root/"data"/"CompiledDefs";
         const auto schema=defschema::Schema::load(argv[3]);
         const uint32_t seed=argc>=5?uint32_t(std::stoul(argv[4],nullptr,0)):0x12345678u;
@@ -45,6 +50,25 @@ int main(int argc,char** argv)try {
                 if(found==meshes.end())found=meshes.emplace(id,meshpreview::readLod0(root/"data"/"graphics"/"graphics.big",id)).first;
                 return found->second;}};
         auto rows=nlohmann::json::array();std::map<std::string,size_t> outcomes;
+        if(roots) {
+            for(size_t i=0;i<source.entries().size();++i) {
+                const auto& entry=source.entries()[i];if(entry.definition!="CREATURE")continue;
+                std::string key;bool morph=false;
+                try {
+                    const auto decoded=defdecode::decode(entry,schema);
+                    const auto field=std::find_if(decoded.fields.begin(),decoded.fields.end(),[](const auto& f){return f.name=="Components";});
+                    if(!decoded.clean()||field==decoded.fields.end())throw std::runtime_error("runtime Components unavailable");
+                    for(const auto at:defdecode::runtimeComponentNameOffsets(*field))
+                        morph|=names.contains(at)&&names.at(at)=="CTCRandomAppearanceMorph";
+                    const auto graph=defedit::resolveCreatureVisuals(source,schema,i);
+                    const auto body=defdecode::decode(source.entries()[graph.bodyIndex],schema);
+                    creatureassembly::assemble(body.prefix,seed,false,sources);
+                    key="assembled";
+                } catch(const std::exception& error){key=error.what();}
+                ++outcomes[(morph?"morph | ":"no morph | ")+key];
+            }
+            std::cout<<nlohmann::json{{"seed",seed},{"outcomes",outcomes}}.dump(1)<<'\n';return 0;
+        }
         for(size_t i=0;i<source.entries().size();++i) {
             const auto& entry=source.entries()[i];if(entry.definition!="CCreatureDef")continue;
             nlohmann::json row{{"index",i},{"name",entry.name}};
@@ -54,11 +78,31 @@ int main(int argc,char** argv)try {
                 const auto assembly=creatureassembly::assemble(decoded.prefix,seed,false,sources);
                 auto parts=nlohmann::json::array();size_t vertices=0;
                 for(const auto& part:assembly.parts) {
+                    auto replacements=nlohmann::json::array(),channels=nlohmann::json::array();
+                    for(const auto& r:part.textures)replacements.push_back({r.original,r.replacement});
+                    for(const auto& m:part.posed.materials)
+                        channels.push_back({m.diffuseTexture,m.bumpTexture,m.reflectionTexture,m.alphaMapTexture});
                     parts.push_back({{"mesh",part.mesh},{"bones",part.boneScales.size()},{"scaled_bones",part.scaledBones},
-                                     {"vertices",part.posed.vertices.size()},{"textures",part.textures.size()}});
+                                     {"vertices",part.posed.vertices.size()},{"textures",part.textures.size()},
+                                     {"replacements",replacements},{"material_textures",channels}});
                     vertices+=part.posed.vertices.size();
                 }
                 row["parts"]=parts;row["targets"]=assembly.skeletalTargets;row["vertices"]=vertices;
+                const auto merged=creatureassembly::merge(assembly);
+                require(merged.vertices.size()==vertices,"merged vertex count differs");
+                size_t materials=0,retextured=0,replacements=0;
+                for(const auto& part:assembly.parts) {
+                    materials+=part.posed.materials.size();replacements+=part.textures.size();
+                    for(size_t m=0;m<part.posed.materials.size();++m) {
+                        const auto& before=part.posed.materials[m];const auto& after=merged.materials[materials-part.posed.materials.size()+m];
+                        retextured+=before.diffuseTexture!=after.diffuseTexture||before.bumpTexture!=after.bumpTexture;
+                    }
+                }
+                require(merged.materials.size()==materials,"merged material count differs");
+                for(const auto& t:merged.triangles)
+                    require(t.a<merged.vertices.size()&&t.b<merged.vertices.size()&&t.c<merged.vertices.size()&&
+                            t.material<int32_t(merged.materials.size()),"merged triangle out of range");
+                row["materials"]=materials;row["retextured"]=retextured;row["replacements"]=replacements;
                 ++outcomes["assembled"];
                 if(argc>=6)writeObj(fs::path(argv[5])/("creature_"+std::to_string(i)+".obj"),assembly);
             } catch(const std::exception& error) {row["refused"]=error.what();++outcomes[error.what()];}

@@ -1077,6 +1077,20 @@ public:
     size_t modelFiltered_ = 0;
     float modelYaw_ = 0.8f, modelPitch_ = 0.55f, modelZoom_ = 1.0f;
     bool modelWire_ = false;
+    // ---- Creature looks: a CREATURE's random appearance, assembled in bind
+    // pose into the model viewport (forge::creatureassembly).
+    bool selectCreatureLook(const std::string& name, uint32_t seed);
+    void drawCreatureLooks(float pad, float inner, float cardInner);
+    std::vector<std::string> creatureLookNames_;
+    bool creatureLookNamesLoaded_ = false;
+    char creatureLookSearch_[96] = {};
+    std::string creatureLookName_, creatureLookSummary_;
+    uint32_t creatureLookSeed_ = 0;
+    std::shared_ptr<forge::defschema::Schema> creatureLookSchema_; // full schema; embedded lacks CCreatureDef
+    // Export the previewed model or creature look as a standalone .glb into the
+    // Export tab's output folder; returns the written path ("" on failure).
+    std::string exportModelGlb();
+    std::string modelExportStatus_, modelExportError_;
     // ---- Read-only Effects browser (gui/effectbrowser.cpp).
     struct EffectBrowserRow { uint32_t id = 0; std::string name, displayName; };
     std::vector<EffectBrowserRow> effectBrowserRows_;

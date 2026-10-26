@@ -777,6 +777,11 @@ and exercises the existing undo paths.
 - `model_select <name|id>`: decode/select a render mesh; fails for a missing or undecodable entry.
 - `model_search <text|->`: set the browser filter (`-` clears it).
 - `model_orbit <yaw> <pitch> <zoom>`: deterministic preview pose in radians; pitch/zoom are bounded.
+- `creature_look <CREATURE> <seed>`: assemble that Creature's random appearance for a stored Seed
+  (bind pose, all selected parts, composed textures, body-shape bone scaling) into the model
+  viewport; fails on a refusal such as an appearance without substituted parts. Widgets:
+  `input_creature_look_search`, `creature_look_row_<NAME>`, `input_creature_look_seed`,
+  `btn_creature_look_roll`. Script: `tests/ui/creature_looks.txt`.
 - `set world_detail_limit <1..32>`: set both manual and automatic map ceilings.
 - `set world_detail_radius <100..1000>`: base radius in world metres.
 

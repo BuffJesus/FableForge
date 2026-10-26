@@ -41,4 +41,10 @@ struct Assembly {
 // inverse transpose, so nonuniformly scaled normals are approximate.
 Assembly assemble(std::span<const uint8_t> creaturePrefix,uint32_t seed,bool decapitated,
                   const Sources& sources);
+// One preview geometry from all posed parts (shared model space). Each part's
+// composed replacements retarget its materials' diffuse and bump IDs: native
+// GetDiffuseTexture/GetBumpTexture both consult the composed source map (one
+// lookup, no chasing). Other texture channels are left as authored. Skeletons
+// are dropped; vertices are already skinned.
+meshpreview::Geometry merge(const Assembly& assembly);
 } // namespace forge::creatureassembly

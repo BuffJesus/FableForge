@@ -5,6 +5,8 @@
 #include <algorithm>
 #include <chrono>
 #include <cstdio>
+#include <cctype>
+#include <random>
 
 #include "theme.hpp"
 #include "texturebrowse.hpp"
@@ -12,6 +14,8 @@
 #include "forge/big.hpp"
 #include "forge/terraintex.hpp"
 #include "resolvedpath.hpp"
+#include "windowsprocess.hpp"
+#include "forge/defschema.hpp"
 
 namespace albion::gui {
 using theme::S;
@@ -460,7 +464,7 @@ bool App::selectModelById(uint32_t id) {
     }
     if (!ctx_.ready() || ctxFuture_.valid()) { pushLog("models: wait for assets to finish loading", 1); return false; }
     modelReady_ = false; modelGeometry_ = {}; modelSelectedTextureContext_.reset(); renderer_.clearModelPreview();
-    modelId_ = it->id; modelName_ = it->name; modelError_.clear();
+    modelId_ = it->id; modelName_ = it->name; modelError_.clear(); creatureLookName_.clear(); modelExportStatus_.clear(); modelExportError_.clear();
     modelYaw_ = 0.8f; modelPitch_ = 0.55f; modelZoom_ = 1;
     try {
         modelGeometry_ = forge::meshpreview::readLod0(modelBankPath_, modelId_);
@@ -480,6 +484,136 @@ bool App::selectModelById(uint32_t id) {
     } catch (const std::exception& e) { modelError_ = e.what(); }
     if (!modelError_.empty()) pushLog("models: " + modelError_, 1);
     return modelReady_;
+}
+
+bool App::selectCreatureLook(const std::string& name, uint32_t seed) {
+    if(meshReplaceFuture_.valid() || modFilesBusy()) {fileWriteBlocked("creature preview");return false;}
+    if (!modelsLoaded_) refreshModels();
+    if (!ctx_.ready() || ctxFuture_.valid()) { pushLog("creature looks: wait for assets to finish loading", 1); return false; }
+    modelReady_ = false; modelGeometry_ = {}; modelSelectedTextureContext_.reset(); renderer_.clearModelPreview();
+    modelId_ = 0; modelName_ = name; modelError_.clear(); creatureLookSummary_.clear(); modelExportStatus_.clear(); modelExportError_.clear();
+    creatureLookName_ = name; creatureLookSeed_ = seed;
+    modelYaw_ = 0.8f; modelPitch_ = 0.25f; modelZoom_ = 1;
+    try {
+        if (!creatureLookSchema_) {
+            // Same lookup as the Definitions browser: the bundled copy wins.
+            auto path = std::filesystem::current_path() / "docs" / "re_reference" / "def_schema.json";
+#ifdef _WIN32
+            const auto bundled = process::executableDirectory() / "docs" / "re_reference" / "def_schema.json";
+            if (std::filesystem::is_regular_file(bundled)) path = bundled;
+#endif
+            if (!std::filesystem::is_regular_file(path))
+                throw std::runtime_error("creature looks need docs/re_reference/def_schema.json beside FableForge");
+            creatureLookSchema_ = std::make_shared<forge::defschema::Schema>(forge::defschema::Schema::load(path));
+        }
+        const auto assembly = ctx_.assembleCreature(name, seed, modelBankPath_, creatureLookSchema_.get());
+        modelGeometry_ = forge::creatureassembly::merge(assembly);
+        std::vector<terrainexport::Image> images;
+        std::map<uint32_t, int> textureIds;
+        std::vector<std::string> warnings;
+        const auto mesh = foliageexport::makeMesh(0, name, name, modelGeometry_, true, ctx_, images, textureIds, warnings);
+        modelReady_ = renderer_.setModelPreview(mesh, images);
+        if (!modelReady_) modelError_ = "This look has no drawable geometry.";
+        for (const auto& warning : warnings) pushLog("creature looks: " + warning, 1);
+        std::string meshes, shapes;
+        for (const auto& part : assembly.parts) meshes += (meshes.empty() ? "" : ", ") + std::to_string(part.mesh);
+        for (size_t i = 0; i < assembly.skeletalTargets.size(); ++i) {
+            char amount[16]; std::snprintf(amount, sizeof amount, " %.0f%%", assembly.selection.skeletal[i].amount * 100);
+            auto target = assembly.skeletalTargets[i];
+            if (target.size() > 6 && target.ends_with(".bncfg")) target.resize(target.size() - 6);
+            shapes += (shapes.empty() ? "" : ", ") + target + amount;
+        }
+        creatureLookSummary_ = std::to_string(assembly.parts.size()) + " parts (meshes " + meshes + ")\nBody shape: " +
+                               (shapes.empty() ? "default" : shapes);
+    } catch (const std::exception& e) { modelError_ = e.what(); }
+    if (!modelError_.empty()) pushLog("creature looks: " + modelError_, 1);
+    return modelReady_;
+}
+
+void App::drawCreatureLooks(float pad, float inner, float cardInner) {
+    if (!creatureLookNamesLoaded_ && ctx_.ready() && !ctxFuture_.valid()) {
+        for (const auto& [name, type] : ctx_.definitions({"CREATURE"})) {
+            std::string error;
+            if (ctx_.definitionHasRuntimeComponent(name, "CTCRandomAppearanceMorph", error).value_or(false))
+                creatureLookNames_.push_back(name);
+        }
+        creatureLookNamesLoaded_ = true;
+    }
+    ImGui::SetCursorPosX(pad);
+    theme::beginCard("##creaturelooks", inner);
+    theme::label("Creature looks");
+    theme::hint("Villagers and bandits pick their body parts, textures and body shape from a seed. Pick a creature, then roll new looks.");
+    ImGui::SetNextItemWidth(cardInner);
+    ImGui::InputTextWithHint("##creaturelooksearch", "Search creatures", creatureLookSearch_, sizeof creatureLookSearch_);
+    auto_.registerWidget("input_creature_look_search");
+    const std::string needle = creatureLookSearch_;
+    std::vector<const std::string*> rows;
+    for (const auto& name : creatureLookNames_)
+        if (needle.empty() || std::search(name.begin(), name.end(), needle.begin(), needle.end(), [](char a, char b) {
+                return std::tolower(static_cast<unsigned char>(a)) == std::tolower(static_cast<unsigned char>(b));
+            }) != name.end()) rows.push_back(&name);
+    ImGui::BeginChild("##creaturelooklist", ImVec2(cardInner, S(140)));
+    ImGuiListClipper clipper; clipper.Begin(int(rows.size()));
+    while (clipper.Step()) for (int k = clipper.DisplayStart; k < clipper.DisplayEnd; ++k) {
+        const auto& name = *rows[size_t(k)];
+        if (ImGui::Selectable(name.c_str(), name == creatureLookName_)) selectCreatureLook(name, creatureLookSeed_);
+        auto_.registerWidget(("creature_look_row_" + name).c_str());
+    }
+    ImGui::EndChild();
+    if (rows.empty()) theme::hint(creatureLookNamesLoaded_ ? "No matching creatures." : "Loading creatures...");
+    const bool chosen = !creatureLookName_.empty();
+    ImGui::BeginDisabled(!chosen);
+    const float rollWidth = ImGui::CalcTextSize("New look").x + S(24);
+    ImGui::SetNextItemWidth(cardInner - rollWidth - ImGui::GetStyle().ItemSpacing.x);
+    if (ImGui::InputScalar("##creaturelookseed", ImGuiDataType_U32, &creatureLookSeed_, nullptr, nullptr, "Seed %u",
+                           ImGuiInputTextFlags_EnterReturnsTrue)) selectCreatureLook(creatureLookName_, creatureLookSeed_);
+    auto_.registerWidget("input_creature_look_seed");
+    ImGui::SameLine();
+    if (theme::primaryButton("New look", ImVec2(rollWidth, S(28)), chosen)) {
+        static std::mt19937 roll{std::random_device{}()};
+        selectCreatureLook(creatureLookName_, uint32_t(roll()));
+    }
+    auto_.registerWidget("btn_creature_look_roll");
+    ImGui::EndDisabled();
+    if (chosen && !creatureLookSummary_.empty() && modelName_ == creatureLookName_) {
+        ImGui::TextWrapped("%s", creatureLookSummary_.c_str());
+        theme::hint("Bind pose. The seed is the creature's stored appearance Seed; animation is not shown.");
+    }
+    theme::endCard();
+    ImGui::Dummy(ImVec2(0, S(8)));
+}
+
+std::string App::exportModelGlb() {
+    modelExportStatus_.clear(); modelExportError_.clear();
+    try {
+        if (!modelReady_ || modelGeometry_.empty()) throw std::runtime_error("select a model first");
+        const bool look = !creatureLookName_.empty() && modelName_ == creatureLookName_;
+        std::string stem = modelName_ + (look ? "_seed" + std::to_string(creatureLookSeed_) : "");
+        for (auto& c : stem) if (!std::isalnum(static_cast<unsigned char>(c)) && c != '_' && c != '-') c = '_';
+        const std::string folder = outDirBuf_[0] ? outDirBuf_ : "exports";
+        const auto out = std::filesystem::u8path(folder) / (stem + ".glb");
+        const terrainexport::Context* textures = modelSelectedTextureContext_ ? modelSelectedTextureContext_.get() : &ctx_;
+        foliageexport::Scene scene;
+        scene.rootName = stem;
+        std::map<uint32_t, int> textureIds;
+        auto mesh = foliageexport::makeMesh(modelId_, modelName_, modelName_, modelGeometry_, true, *textures,
+                                            scene.images, textureIds, scene.warnings);
+        mesh.instanceCount = 1;
+        scene.meshes.push_back(std::move(mesh));
+        foliageexport::Instance at; at.mesh = 0; at.prim = 0;
+        scene.instances.push_back(at);
+        foliageexport::writeModelGlb(scene, out);
+        for (const auto& warning : scene.warnings) pushLog("model export: " + warning, 1);
+        const auto written = out.u8string();
+        const std::string shown(written.begin(), written.end());
+        modelExportStatus_ = "Saved " + shown;
+        pushLog("model export: " + shown, 0);
+        return shown;
+    } catch (const std::exception& e) {
+        modelExportError_ = e.what();
+        pushLog("model export failed: " + modelExportError_, 2);
+        return {};
+    }
 }
 
 bool App::replaceMesh(const std::string& model) {
@@ -591,12 +725,14 @@ void App::drawModelBrowser(float pad, float inner, float cardInner) {
     if (rows.empty()) theme::hint("No matching models.");
     theme::endCard();
     ImGui::Dummy(ImVec2(0, S(8)));
+    drawCreatureLooks(pad, inner, cardInner);
     if (!modelError_.empty()) { ImGui::SetCursorPosX(pad); ImGui::TextWrapped("%s", modelError_.c_str()); }
     if (modelName_.empty()) return;
     ImGui::SetCursorPosX(pad);
     theme::beginCard("##modelinfo", inner);
     ImGui::TextWrapped("%s", modelName_.c_str());
-    ImGui::Text("id %u | LOD 0", modelId_);
+    if (!creatureLookName_.empty() && modelName_ == creatureLookName_) ImGui::Text("Creature look | seed %u", creatureLookSeed_);
+    else ImGui::Text("id %u | LOD 0", modelId_);
     ImGui::Text("%zu vertices | %zu triangles", modelGeometry_.vertices.size(), modelGeometry_.triangles.size());
     ImGui::Text("%u primitives | %u bones", modelGeometry_.primitiveCount, modelGeometry_.boneCount);
     const auto selected=std::find_if(modelRows_.begin(),modelRows_.end(),[&](const auto& row){return row.id==modelId_;});
@@ -608,6 +744,14 @@ void App::drawModelBrowser(float pad, float inner, float cardInner) {
     }
     auto_.registerWidget("btn_model_replace");
     ImGui::EndDisabled();
+    if (theme::ghostButton("Export .glb (Blender)", ImVec2(cardInner, S(28)))) exportModelGlb();
+    auto_.registerWidget("btn_model_export");
+    if (!modelExportError_.empty()) {
+        ImGui::PushStyleColor(ImGuiCol_Text, theme::vec(theme::Error)); ImGui::TextWrapped("%s", modelExportError_.c_str()); ImGui::PopStyleColor();
+    } else if (!modelExportStatus_.empty()) {
+        ImGui::PushStyleColor(ImGuiCol_Text, theme::vec(theme::Success)); ImGui::TextWrapped("%s", modelExportStatus_.c_str()); ImGui::PopStyleColor();
+        theme::hint("Saved to the output folder on the Export tab. Textures are embedded.");
+    }
     if (modelGeometry_.boneCount) theme::hint("Static pose; animation playback is not available yet.");
     ImGui::Checkbox("Wireframe", &modelWire_); auto_.registerWidget("check_model_wire");
     const float resetWidth = ImGui::CalcTextSize("Reset view").x + S(24);

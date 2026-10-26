@@ -1,4 +1,14 @@
-> Resume, 2026-10-26: [Creature assembly](HANDOFF_CREATURE_ASSEMBLY_2026-10-26.md). Pose oracle/retail bind gates pass; a core assembler builds bind-pose Creatures from seeds (188/330 retail assemble, 142 base-mesh refusals). GUI preview next.
+> Resume, 2026-10-26: [Creature assembly](HANDOFF_CREATURE_ASSEMBLY_2026-10-26.md). Pose oracle/retail bind gates pass; a core assembler builds bind-pose Creatures from seeds (188/330 retail assemble, 142 base-mesh refusals). Assets > Models > Creature looks and Export .glb landed.
+>
+> Community candidates (Discord, 2026-10-26, from a modder building a Chocolate Box companion):
+> 1. **UI translation** (top request; Italian modder): string extraction across the GUI, language picker.
+> 2. **In-app guided tutorials** that tick themselves, paired with `docs/guide` pages.
+> 3. **Editor actions for AI assistants**: an MCP server over `forge-tools` and the `--auto` verbs so
+>    an assistant performs real, pack-scoped, undoable edits (place, define, import) instead of chatting.
+>    Also a guide page for bringing AI-generated .glb buildings in through mesh import.
+> 4. **Donor-guided character conversion** (next Creature lane): align any skinned/unskinned body
+>    to a retail donor's bind pose, segment triangles by nearest donor part (head/torso/legs seams),
+>    transfer weights from the donor surface, keep the donor skeleton exact, preview in Creature looks.
 >
 > Previous development checkpoint, 2026-10-23: [Creature placement profiles](HANDOFF_CREATURE_PROFILES_2026-10-23.md). The runtime-profile archive passes 119 identities, 145 documentation links and four extracted workflows: retail/GUI smoke, 16 metadata-profile placements and eight malformed-profile refusals. 146 workflows not run; two unrelated corpus skips. The unchanged import gate was not repeated. Whole-creature presentation and gameplay remain unverified; RC2 unchanged.
 

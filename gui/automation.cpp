@@ -696,6 +696,14 @@ bool Automation::tick(App& app) {
         note("ok   " + line); ++pc_;
     }
     else if (cmd == "model_select") { if (!app.selectModel(rest)) fail("model_select: " + rest); else note("ok   " + line); ++pc_; }
+    else if (cmd == "model_export") { const auto path = app.exportModelGlb(); if (path.empty()) fail("model_export: " + app.modelExportError_); else note("ok   " + line + " -> " + path); ++pc_; }
+    else if (cmd == "creature_look") {
+        std::istringstream in(rest); std::string name; unsigned long seed = 0;
+        if (!(in >> name >> seed) || seed > 0xffffffffUL) fail("creature_look <CREATURE> <seed>");
+        else if (!app.selectCreatureLook(name, uint32_t(seed))) fail("creature_look: " + rest);
+        else note("ok   " + line);
+        ++pc_;
+    }
     else if (cmd == "model_search") { std::snprintf(app.modelSearch_, sizeof app.modelSearch_, "%s", rest == "-" ? "" : rest.c_str()); note("ok   " + line); ++pc_; }
     else if(cmd=="definition_clone" || cmd=="definition_clone_refused" || cmd=="definition_clone_creature" || cmd=="definition_clone_creature_refused") {
         const bool creature=cmd=="definition_clone_creature" || cmd=="definition_clone_creature_refused";
