@@ -600,7 +600,8 @@ std::string App::exportModelGlb() {
                                             scene.images, textureIds, scene.warnings);
         mesh.instanceCount = 1;
         scene.meshes.push_back(std::move(mesh));
-        foliageexport::Instance at; at.mesh = 0; at.prim = 0;
+        // 100 mesh units = 1 m: the same 0.01 scale the importer undoes.
+        foliageexport::Instance at; at.mesh = 0; at.prim = 0; at.scale = 0.01f;
         scene.instances.push_back(at);
         foliageexport::writeModelGlb(scene, out);
         for (const auto& warning : scene.warnings) pushLog("model export: " + warning, 1);
