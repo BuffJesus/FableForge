@@ -1,4 +1,6 @@
-> Current development checkpoint, 2026-10-23: [Creature placement profiles](HANDOFF_CREATURE_PROFILES_2026-10-23.md). The runtime-profile archive passes 119 identities, 145 documentation links and four extracted workflows: retail/GUI smoke, 16 metadata-profile placements and eight malformed-profile refusals. 146 workflows not run; two unrelated corpus skips. The unchanged import gate was not repeated. Whole-creature presentation and gameplay remain unverified; RC2 unchanged.
+> Resume, 2026-10-26: [Creature assembly](HANDOFF_CREATURE_ASSEMBLY_2026-10-26.md). Pose oracle/retail bind gates pass; a core assembler builds bind-pose Creatures from seeds (188/330 retail assemble, 142 base-mesh refusals). GUI preview next.
+>
+> Previous development checkpoint, 2026-10-23: [Creature placement profiles](HANDOFF_CREATURE_PROFILES_2026-10-23.md). The runtime-profile archive passes 119 identities, 145 documentation links and four extracted workflows: retail/GUI smoke, 16 metadata-profile placements and eight malformed-profile refusals. 146 workflows not run; two unrelated corpus skips. The unchanged import gate was not repeated. Whole-creature presentation and gameplay remain unverified; RC2 unchanged.
 
 # Albion Atlas -> 1.0: what it should do, what it can't, and how we get there
 
