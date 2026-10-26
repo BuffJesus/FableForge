@@ -10,6 +10,12 @@
 >    to a retail donor's bind pose, segment triangles by nearest donor part (head/torso/legs seams),
 >    transfer weights from the donor surface, keep the donor skeleton exact, preview in Creature looks.
 >
+> Known limitation (found 2026-10-26 by the rc.3 package gate): writes fail once a staged path
+> reaches MAX_PATH (260). Definition saves stage `CompiledDefs/forge-def-prepare-<id>-0/new/
+> pool-normalized.bin`, so an install path over ~200 characters breaks them. The executables
+> have no longPathAware manifest and the writers use plain std::ofstream. Fix: manifest plus a
+> writer audit (or \\?\ paths); add a long-root package workflow. Default Steam paths are ~90.
+>
 > Previous development checkpoint, 2026-10-23: [Creature placement profiles](HANDOFF_CREATURE_PROFILES_2026-10-23.md). The runtime-profile archive passes 119 identities, 145 documentation links and four extracted workflows: retail/GUI smoke, 16 metadata-profile placements and eight malformed-profile refusals. 146 workflows not run; two unrelated corpus skips. The unchanged import gate was not repeated. Whole-creature presentation and gameplay remain unverified; RC2 unchanged.
 
 # Albion Atlas -> 1.0: what it should do, what it can't, and how we get there

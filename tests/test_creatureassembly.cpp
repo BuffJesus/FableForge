@@ -108,7 +108,11 @@ int main(int argc,char** argv)try {
             } catch(const std::exception& error) {row["refused"]=error.what();++outcomes[error.what()];}
             rows.push_back(std::move(row));
         }
-        std::cout<<nlohmann::json{{"seed",seed},{"outcomes",outcomes},{"records",rows}}.dump(1)<<'\n';return 0;
+        std::cout<<nlohmann::json{{"seed",seed},{"outcomes",outcomes},{"records",rows}}.dump(1)<<'\n';
+        // Anything but an assembly or the known base-mesh refusal is a failure.
+        for(const auto& [outcome,count]:outcomes)
+            if(outcome!="assembled"&&outcome.find("no substituted body parts")==std::string::npos)return 1;
+        return 0;
     }
     require(argc==1,"expected --retail <install> <schema> [seed] [obj-dir] or no arguments");
     const creatureassembly::Sources none{[](uint32_t)->std::string{throw std::runtime_error("unused");},
@@ -119,5 +123,25 @@ int main(int argc,char** argv)try {
     require(refused,"missing resolvers must refuse");refused=false;
     try{creatureassembly::assemble({}, 0, false, none);}catch(const std::runtime_error&){refused=true;}
     require(refused,"empty creature prefix must refuse");
+    // merge(): parts share one geometry; vertex/material indices offset per part,
+    // an index past a part's own materials becomes untextured (-1), and composed
+    // replacements apply once from the authored IDs (10->20 and 20->30 never chain).
+    creatureassembly::Assembly assembly;
+    for(size_t p=0;p<2;++p) {
+        creatureassembly::Part part;
+        part.posed.vertices.resize(3);
+        part.posed.materials.resize(1);
+        part.posed.materials[0].diffuseTexture=p?20:10;part.posed.materials[0].bumpTexture=10;
+        part.posed.triangles.push_back({0,1,2,0});
+        part.posed.triangles.push_back({2,1,0,p?-1:1}); // part 0: index 1 is past its single material
+        part.textures={{10,20},{20,30}};
+        assembly.parts.push_back(std::move(part));
+    }
+    const auto merged=creatureassembly::merge(assembly);
+    require(merged.vertices.size()==6&&merged.materials.size()==2&&merged.triangles.size()==4,"merged counts differ");
+    require(merged.triangles[2].a==3&&merged.triangles[2].material==1,"second part indices were not offset");
+    require(merged.triangles[1].material==-1&&merged.triangles[3].material==-1,"out-of-range part material borrowed another part's");
+    require(merged.materials[0].diffuseTexture==20&&merged.materials[1].diffuseTexture==30&&merged.materials[0].bumpTexture==20,
+            "replacements chained or skipped a channel");
     std::cout<<"Creature assembly: PASS\n";return 0;
 } catch(const std::exception& error){std::cerr<<error.what()<<'\n';return 1;}

@@ -82,13 +82,17 @@ void App::setSaveRoot(const std::string& root) {
     const fs::path previousGraphics = graphicsBigPath().lexically_normal();
     const bool hadModel = !modelName_.empty();
     const uint32_t selectedModel = modelId_;
+    // A creature look has no mesh id; rebuild the look itself from the new banks.
+    const std::string selectedLook = (!creatureLookName_.empty() && modelName_ == creatureLookName_) ? creatureLookName_ : std::string();
+    const uint32_t selectedSeed = creatureLookSeed_;
     saveRoot_ = root;
     modelRoot_ = saveRoot();
     if (previous != fs::path(saveRoot()).lexically_normal()) resetModDestination();
     if (previousTextures != texturesBigPath().lexically_normal()) invalidateTextureViews();
     if (modelsLoaded_ && previousGraphics != graphicsBigPath().lexically_normal()) {
         refreshModels();
-        if (hadModel) selectModelById(selectedModel);
+        if (!selectedLook.empty()) selectCreatureLook(selectedLook, selectedSeed);
+        else if (hadModel) selectModelById(selectedModel);
     }
 }
 

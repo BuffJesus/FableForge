@@ -66,6 +66,15 @@ std::array<uint8_t, 4> weightBytes(const std::array<float, 4>& w) {
 }
 } // namespace
 
+std::string unsupportedReason(const forge::meshpreview::Geometry& g) {
+    if (g.bones.empty()) return "mesh has no bones";
+    std::set<std::string> names;
+    for (const auto& bone : g.bones)
+        if (bone.name.empty() || !names.insert(bone.name).second) return "repeated bone name " + bone.name;
+    for (const auto& v : g.vertices) if (!v.skinned) return "a vertex is not skinned";
+    return {};
+}
+
 std::vector<uint8_t> build(const foliageexport::Mesh& mesh, const std::vector<terrainexport::Image>& images) {
     const auto& g = mesh.geometry;
     if (g.bones.empty()) fail("mesh has no bones");

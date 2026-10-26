@@ -602,7 +602,10 @@ std::string App::exportModelGlb() {
         mesh.instanceCount = 1;
         // A single skinned retail mesh keeps its skeleton and weights (Blender
         // edits re-import against the same donor); posed looks stay static.
-        const bool rigged = !look && !modelGeometry_.bones.empty();
+        const std::string riggedRefusal = look ? std::string("posed creature look") : skinnedexport::unsupportedReason(modelGeometry_);
+        const bool rigged = riggedRefusal.empty();
+        if (!rigged && !look && !modelGeometry_.bones.empty())
+            scene.warnings.push_back("exported without its skeleton: " + riggedRefusal);
         if (rigged) skinnedexport::write(mesh, scene.images, out);
         else {
             scene.meshes.push_back(std::move(mesh));

@@ -39,7 +39,7 @@ not its inverse transpose.
 `fableforge_creatureassembly_tests --retail <install> <schema> [seed] [obj-dir]`
 (read-only) over all 330 CCreatureDef records, seeds 0-7 and 0x12345678:
 188 assemble, 142 refuse as "no substituted body parts", zero other failures.
-At 0x12345678 all 15 Creatures that selected a skeletal target scale 6-15 bones
+At 0x12345678 all 15 Creatures that selected a skeletal target scale 8-15 bones
 on every part; none without a target is scaled.
 
 Creature 9126 (meshes 3912/3914/3913), absolute extents (width/depth/height):
@@ -93,7 +93,10 @@ Full suite after the assembler/GUI work: 62/62 CTest targets pass.
 bones as nodes at bind, inverseBindMatrices = C^-1 * M * C (so meshimport's
 inverseBindInFable returns the mesh's own), JOINTS_0 local slots, WEIGHTS_0
 normalized bytes summing to 255 (largest remainder). The GUI's Export .glb uses
-it for any selected model with bones; Creature looks stay static (posed).
+it for selected models with bones; Creature looks stay static (posed). Review
+(2026-10-26 workflow) found 15 retail creatures with repeated bone names (IGNORE /
+EMITTER_ dummies: balverines, nymphs, trolls, dragon, scorpion king); those and any
+mesh with unskinned vertices export static with a warning (`unsupportedReason`).
 
 `fableforge_skinnedexport_tests --retail <graphics.big> <out> <ids>` runs retail ->
 rigged .glb -> loadSkinnedModel -> mapSkinToDonor -> prepareSkinnedMesh (the real
@@ -110,3 +113,25 @@ skinned writer) and the clipping diagnostic; after the fix all 12 meshes match U
 modulo the packer's whole-tile offset. Pinned tests updated (test_export 3694,
 meshinput edge fixture). 62/62 CTest, 91 geometry/URI import checks pass.
 NOT yet seen in game: check an imported model with an asymmetric texture.
+
+## Review and rc.3 status (end of 2026-10-26 session)
+
+An adversarial review workflow (4 reviewers, one skeptic per finding) over 7b69640..02c3ef2
+confirmed 6 defects, all fixed: rigged export now falls back to static for repeated bone
+names/unskinned vertices; merge() makes out-of-range part material indices untextured;
+save-root changes rebuild an active Creature look; stricter round-trip criteria (triangle
+count, full vertex coverage); stale meshcompose.hpp comment; AUTOMATION.md model_export.
+No reviewer found remaining code assuming the old stored 1-v convention.
+
+rc.3 package gate: passes 57/57 selected workflows from the short evidence root
+(C:/Users/Cornelio/AppData/Local/FableForgeEvidence/20261026). From the long checkout
+build/ root, definition_vectors fails: a 260-char MAX_PATH limit on staged definition
+writes (see ROADMAP known limitation). Not a regression in this work.
+
+Resume: rebuild, `python tools/package.py --no-check --version 0.18.1-rc.3 --output-dir
+dist/development/20261026-rc3`, run test_package.py with `--work-root` under FableForgeEvidence
+and the RC2 selection (FableForgeRelease/rc2-package-selection.json), check CI on the head,
+then tag v0.18.1-rc.3 on the branch head, attach the zip + Aeon guide zip, publish as
+prerelease. Draft notes: session scratchpad rc3-notes.md (copy kept below if lost):
+Creature looks; Export .glb (rigged); fixed flipped textures on model import (in-game check
+pending); known long-path limitation.

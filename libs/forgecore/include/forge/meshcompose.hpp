@@ -103,7 +103,8 @@ uint32_t packNormal(Vec3 n);
 // Saturate finite coordinates before integer conversion; non-finite input throws.
 int16_t compressUv(float v);
 // True when packing must saturate beyond ordinary 1/2048 quantization.
-// Non-finite input throws, as in compressUv. Call with the stored V (1-v).
+// Non-finite input throws, as in compressUv. Call with the stored V, which is the
+// glTF V unchanged (the value passed to compressUv).
 bool uvNeedsClamping(float v);
 
 } // namespace forge::meshcompose

@@ -13,6 +13,10 @@
 
 namespace albion::skinnedexport {
 
+// Empty when `geometry` can be exported rigged, else the reason it cannot
+// (no bones, an unskinned vertex, repeated bone names such as the retail
+// IGNORE/EMITTER_ dummies on balverines and trolls). Callers fall back to static.
+std::string unsupportedReason(const forge::meshpreview::Geometry& geometry);
 // `mesh` comes from foliageexport::makeMesh (material parts and images). Throws
 // for meshes without bones, unskinned vertices, duplicate bone names or
 // non-invertible binds: no partial rig is written.

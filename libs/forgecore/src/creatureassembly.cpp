@@ -64,7 +64,11 @@ meshpreview::Geometry merge(const Assembly& assembly) {
         }
         for(auto triangle:part.posed.triangles) {
             triangle.a+=uint32_t(vertexBase);triangle.b+=uint32_t(vertexBase);triangle.c+=uint32_t(vertexBase);
-            if(triangle.material>=0)triangle.material+=int32_t(materialBase);
+            // An index past this part's own materials is untextured, as in makeMesh;
+            // offsetting it would borrow the next part's material.
+            if(triangle.material>=0)
+                triangle.material=size_t(triangle.material)<part.posed.materials.size() ?
+                    triangle.material+int32_t(materialBase) : -1;
             out.triangles.push_back(triangle);
         }
         out.primitiveCount+=part.posed.primitiveCount;

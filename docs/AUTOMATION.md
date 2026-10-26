@@ -782,6 +782,11 @@ and exercises the existing undo paths.
   viewport; fails on a refusal such as an appearance without substituted parts. Widgets:
   `input_creature_look_search`, `creature_look_row_<NAME>`, `input_creature_look_seed`,
   `btn_creature_look_roll`. Script: `tests/ui/creature_looks.txt`.
+- `model_export`: write the previewed model or creature look to `<outdir>/<stem>.glb` (the Export
+  tab's output folder, `exports/` when empty; `set outdir` changes it). Skinned models keep their
+  skeleton and weights unless they have repeated bone names or unskinned vertices, which export
+  static with a log warning; looks append `_seed<N>`. Fails when nothing is selected. Widget
+  `btn_model_export`.
 - `set world_detail_limit <1..32>`: set both manual and automatic map ceilings.
 - `set world_detail_radius <100..1000>`: base radius in world metres.
 

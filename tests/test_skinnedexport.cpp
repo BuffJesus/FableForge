@@ -44,11 +44,15 @@ int main(int argc,char** argv)try {
         const auto key=[](float x,float y,float z){return std::tuple<long,long,long>{std::lround(x*100),std::lround(y*100),std::lround(z*100)};};
         for(size_t i=0;i<mesh.geometry.vertices.size();++i){const auto& v=mesh.geometry.vertices[i];grid.emplace(key(v.x,v.y,v.z),i);}
         size_t matched=0,uvSame=0,uvFlipped=0,weightsClose=0;
+        // Exported triangles (makeMesh may drop a collision hull) and the vertices they use.
+        size_t exportedTriangles=0;std::vector<bool> used(mesh.geometry.vertices.size()),covered(used.size());
+        for(const auto& part:mesh.parts){exportedTriangles+=part.indices.size()/3;for(const auto i:part.indices)used[i]=true;}
         for(const auto& v:composed.vertices) {
             const auto [first,last]=grid.equal_range(key(v.x,v.y,v.z));
             if(first==last)continue;
             ++matched;bool same=false,flipped=false,close=false;
             for(auto it=first;it!=last;++it) {
+                covered[it->second]=true;
                 const auto& o=mesh.geometry.vertices[it->second];
                 // Equal modulo the packer's whole-tile offset (wrap-equivalent).
                 const auto wraps=[](float d){return std::abs(d-std::round(d))<1e-3f;};
@@ -68,9 +72,12 @@ int main(int argc,char** argv)try {
             {"original_vertices",mesh.geometry.vertices.size()},{"composed_vertices",composed.vertices.size()},
             {"original_triangles",original.triangles.size()},{"composed_triangles",composed.triangles.size()},
             {"position_matched",matched},{"uv_same",uvSame},{"uv_flipped",uvFlipped},{"weights_within_0.02",weightsClose},
-            {"composed_bones",composed.bones.size()}};
-        report.push_back(row);
-        passed&=matched==composed.vertices.size()&&uvSame==matched&&weightsClose==matched&&composed.bones.size()==original.bones.size();
+            {"composed_bones",composed.bones.size()},{"exported_triangles",exportedTriangles}};
+        size_t uncovered=0;
+        for(size_t i=0;i<used.size();++i)uncovered+=used[i]&&!covered[i];
+        report.push_back(row);report.back()["uncovered_vertices"]=uncovered;
+        passed&=!composed.vertices.empty()&&composed.triangles.size()==exportedTriangles&&uncovered==0&&
+                matched==composed.vertices.size()&&uvSame==matched&&weightsClose==matched&&composed.bones.size()==original.bones.size();
     }
     std::cout<<nlohmann::json{{"passed",passed},{"meshes",report}}.dump(1)<<'\n';
     return passed?0:1;
