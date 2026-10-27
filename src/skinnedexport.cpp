@@ -9,6 +9,7 @@
 
 #include "exportfiles.hpp"
 #include "glbwriter.hpp"
+#include "forge/texturewrite.hpp"
 
 namespace albion::skinnedexport {
 namespace {
@@ -188,6 +189,35 @@ std::vector<uint8_t> build(const foliageexport::Mesh& mesh, const std::vector<te
     out.insert(out.end(), js.begin(), js.end());
     out.insert(out.end(), binChunk.begin(), binChunk.end());
     return out;
+}
+
+void attachInputTextures(foliageexport::Mesh& mesh, std::vector<terrainexport::Image>& images,
+                         const std::vector<int>& slotOfMaterial,
+                         const std::vector<std::vector<uint8_t>>& materialImages,
+                         std::map<int, int>& decoded, std::vector<std::string>& warnings) {
+    for (auto& part : mesh.parts) {
+        if (part.material < 0 || size_t(part.material) >= slotOfMaterial.size()) continue;
+        const int slot = slotOfMaterial[size_t(part.material)];
+        if (slot < 0 || size_t(slot) >= materialImages.size() || materialImages[size_t(slot)].empty()) continue;
+        auto found = decoded.find(slot);
+        if (found == decoded.end()) {
+            std::string error;
+            const auto image = forge::texturewrite::decodeImage(materialImages[size_t(slot)], error);
+            int index = -1;
+            if (error.empty()) {
+                terrainexport::Image out;
+                out.width = uint32_t(image.width); out.height = uint32_t(image.height);
+                out.rgba = image.rgba; out.name = mesh.name + "_material" + std::to_string(slot);
+                images.push_back(std::move(out));
+                index = int(images.size() - 1);
+            } else warnings.push_back("material slot " + std::to_string(slot) + ": " + error);
+            found = decoded.emplace(slot, index).first;
+        }
+        if (found->second < 0) continue;
+        part.image = found->second;
+        const auto& rgba = images[size_t(found->second)].rgba;
+        for (size_t i = 3; i < rgba.size(); i += 4) if (rgba[i] < 255) { part.hasAlpha = true; break; }
+    }
 }
 
 std::vector<fs::path> write(const foliageexport::Mesh& mesh, const std::vector<terrainexport::Image>& images,

@@ -510,6 +510,41 @@ void readSkinAttributes(const GltfBuffers& g,const json& attributes,size_t count
     }
 }
 
+// Encoded bytes of a material's baseColorTexture image (bufferView, data URI or
+// sidecar file). Best effort: the geometry import never depends on it, so any
+// problem leaves the slot without an image and records a note.
+std::vector<uint8_t> baseColourImage(const GltfBuffers& g, const fs::path& path, size_t material,
+                                     std::vector<std::string>& notes) {
+    try {
+        const auto& m = g.doc.at("materials").at(material);
+        if (!m.contains("pbrMetallicRoughness") || !m["pbrMetallicRoughness"].contains("baseColorTexture")) return {};
+        const auto& texture = g.doc.at("textures").at(gltfSize(m["pbrMetallicRoughness"]["baseColorTexture"], "index"));
+        if (!texture.contains("source")) return {};
+        const auto& image = g.doc.at("images").at(gltfSize(texture, "source"));
+        if (image.contains("bufferView")) {
+            const auto& view = g.doc.at("bufferViews").at(gltfSize(image, "bufferView"));
+            const auto& buffer = g.buffers.at(gltfSize(view, "buffer"));
+            const size_t offset = view.contains("byteOffset") ? gltfSize(view, "byteOffset") : 0, length = gltfSize(view, "byteLength");
+            if (offset > buffer.size() || length > buffer.size() - offset) throw std::runtime_error("image view outside its buffer");
+            return {buffer.begin() + std::ptrdiff_t(offset), buffer.begin() + std::ptrdiff_t(offset + length)};
+        }
+        const std::string uri = image.at("uri").get<std::string>();
+        if (uri.rfind("data:", 0) == 0) {
+            // Same base64 payload rules as buffers; only the media type differs.
+            const size_t comma = uri.find(',');
+            if (comma == std::string::npos || uri.substr(0, comma).find(";base64") == std::string::npos)
+                throw std::runtime_error("image data URI is not base64");
+            return decodeBufferUri("data:application/octet-stream;base64" + uri.substr(comma));
+        }
+        const auto decoded = decodeUriEscapes(uri);
+        if (decoded.find('\0') != std::string::npos) throw std::runtime_error("NUL in image URI");
+        return readFile(path.parent_path() / fs::u8path(decoded));
+    } catch (const std::exception& e) {
+        notes.push_back("material " + std::to_string(material) + ": base colour texture not read (" + e.what() + ")");
+        return {};
+    }
+}
+
 Model loadGltf(const fs::path& path,bool skinned=false) {
     Model model;
     const GltfBuffers g = openGltf(path,skinned);
@@ -537,6 +572,7 @@ Model loadGltf(const fs::path& path,bool skinned=false) {
         if (it != slotOf.end()) return it->second;
         const int slot = int(model.materialNames.size());
         model.materialNames.push_back(name); slotOf[identity] = slot;
+        model.materialImages.push_back(identity ? baseColourImage(g, path, *identity, model.notes) : std::vector<uint8_t>{});
         return slot;
     };
     // Traverse the selected scene iteratively: malformed cycles and deep valid
@@ -702,7 +738,7 @@ Model loadGltf(const fs::path& path,bool skinned=false) {
             }
         }
     }
-    if (model.materialNames.empty()) model.materialNames.push_back("default");
+    if (model.materialNames.empty()) { model.materialNames.push_back("default"); model.materialImages.emplace_back(); }
     return model;
 }
 
@@ -840,7 +876,7 @@ Model loadObj(const fs::path& path) {
         auto it = slotOf.find(name);
         if (it != slotOf.end()) return it->second;
         const int s = int(model.materialNames.size());
-        model.materialNames.push_back(name); slotOf[name] = s;
+        model.materialNames.push_back(name); model.materialImages.emplace_back(); slotOf[name] = s;
         return s;
     };
     slot = ensureSlot("default");

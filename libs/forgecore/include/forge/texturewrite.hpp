@@ -33,6 +33,8 @@ struct Image {
 
 // PNG/JPG/BMP/TGA through stb_image. Empty image + error on failure.
 Image loadImage(const std::string& path, std::string& error);
+// The same decoders over encoded bytes in memory (e.g. a glTF material image).
+Image decodeImage(const std::vector<uint8_t>& bytes, std::string& error);
 // Resample to (w, h): 2x2 box when halving exactly, bilinear otherwise.
 Image resample(const Image& img, int w, int h);
 Image downsample(const Image& img);   // one mip step (box filter; odd dims nearest)

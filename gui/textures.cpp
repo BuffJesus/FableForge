@@ -615,22 +615,34 @@ bool App::fitModelToLook(const std::string& model) {
         std::string stem = creatureLookName_ + "_seed" + std::to_string(creatureLookSeed_) + "_fit";
         size_t written = 0;
         forge::creatureassembly::Assembly preview;
+        // Fitted materials are the input primitives; map each to its material slot.
+        std::vector<int> slotOfMaterial, previewSlots;
+        for (const auto& prim : input.prims) slotOfMaterial.push_back(prim.material);
+        for (const auto& note : input.notes) pushLog("creature fit: " + note, 1);
         for (size_t i = 0; i < fitted.parts.size(); ++i) {
             const auto& part = fitted.parts[i];
             if (part.geometry.triangles.empty()) continue;
             const auto name = stem + "_body" + std::to_string(assembly.parts[i].body) + "_alt" + std::to_string(assembly.parts[i].alternative);
             std::vector<terrainexport::Image> images; std::map<uint32_t, int> ids; std::vector<std::string> warnings;
             const terrainexport::Context noTextures;
-            const auto mesh = foliageexport::makeMesh(assembly.parts[i].mesh, name, name, part.geometry, false, noTextures, images, ids, warnings);
+            auto mesh = foliageexport::makeMesh(assembly.parts[i].mesh, name, name, part.geometry, false, noTextures, images, ids, warnings);
+            std::map<int, int> decoded;
+            skinnedexport::attachInputTextures(mesh, images, slotOfMaterial, input.materialImages, decoded, warnings);
+            for (const auto& warning : warnings) pushLog("creature fit: " + warning, 1);
             skinnedexport::write(mesh, images, std::filesystem::u8path(folder) / (name + ".glb"));
             ++written;
             forge::creatureassembly::Part shown; shown.mesh = assembly.parts[i].mesh; shown.posed = part.geometry;
             preview.parts.push_back(std::move(shown));
+            previewSlots.insert(previewSlots.end(), slotOfMaterial.begin(), slotOfMaterial.end());
         }
-        // Show the fitted parts (already in the donor's bind space) in the viewport.
+        // Show the fitted parts (already in the donor's bind space) in the viewport,
+        // with the input's own textures; merge() concatenates each part's materials.
         modelGeometry_ = forge::creatureassembly::merge(preview);
         std::vector<terrainexport::Image> images; std::map<uint32_t, int> textureIds; std::vector<std::string> warnings;
-        modelReady_ = renderer_.setModelPreview(foliageexport::makeMesh(0, modelName_, modelName_, modelGeometry_, false, ctx_, images, textureIds, warnings), images);
+        auto shownMesh = foliageexport::makeMesh(0, modelName_, modelName_, modelGeometry_, false, ctx_, images, textureIds, warnings);
+        std::map<int, int> decoded;
+        skinnedexport::attachInputTextures(shownMesh, images, previewSlots, input.materialImages, decoded, warnings);
+        modelReady_ = renderer_.setModelPreview(shownMesh, images);
         char scale[32]; std::snprintf(scale, sizeof scale, "%.3f", fitted.scale);
         creatureFitStatus_ = "Fitted (scale " + std::string(scale) + ") into " + std::to_string(written) + " rigged parts in " + folder + ".";
         pushLog("creature fit: " + creatureFitStatus_, 0);

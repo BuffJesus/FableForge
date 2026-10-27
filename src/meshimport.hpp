@@ -41,6 +41,9 @@ struct SkinBinding {
 struct Model {
     std::vector<forge::meshcompose::Primitive> prims;   // one per glTF primitive / OBJ material group, in Fable space
     std::vector<std::string> materialNames;             // per slot
+    // Encoded base-colour image per slot (glTF baseColorTexture; empty when none, for OBJ,
+    // or when unreadable, which adds a note). Read-only context: imports never use it.
+    std::vector<std::vector<uint8_t>> materialImages;
     std::vector<std::string> notes;
     std::vector<SkinBinding> skins; // loadSkinnedModel only, parallel to prims
     struct SourceFile {std::filesystem::path path,resolved;std::string sha256;};

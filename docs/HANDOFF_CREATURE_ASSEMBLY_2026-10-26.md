@@ -179,3 +179,10 @@ previewing the fit (untextured). Owner choice now uses one global 32-nearest que
 sample point (absent parts take the 32nd distance as a lower bound): the fit went from
 ~40 s to ~1 s with unchanged oracle fidelity. UI script passes; guide section added.
 Next: carry input textures into preview/parts, an "import all parts" action, in-game check.
+
+Textures: meshimport::Model now keeps each glTF material slot's encoded base-colour image
+(`materialImages`: bufferView, data URI or sidecar; best effort with a note), decoded by
+`texturewrite::decodeImage`; `skinnedexport::attachInputTextures` puts them on fitted parts
+(CLI + GUI) and the GUI preview. The fitted seed-3 bandit renders fully textured on the
+seed-7 skeletons (docs/guide/img/creature_fit.png), the right way up, which also cross-checks
+the V fix along export -> loadModel -> fit -> preview. Textured parts still pass `--glb`.

@@ -62,13 +62,19 @@ static int runCreatureFit(const Args& args) {
     fs::create_directories(output);
     nlohmann::json report{{"creature",positional[1]},{"seed",seed},{"scale",fitted.scale},{"offset",fitted.offset},{"parts",nlohmann::json::array()}};
     const terrainexport::Context noTextures;
+    std::vector<int> slotOfMaterial;for(const auto& prim:model.prims)slotOfMaterial.push_back(prim.material);
+    for(const auto& note:model.notes) std::cerr<<"note: "<<note<<'\n';
     for(size_t i=0;i<fitted.parts.size();++i) {
         const auto& source=assembly.parts[i];const auto& part=fitted.parts[i];
         nlohmann::json row{{"body",source.body},{"alternative",source.alternative},{"donor_mesh",source.mesh},{"triangles",part.sourceTriangles}};
         if(part.geometry.triangles.empty()) {row["skipped"]="no input triangles nearest this part";report["parts"].push_back(row);continue;}
         std::vector<terrainexport::Image> images;std::map<uint32_t,int> ids;std::vector<std::string> warnings;
         const auto stem=positional[1]+"_body"+std::to_string(source.body)+"_alt"+std::to_string(source.alternative);
-        const auto mesh=foliageexport::makeMesh(source.mesh,stem,stem,part.geometry,false,noTextures,images,ids,warnings);
+        auto mesh=foliageexport::makeMesh(source.mesh,stem,stem,part.geometry,false,noTextures,images,ids,warnings);
+        std::map<int,int> decoded;
+        skinnedexport::attachInputTextures(mesh,images,slotOfMaterial,model.materialImages,decoded,warnings);
+        for(const auto& warning:warnings) std::cerr<<"warning: "<<warning<<'\n';
+        row["textures"]=images.size();
         const auto path=output/(stem+".glb");
         skinnedexport::write(mesh,images,path);
         const auto written=path.u8string();

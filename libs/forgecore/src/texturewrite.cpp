@@ -137,6 +137,18 @@ Image loadImage(const std::string& path, std::string& error) {
     return out;
 }
 
+Image decodeImage(const std::vector<uint8_t>& bytes, std::string& error) {
+    Image out;
+    int w = 0, h = 0, n = 0;
+    if (bytes.empty() || bytes.size() > size_t(std::numeric_limits<int>::max())) { error = "cannot decode image: empty or too large"; return out; }
+    unsigned char* data = stbi_load_from_memory(bytes.data(), int(bytes.size()), &w, &h, &n, 4);
+    if (!data) { error = std::string("cannot decode image: ") + (stbi_failure_reason() ? stbi_failure_reason() : "unknown"); return out; }
+    out.width = w; out.height = h;
+    out.rgba.assign(data, data + size_t(w) * size_t(h) * 4);
+    stbi_image_free(data);
+    return out;
+}
+
 Image downsample(const Image& img) {
     Image out;
     out.width = std::max(1, img.width >> 1); out.height = std::max(1, img.height >> 1);

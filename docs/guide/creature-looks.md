@@ -30,6 +30,8 @@ the look's head, body and legs, and gives each piece the skin weights of the par
 it replaces. One rigged .glb per part goes to the output folder on the Export tab,
 named `<CREATURE>_seed<N>_fit_body<b>_alt<a>.glb`; import each into its body slot as
 a custom creature. The command line does the same: `forge creature-fit`.
+Textures embedded in a .glb/.gltf (base colour) come along into the preview and
+the rigged parts.
 
 ![A bandit body fitted onto another seed's parts](img/creature_fit.png)
 

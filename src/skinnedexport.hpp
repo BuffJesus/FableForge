@@ -7,9 +7,12 @@
 
 #include <cstdint>
 #include <filesystem>
+#include <map>
+#include <string>
 #include <vector>
 
 #include "foliageexport.hpp"
+#include "forge/meshcompose.hpp"
 
 namespace albion::skinnedexport {
 
@@ -24,5 +27,15 @@ std::vector<uint8_t> build(const foliageexport::Mesh& mesh, const std::vector<te
 std::vector<std::filesystem::path> write(const foliageexport::Mesh& mesh,
                                          const std::vector<terrainexport::Image>& images,
                                          const std::filesystem::path& out);
+
+// For fitted geometry: `slotOfMaterial[m]` is the input material slot behind mesh
+// material m (characterfit materials = input primitives). Give each mesh part that
+// slot's decoded base-colour image, appending decoded
+// images to `images` once per material slot (`decoded` caches slot -> image index).
+// Undecodable images are skipped with a warning; parts stay untextured.
+void attachInputTextures(foliageexport::Mesh& mesh, std::vector<terrainexport::Image>& images,
+                         const std::vector<int>& slotOfMaterial,
+                         const std::vector<std::vector<uint8_t>>& materialImages,
+                         std::map<int, int>& decoded, std::vector<std::string>& warnings);
 
 } // namespace albion::skinnedexport
