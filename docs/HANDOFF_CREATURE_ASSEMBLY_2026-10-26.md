@@ -135,3 +135,10 @@ then tag v0.18.1-rc.3 on the branch head, attach the zip + Aeon guide zip, publi
 prerelease. Draft notes: session scratchpad rc3-notes.md (copy kept below if lost):
 Creature looks; Export .glb (rigged); fixed flipped textures on model import (in-game check
 pending); known long-path limitation.
+
+**Published:** v0.18.1-rc.3 prerelease, tag on 24e817c,
+https://github.com/BuffJesus/FableForge/releases/tag/v0.18.1-rc.3 . Archive SHA256
+b40259144405cfdc37c2c502597a67a3553ad57ec89e292802cb3bab9d365d9a; gate 124 identities, 158 links,
+57/57 workflows (FableForgeEvidence/20261026). Notes: docs/releases/0.18.1-rc.3.md. PR #2 stays
+draft/unmerged. Next: in-game look at an imported asymmetric-texture model (V fix), then the
+donor-guided character conversion lane (ROADMAP top).

@@ -1,4 +1,4 @@
-> Resume, 2026-10-26: [Creature assembly](HANDOFF_CREATURE_ASSEMBLY_2026-10-26.md). Pose oracle/retail bind gates pass; a core assembler builds bind-pose Creatures from seeds (188/330 retail assemble, 142 base-mesh refusals). Assets > Models > Creature looks and Export .glb landed.
+> Resume, 2026-10-26: [Creature assembly](HANDOFF_CREATURE_ASSEMBLY_2026-10-26.md). Creature looks, rigged .glb export and the import V-flip fix shipped in v0.18.1-rc.3 (prerelease). Next: in-game V check, then donor-guided character conversion.
 >
 > Community candidates (Discord, 2026-10-26, from a modder building a Chocolate Box companion):
 > 1. **UI translation** (top request; Italian modder): string extraction across the GUI, language picker.
