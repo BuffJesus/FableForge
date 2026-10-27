@@ -158,3 +158,17 @@ input return to their own part on 100% (3912/3914/3913, 4543/4535/4542, 3909/391
 and 99.97% (5157/5163/5158) of triangles, with exact weights on every vertex.
 Next: a CLI that loads a .glb/.obj, fits it to a Creature look's parts and writes one
 rigged .glb per part (skinnedexport) for the existing donor import; then GUI.
+
+## creature-fit CLI
+
+`forge creature-fit <model.glb|.gltf|.obj> <CREATURE> --install <root> --out <dir> [--seed n]
+[--schema docs/re_reference/def_schema.json] [--neighbours 1-64] [--no-align] [--json]` selects
+the look's parts for the seed, fits the model, and writes `<CREATURE>_body<b>_alt<a>.glb` per
+part with that part's own skeleton, ready for `creature-import --body b --alternative a`.
+
+End to end: the static seed-3 CREATURE_BANDIT_GRUNT export fitted onto the seed-7 parts
+(4543/4535/4542): 1149 + 2282 + 1352 = all 4783 input triangles. Each part passes
+`fableforge_skinnedexport_tests --glb <graphics.big> <part.glb> <donor id>` (strict loader,
+donor mapping, real composer; all triangles and 26/42/15 donor bones kept). Render:
+docs/guide/img/creature_fit.png (head/torso/legs split cleanly). Not imported or seen in game.
+Next: GUI entry (Creature looks card: "Fit a model to this look...") and an import-all step.

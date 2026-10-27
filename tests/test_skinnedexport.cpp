@@ -16,8 +16,24 @@ using albion::terrainexport::Context;
 static void require(bool ok,const std::string& message){if(!ok)throw std::runtime_error(message);}
 
 int main(int argc,char** argv)try {
+    // --glb <graphics.big> <rigged.glb> <donor-mesh-id>: an authored rig (e.g. creature-fit
+    // output) through the strict loader, donor mapping and the real composer.
+    if(argc==5&&std::string_view(argv[1])=="--glb") {
+        const auto graphics=forge::big::File::open(argv[2]);
+        const uint32_t donorId=uint32_t(std::stoul(argv[4]));
+        const auto donor=forge::meshpreview::readLod0(argv[2],donorId);
+        const auto model=albion::meshimport::loadSkinnedModel(argv[3]);
+        const auto mapped=albion::meshimport::mapSkinToDonor(model,donor.bones);
+        std::vector<forge::meshcompose::Material> materials(model.prims.size());
+        const auto entry=albion::meshimport::prepareSkinnedMesh(model,graphics,donorId,"MESH_FIT_CHECK",materials,false);
+        const auto composed=forge::meshpreview::decodeLods(entry.data,entry.subHeader,5).at(0);
+        size_t triangles=0;for(const auto& p:model.prims)triangles+=p.faces.size();
+        std::cout<<nlohmann::json{{"glb",argv[3]},{"donor",donorId},{"mapped_primitives",mapped.size()},{"input_triangles",triangles},
+            {"composed_triangles",composed.triangles.size()},{"composed_bones",composed.bones.size()},{"donor_bones",donor.bones.size()}}.dump()<<'\n';
+        return composed.triangles.size()==triangles&&composed.bones.size()==donor.bones.size()?0:1;
+    }
     // --retail <graphics.big> <out-dir> <mesh-id>...
-    require(argc>=5&&std::string_view(argv[1])=="--retail","usage: --retail <graphics.big> <out-dir> <mesh-id>...");
+    require(argc>=5&&std::string_view(argv[1])=="--retail","usage: --retail <graphics.big> <out-dir> <mesh-id>... | --glb <graphics.big> <rigged.glb> <donor-mesh-id>");
     const fs::path bank=argv[2],out=argv[3];
     const auto graphics=forge::big::File::open(bank);
     const Context textures;

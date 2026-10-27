@@ -70,6 +70,7 @@ int usage() {
         "  forge mesh-import <model.glb|.gltf|.obj> <NAME> [--texture <png> | --texture-id <n>] [--donor <OBJECT_...>] [--stored] [--no-collision] [--install <root>]\n"
         "  forge mesh-replace <model.glb|.gltf|.obj> <MESH_NAME|id> [--stored] [--install <root>] (static geometry; preserves materials and collision)\n"
         "      (a custom static object: MESH_<NAME> appended to graphics.big, its diffuse to textures.big, a collision hull from its own triangles, an OBJECT_<NAME> def copied from the donor; Y-up model space)\n"
+        "  forge creature-fit <model.glb|.gltf|.obj> <CREATURE> --install <root> --out <dir> [--seed <n>] [--schema <json>] [--neighbours <1-64>] [--no-align] [--json]\n"
         "  forge creature-import <model.glb|.gltf> <NAME> --donor-index <n> --body <n> --alternative <n> --schema <json> --install <root> --out <root> [--texture <image> | --texture-id <n>] [--texture-format dxt1|dxt3|argb8888] [--stored] [--json]\n"
         "      (private root/body/appearance clone + one selected body mesh; other body slots and animations remain shared; runtime compatibility unverified)\n"
         "  forge textures [filter] [--bank <bank>]              (list textures.big entries: id, size, format, bank)\n"
