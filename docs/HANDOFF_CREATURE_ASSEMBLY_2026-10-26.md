@@ -142,3 +142,19 @@ b40259144405cfdc37c2c502597a67a3553ad57ec89e292802cb3bab9d365d9a; gate 124 ident
 57/57 workflows (FableForgeEvidence/20261026). Notes: docs/releases/0.18.1-rc.3.md. PR #2 stays
 draft/unmerged. Next: in-game look at an imported asymmetric-texture model (V fix), then the
 donor-guided character conversion lane (ROADMAP top).
+
+## Donor-guided character conversion: core fitter
+
+`forge::characterfit::fit(input primitives, donor part geometries, options)` aligns an
+input humanoid to the donor (height scale, XY centre, feet on feet), assigns each triangle
+to the part with the least summed corner+centroid distance to that part's surface (the
+centroid-only rule misassigned 2-3% where layers overlap), duplicates seam vertices per
+part, and blends each vertex's influences from the part's k nearest donor vertices
+(exact hit copies unchanged). Every part keeps the donor skeleton blocks untouched.
+
+`fableforge_characterfit_tests` (CTest: synthetic split/alignment/refusals) and
+`--retail <graphics.big> <part ids>` self-fit oracle: the donor's own parts merged into one
+input return to their own part on 100% (3912/3914/3913, 4543/4535/4542, 3909/3911/3910)
+and 99.97% (5157/5163/5158) of triangles, with exact weights on every vertex.
+Next: a CLI that loads a .glb/.obj, fits it to a Creature look's parts and writes one
+rigged .glb per part (skinnedexport) for the existing donor import; then GUI.
