@@ -17,6 +17,7 @@
 #include "windowsprocess.hpp"
 #include "forge/defschema.hpp"
 #include "skinnedexport.hpp"
+#include "forge/characterfit.hpp"
 
 namespace albion::gui {
 using theme::S;
@@ -580,8 +581,65 @@ void App::drawCreatureLooks(float pad, float inner, float cardInner) {
         ImGui::TextWrapped("%s", creatureLookSummary_.c_str());
         theme::hint("Bind pose. The seed is the creature's stored appearance Seed; animation is not shown.");
     }
+    if (chosen) {
+        ImGui::Spacing();
+        theme::label("Fit your own model to this look");
+        drawPathInput("creaturefit", "A .glb, .gltf or .obj character", creatureFitPath_, sizeof creatureFitPath_, cardInner,
+                      PathField::Model, "input_creature_fit_model");
+        if (theme::primaryButton("Fit to this look", ImVec2(cardInner, S(28)), creatureFitPath_[0] != 0))
+            fitModelToLook(creatureFitPath_);
+        auto_.registerWidget("btn_creature_fit");
+        if (!creatureFitError_.empty()) {
+            ImGui::PushStyleColor(ImGuiCol_Text, theme::vec(theme::Error)); ImGui::TextWrapped("%s", creatureFitError_.c_str()); ImGui::PopStyleColor();
+        } else if (!creatureFitStatus_.empty()) {
+            ImGui::PushStyleColor(ImGuiCol_Text, theme::vec(theme::Success)); ImGui::TextWrapped("%s", creatureFitStatus_.c_str()); ImGui::PopStyleColor();
+        }
+        theme::hint("Scaled to this creature's height, split into its head, body and legs, and weighted to each part's own skeleton. "
+                    "Writes one rigged .glb per part to the Export output folder for import as a custom creature.");
+    }
     theme::endCard();
     ImGui::Dummy(ImVec2(0, S(8)));
+}
+
+bool App::fitModelToLook(const std::string& model) {
+    creatureFitStatus_.clear(); creatureFitError_.clear();
+    try {
+        if (creatureLookName_.empty() || !creatureLookSchema_) throw std::runtime_error("show a creature look first");
+        if (!ctx_.ready() || ctxFuture_.valid()) throw std::runtime_error("wait for assets to finish loading");
+        const auto assembly = ctx_.assembleCreature(creatureLookName_, creatureLookSeed_, modelBankPath_, creatureLookSchema_.get());
+        std::vector<forge::meshpreview::Geometry> donor;
+        for (const auto& part : assembly.parts) donor.push_back(forge::meshpreview::readLod0(modelBankPath_, part.mesh));
+        const auto input = meshimport::loadModel(std::filesystem::u8path(model));
+        const auto fitted = forge::characterfit::fit(input.prims, donor);
+        const std::string folder = outDirBuf_[0] ? outDirBuf_ : "exports";
+        std::string stem = creatureLookName_ + "_seed" + std::to_string(creatureLookSeed_) + "_fit";
+        size_t written = 0;
+        forge::creatureassembly::Assembly preview;
+        for (size_t i = 0; i < fitted.parts.size(); ++i) {
+            const auto& part = fitted.parts[i];
+            if (part.geometry.triangles.empty()) continue;
+            const auto name = stem + "_body" + std::to_string(assembly.parts[i].body) + "_alt" + std::to_string(assembly.parts[i].alternative);
+            std::vector<terrainexport::Image> images; std::map<uint32_t, int> ids; std::vector<std::string> warnings;
+            const terrainexport::Context noTextures;
+            const auto mesh = foliageexport::makeMesh(assembly.parts[i].mesh, name, name, part.geometry, false, noTextures, images, ids, warnings);
+            skinnedexport::write(mesh, images, std::filesystem::u8path(folder) / (name + ".glb"));
+            ++written;
+            forge::creatureassembly::Part shown; shown.mesh = assembly.parts[i].mesh; shown.posed = part.geometry;
+            preview.parts.push_back(std::move(shown));
+        }
+        // Show the fitted parts (already in the donor's bind space) in the viewport.
+        modelGeometry_ = forge::creatureassembly::merge(preview);
+        std::vector<terrainexport::Image> images; std::map<uint32_t, int> textureIds; std::vector<std::string> warnings;
+        modelReady_ = renderer_.setModelPreview(foliageexport::makeMesh(0, modelName_, modelName_, modelGeometry_, false, ctx_, images, textureIds, warnings), images);
+        char scale[32]; std::snprintf(scale, sizeof scale, "%.3f", fitted.scale);
+        creatureFitStatus_ = "Fitted (scale " + std::string(scale) + ") into " + std::to_string(written) + " rigged parts in " + folder + ".";
+        pushLog("creature fit: " + creatureFitStatus_, 0);
+        return true;
+    } catch (const std::exception& e) {
+        creatureFitError_ = e.what();
+        pushLog("creature fit failed: " + creatureFitError_, 2);
+        return false;
+    }
 }
 
 std::string App::exportModelGlb() {

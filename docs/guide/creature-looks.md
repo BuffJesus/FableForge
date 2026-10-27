@@ -20,3 +20,18 @@ shape here as in the game.
 The preview shows the creature in its bind pose (arms out); animation is not
 played. Creatures without swappable body parts are refused with a message
 instead of showing an incomplete model.
+
+## Fit your own model to a look
+
+Any humanoid model can wear a look's skeletons. With a look showing, choose a
+.glb, .gltf or .obj under **Fit your own model to this look** and press **Fit to
+this look**. FableForge scales the model to the creature's height, splits it into
+the look's head, body and legs, and gives each piece the skin weights of the part
+it replaces. One rigged .glb per part goes to the output folder on the Export tab,
+named `<CREATURE>_seed<N>_fit_body<b>_alt<a>.glb`; import each into its body slot as
+a custom creature. The command line does the same: `forge creature-fit`.
+
+![A bandit body fitted onto another seed's parts](img/creature_fit.png)
+
+The model should stand upright in a T- or A-pose, facing the same way as Fable's
+characters. Fitted creatures have not been checked in game yet.

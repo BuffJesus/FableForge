@@ -29,6 +29,14 @@ frames 3
 model_export
 creature_look CREATURE_BANDIT_GRUNT 3
 frames 3
+creature_look CREATURE_BANDIT_GRUNT 7
+frames 3
+creature_fit build/ui/model_export/CREATURE_BANDIT_GRUNT_seed3.glb
+frames 4
+assert_state model_ready 1
+model_orbit 0.3 0.15 1
+frames 3
+screenshot build/ui/creature_fit.png
 click btn_creature_look_roll
 frames 4
 assert_state model_ready 1

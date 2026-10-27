@@ -1091,6 +1091,11 @@ public:
     // Export tab's output folder; returns the written path ("" on failure).
     std::string exportModelGlb();
     std::string modelExportStatus_, modelExportError_;
+    // Fit a .glb/.gltf/.obj onto the selected creature look's parts (forge::characterfit),
+    // write one rigged .glb per part to the output folder and preview the fit.
+    bool fitModelToLook(const std::string& model);
+    char creatureFitPath_[512] = {};
+    std::string creatureFitStatus_, creatureFitError_;
     // ---- Read-only Effects browser (gui/effectbrowser.cpp).
     struct EffectBrowserRow { uint32_t id = 0; std::string name, displayName; };
     std::vector<EffectBrowserRow> effectBrowserRows_;

@@ -172,3 +172,10 @@ End to end: the static seed-3 CREATURE_BANDIT_GRUNT export fitted onto the seed-
 donor mapping, real composer; all triangles and 26/42/15 donor bones kept). Render:
 docs/guide/img/creature_fit.png (head/torso/legs split cleanly). Not imported or seen in game.
 Next: GUI entry (Creature looks card: "Fit a model to this look...") and an import-all step.
+
+GUI: the Creature looks card has "Fit your own model to this look" (`fitModelToLook`,
+automation `creature_fit`), writing the rigged parts to the Export output folder and
+previewing the fit (untextured). Owner choice now uses one global 32-nearest query per
+sample point (absent parts take the 32nd distance as a lower bound): the fit went from
+~40 s to ~1 s with unchanged oracle fidelity. UI script passes; guide section added.
+Next: carry input textures into preview/parts, an "import all parts" action, in-game check.

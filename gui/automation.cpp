@@ -697,6 +697,7 @@ bool Automation::tick(App& app) {
     }
     else if (cmd == "model_select") { if (!app.selectModel(rest)) fail("model_select: " + rest); else note("ok   " + line); ++pc_; }
     else if (cmd == "model_export") { const auto path = app.exportModelGlb(); if (path.empty()) fail("model_export: " + app.modelExportError_); else note("ok   " + line + " -> " + path); ++pc_; }
+    else if (cmd == "creature_fit") { if (!app.fitModelToLook(rest)) fail("creature_fit: " + app.creatureFitError_); else note("ok   " + line + " -> " + app.creatureFitStatus_); ++pc_; }
     else if (cmd == "creature_look") {
         std::istringstream in(rest); std::string name; unsigned long seed = 0;
         if (!(in >> name >> seed) || seed > 0xffffffffUL) fail("creature_look <CREATURE> <seed>");

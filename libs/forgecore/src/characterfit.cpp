@@ -133,19 +133,22 @@ Fit fit(std::span<const meshcompose::Primitive> input, std::span<const meshprevi
             // Owner = the part whose surface lies closest to the whole triangle: summed
             // nearest-vertex distance of its corners and centroid. Layers overlap (a
             // shirt over the waist of the trousers), so the centroid alone misassigns.
-            uint32_t part = 0;
-            float bestCost = std::numeric_limits<float>::infinity();
-            for (uint32_t candidate = 0; candidate < donor.size(); ++candidate) {
-                float cost = 0;
-                const auto measure = [&](const std::array<float, 3>& at) {
-                    const auto near = grid.nearest(at[0], at[1], at[2], 1, int(candidate));
-                    cost += near.empty() ? std::numeric_limits<float>::infinity() : near.front().first;
-                };
-                measure(c);
-                for (const auto corner : face) measure(place(prim.verts[corner]));
-                if (cost < bestCost) { bestCost = cost; part = candidate; }
-            }
-            if (!std::isfinite(bestCost)) fail("no donor vertex near a triangle");
+            // One global 32-nearest query per sample point gives each nearby part's
+            // distance; a part absent from it is at least the 32nd distance away.
+            std::vector<float> cost(donor.size(), 0);
+            const auto measure = [&](const std::array<float, 3>& at) {
+                const auto near = grid.nearest(at[0], at[1], at[2], 32);
+                if (near.empty()) fail("no donor vertex near a triangle");
+                std::vector<float> closest(donor.size(), near.back().first);
+                for (const auto& [distance, index] : near) {
+                    auto& slot = closest[grid.at(index).part];
+                    slot = std::min(slot, distance);
+                }
+                for (size_t p = 0; p < donor.size(); ++p) cost[p] += closest[p];
+            };
+            measure(c);
+            for (const auto corner : face) measure(place(prim.verts[corner]));
+            const uint32_t part = uint32_t(std::min_element(cost.begin(), cost.end()) - cost.begin());
             auto& out = result.parts[part];
             std::array<uint32_t, 3> local{};
             for (size_t k = 0; k < 3; ++k) {

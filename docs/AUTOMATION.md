@@ -787,6 +787,9 @@ and exercises the existing undo paths.
   skeleton and weights unless they have repeated bone names or unskinned vertices, which export
   static with a log warning; looks append `_seed<N>`. Fails when nothing is selected. Widget
   `btn_model_export`.
+- `creature_fit <model>`: fit a .glb/.gltf/.obj onto the shown creature look (forge::characterfit),
+  write one rigged .glb per part to the output folder and preview the fit; fails without a look.
+  Widgets `input_creature_fit_model`, `btn_creature_fit`.
 - `set world_detail_limit <1..32>`: set both manual and automatic map ceilings.
 - `set world_detail_radius <100..1000>`: base radius in world metres.
 
