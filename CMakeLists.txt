@@ -354,3 +354,14 @@ add_test(NAME fableforge_setheight_tests COMMAND fableforge_setheight_tests)
 add_executable(fableforge_ownedgraph_tests tests/test_ownedgraph.cpp)
 target_link_libraries(fableforge_ownedgraph_tests PRIVATE fableforge)
 add_test(NAME fableforge_ownedgraph_tests COMMAND fableforge_ownedgraph_tests)
+
+# Long-path opt-in for the shipped executables; Windows honours it when
+# LongPathsEnabled is set. Staged bank writes nest several folders under the install.
+if(WIN32 AND NOT MSVC)
+  enable_language(RC)
+  foreach(target forge FableForge forge-tools)
+    if(TARGET ${target})
+      target_sources(${target} PRIVATE cmake/longpath.rc)
+    endif()
+  endforeach()
+endif()

@@ -12,6 +12,7 @@
 
 #include "forge/stb.hpp"
 #include "forge/stbinfo.hpp"
+#include "forge/temporarydirectory.hpp"
 #include "forge/tng.hpp"
 #include "forge/wad.hpp"
 
@@ -581,7 +582,7 @@ CreateLevelResult createLevelFromDonor(const CreateLevelRequest& request) {
         fs::rename(temporary, request.outputProject);
     } catch (...) {
         std::error_code cleanupError;
-        fs::remove_all(temporary, cleanupError);
+        forge::removeTree(temporary, cleanupError);
         throw;
     }
     return result;

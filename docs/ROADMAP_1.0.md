@@ -10,11 +10,14 @@
 >    to a retail donor's bind pose, segment triangles by nearest donor part (head/torso/legs seams),
 >    transfer weights from the donor surface, keep the donor skeleton exact, preview in Creature looks.
 >
-> Known limitation (found 2026-10-26 by the rc.3 package gate): writes fail once a staged path
-> reaches MAX_PATH (260). Definition saves stage `CompiledDefs/forge-def-prepare-<id>-0/new/
-> pool-normalized.bin`, so an install path over ~200 characters breaks them. The executables
-> have no longPathAware manifest and the writers use plain std::ofstream. Fix: manifest plus a
-> writer audit (or \\?\ paths); add a long-root package workflow. Default Steam paths are ~90.
+> Long paths (2026-10-26): the rc.3 gate failed definition saves once staged paths reached
+> MAX_PATH. Now: forge/FableForge/forge-tools carry a longPathAware manifest (honoured when
+> Windows LongPathsEnabled=1), and libstdc++ remove_all, which spun forever past MAX_PATH in
+> staging cleanup (gdb: ~PendingBanks -> remove_all -> recursive_directory_iterator::__erase),
+> is replaced by bounded forge::removeTree at all four sites. Saves from a 310-char staging
+> path now pass. Still open: an install whose own files reach ~273 chars stalls at startup
+> (automation wait_maps never completes; no worker thread stuck) - an unidentified loader.
+> Machines without LongPathsEnabled keep the old 260 limit.
 >
 > Previous development checkpoint, 2026-10-23: [Creature placement profiles](HANDOFF_CREATURE_PROFILES_2026-10-23.md). The runtime-profile archive passes 119 identities, 145 documentation links and four extracted workflows: retail/GUI smoke, 16 metadata-profile placements and eight malformed-profile refusals. 146 workflows not run; two unrelated corpus skips. The unchanged import gate was not repeated. Whole-creature presentation and gameplay remain unverified; RC2 unchanged.
 

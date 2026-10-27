@@ -6,8 +6,35 @@
 #include <filesystem>
 #include <stdexcept>
 #include <string>
+#include <system_error>
+#include <vector>
 
 namespace forge {
+
+// Bounded std::filesystem::remove_all. libstdc++'s remove_all can spin forever on
+// paths beyond MAX_PATH (seen in a long-path-aware build: its iterator erase never
+// advances). List the tree once, then remove deepest entries first; every step is
+// bounded and errors only leave files behind. Returns false if anything remains.
+inline bool removeTree(const std::filesystem::path& root, std::error_code& error) {
+    namespace fs = std::filesystem;
+    error.clear();
+    if (!fs::exists(root, error)) { error.clear(); return true; }
+    std::vector<fs::path> entries;
+    constexpr size_t kLimit = 1000000;
+    for (fs::recursive_directory_iterator it(root, fs::directory_options::skip_permission_denied, error), end;
+         !error && it != end && entries.size() < kLimit; it.increment(error))
+        entries.push_back(it->path());
+    bool removed = !error;
+    for (auto it = entries.rbegin(); it != entries.rend(); ++it) {
+        std::error_code step;
+        fs::remove(*it, step);
+        if (step) { removed = false; error = step; }
+    }
+    std::error_code step;
+    fs::remove(root, step);
+    if (step) { removed = false; error = step; }
+    return removed;
+}
 
 // Exclusively created scratch child; only that child is removed on scope exit.
 class TemporaryDirectory {
@@ -33,7 +60,7 @@ public:
     ~TemporaryDirectory() {
         if (!retained_ && !path_.empty() && path_.parent_path() == parent_) {
             std::error_code error;
-            std::filesystem::remove_all(path_, error);
+            removeTree(path_, error);
         }
     }
     const std::filesystem::path& path() const { return path_; }

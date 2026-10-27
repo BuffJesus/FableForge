@@ -186,3 +186,5 @@ Textures: meshimport::Model now keeps each glTF material slot's encoded base-col
 (CLI + GUI) and the GUI preview. The fitted seed-3 bandit renders fully textured on the
 seed-7 skeletons (docs/guide/img/creature_fit.png), the right way up, which also cross-checks
 the V fix along export -> loadModel -> fit -> preview. Textured parts still pass `--glb`.
+
+- 2026-10-26 FableForge long paths: libstdc++ std::filesystem::remove_all loops forever past MAX_PATH in a longPathAware MinGW build (use forge::removeTree). Remaining: install files ~273 chars stall Forge startup; loader not identified after two attempts.

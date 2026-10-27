@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "backups.hpp"
+#include "forge/temporarydirectory.hpp"
 
 namespace albion::detail {
 namespace fs = std::filesystem;
@@ -38,7 +39,7 @@ public:
         // A failed rollback retains its previous banks and reports this path.
         if (!keepRecovery_ && !staging_.empty() && staging_.parent_path() == root_) {
             std::error_code ec;
-            fs::remove_all(staging_, ec);
+            forge::removeTree(staging_, ec);
         }
     }
     fs::path prepare(const fs::path& relative) {
