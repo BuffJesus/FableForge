@@ -1,4 +1,4 @@
-> Resume, 2026-10-26: [Creature assembly](HANDOFF_CREATURE_ASSEMBLY_2026-10-26.md). Creature looks, rigged .glb export and the import V-flip fix shipped in v0.18.1-rc.3 (prerelease). Next: in-game V check, then donor-guided character conversion.
+> Resume, 2026-10-27: [Creature assembly](HANDOFF_CREATURE_ASSEMBLY_2026-10-26.md) last section. Shipped in v0.18.1-rc.3: Creature looks, rigged .glb export, import V-flip fix. Since: character fit (core, `forge creature-fit`, GUI card, textures), long-path manifest + bounded removeTree, multi-part import (`--import NAME --import-to <root>`). Next: verify the scratch import, GUI import action, CI on the manifest, in-game checks.
 >
 > Community candidates (Discord, 2026-10-26, from a modder building a Chocolate Box companion):
 > 1. **UI translation** (top request; Italian modder): string extraction across the GUI, language picker.

@@ -188,3 +188,31 @@ seed-7 skeletons (docs/guide/img/creature_fit.png), the right way up, which also
 the V fix along export -> loadModel -> fit -> preview. Textured parts still pass `--glb`.
 
 - 2026-10-26 FableForge long paths: libstdc++ std::filesystem::remove_all loops forever past MAX_PATH in a longPathAware MinGW build (use forge::removeTree). Remaining: install files ~273 chars stall Forge startup; loader not identified after two attempts.
+
+## Multi-part import and end of session (2026-10-26 night)
+
+`creatureimport::prepareMeshes` / `publishMeshes` import several body slots into ONE private
+clone in one staged transaction (donor rig per slot read from the clone as cloned; meshes
+append in order). Texture appends are a list (sequential importPng through `.step<k>` files in
+staging, all verified before install) and the diffuse choice is per material
+(`materialTexture[part][material]`). `prepareMesh`/`publishMesh` are now one-part wrappers.
+Gates: 63/63 CTest; `fableforge_skinnedinput_tests` no-arg; the donor publication gate
+`python tools/test_skinned_input_donors.py --install <steam> --oracle-root D:/Documents/FableTLC
+--work-root build/donor-gate-20261026` PASS on donors 4521/5121/5150/3985/5110 (this is the
+gate that actually exercises publishMesh; plain CTest does not).
+
+`forge creature-fit ... --import NAME --import-to <root>` fits, writes rigged parts (+ each
+material's embedded texture as PNG), and publishes all parts as CREATURE_<NAME>. Run into an
+empty scratch root (`build/creature-fit-import-20261026/destination`): CREATURE_FITTED_BANDIT
+created at definition 14764 with 3 fitted parts; all four banks + .forge-created markers written
+only there. NOT yet verified beyond that: readback of the new creature (e.g. Creature looks on a
+full copy), and nothing in game.
+
+Resume next session:
+1. Verify the scratch import: decode the three new MESH_FITTED_BANDIT_* entries, the clone's
+   body slots and the appended textures; then a GUI "Import as custom creature" on the fit card
+   (ask the user which destination: scratch copy / mod pack / install).
+2. CI for 7385b2e (longPathAware manifest) was still running: if MSYS2's default manifest
+   collides (duplicate RT_MANIFEST), guard the .rc or drop the default via linker flags.
+3. Commit state: everything below is pushed; see git log on feat/definition-clone-gui-20261010.
+4. In-game checks need the user: V fix on an imported asymmetric texture; fitted creature.
