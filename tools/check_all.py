@@ -43,6 +43,8 @@ def main():
     if not a.no_build:
         ok &= run("build", ["cmake", "--build", "build"], capture_output=True)
     ok &= run("CTest (core, rows, geometry, LZO)", ["ctest", "--test-dir", "build", "--output-on-failure"], capture_output=True)
+    ok &= run("UI system glyph fallback, missing fonts, roles and atlas rebuilds",
+              [sys.executable, "tools/test_font_fallback_ui.py"], capture_output=True)
     for label, script in (
         ("read-only world storage CLI and per-entry refusals", "test_worldreview_cli.py"),
         ("LEV exact-name ambiguity and class findings", "test_levsymbols.py"),
@@ -121,6 +123,47 @@ def main():
     dialogue = retail_dialogue_big()
     if dialogue:
         install_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(dialogue))))
+        ok &= run("Read-only Creature visual ownership and relocation observations (not clone eligibility)",
+                  [sys.executable, "tools/audit_creature_visual_graph.py", "--install", install_root,
+                   "--payload-exe", "build/fableforge_defrelocate_tests.exe"], capture_output=True)
+        ok &= run("Independent retail Creature body-part model slot audit (not runtime compatibility)",
+                  [sys.executable, "tools/audit_creature_body_models.py", "--install", install_root, "--graphics"], capture_output=True)
+        ok &= run("Read-only Creature body-slot mesh preview and draft guards at both sizes",
+                  [sys.executable, "tools/test_creature_body_preview_ui.py", "--install", install_root], capture_output=True)
+        ok &= run("Independent retail body-binding publication, exact deltas and Restore",
+                  [sys.executable, "tools/test_creature_body_publication.py", "--install", install_root], capture_output=True)
+        ok &= run("Body-binding CLI retail publication, Restore and argument refusals",
+                  [sys.executable, "tools/test_creature_body_publication.py", "--install", install_root,
+                   "--tools", "build/forge-tools.exe"], capture_output=True)
+        ok &= run("Body-binding GUI drafts, exact native deltas, guards and Restore at both sizes",
+                  [sys.executable, "tools/test_creature_body_binding_ui.py", "--install", install_root], capture_output=True)
+        ok &= run("Read-only Creature animation boundaries and numeric candidate observations",
+                  [sys.executable, "tools/audit_creature_animation.py", "--install", install_root,
+                   "--payload-exe", "build/fableforge_defrelocate_tests.exe"], capture_output=True)
+        ok &= run("Private Creature visual API, localized ownership, atomic refusal and independent paired output",
+                  [sys.executable, "tools/test_creature_visual_clone_api.py", "--install", install_root], capture_output=True)
+        ok &= run("Private Creature GUI controls at both sizes, independent native deltas and Restore",
+                  [sys.executable, "tools/test_creature_private_clone_ui.py", "--install", install_root], capture_output=True)
+        ok &= run("Read-only Creature body/appearance navigation and draft guards at both sizes",
+                  [sys.executable, "tools/test_creature_visual_navigation_ui.py", "--install", install_root], capture_output=True)
+        for donor_policy in ("inherited", "missing", "unresolved"):
+            ok &= run("Private Creature GUI donor policy " + donor_policy,
+                      [sys.executable, "tools/test_creature_private_clone_ui.py", "--install", install_root,
+                       "--donor-policy", donor_policy, "--only", "save"], capture_output=True)
+        ok &= run("Creature donor self-reference layout and independent relocation audit",
+                  [sys.executable, "tools/audit_creature_self_refs.py", "--install", install_root, "--clone-api"], capture_output=True)
+        ok &= run("Retail paired Creature clone, self-only deltas and Restore",
+                  [sys.executable, "tools/test_creature_clone_retail.py", "--install", install_root], capture_output=True)
+        for window_size in ("1440x900", "800x600"):
+            ok &= run("Retail Creature clone controls and Restore " + window_size,
+                      [sys.executable, "tools/test_creature_clone_retail.py", "--install", install_root,
+                       "--gui", "build/FableForge.exe", "--size", window_size], capture_output=True)
+        ok &= run("Creature GroupDef schema, independent boundaries and all retail records",
+                  [sys.executable, "tools/test_creature_group_schema.py", "--install", install_root], capture_output=True)
+        ok &= run("retail group picker families, exact field deltas and Restore",
+                  [sys.executable, "tools/test_definition_group_retail.py", "--install", install_root], capture_output=True)
+        ok &= run("retail GUI Unicode definition delta, identity preservation and Restore",
+                  [sys.executable, "tools/test_definition_wide_retail.py", "--install", install_root], capture_output=True)
         ok &= run("retail lipsync byte roundtrip", [os.path.join("build", "fableforge_lipsync_tests.exe"), dialogue])
         ok &= run("retail dialogue LUT/lipsync join", [os.path.join("build", "fableforge_lut_tests.exe"), os.path.dirname(dialogue)])
         ok &= run("retail dialogue subtitle join", [os.path.join("build", "fableforge_dialoguetext_tests.exe"), install_root])
@@ -322,6 +365,32 @@ def main():
               [sys.executable, "tools/test_definition_vector_edit_ui.py"], capture_output=True)
     ok &= run("Definition donor cloning, paired publication, rollback and exact Restore",
               [sys.executable, "tools/test_definition_clone.py"], capture_output=True)
+    ok &= run("Creature clone selector, verified self-only payloads, paired rollback and Restore",
+              [sys.executable, "tools/test_creature_clone_cli.py"], capture_output=True)
+    ok &= run("Private Creature CLI ownership, paired publication, rollback and Restore",
+              [sys.executable, "tools/test_creature_private_clone_cli.py"], capture_output=True)
+    ok &= run("Creature clone controls, draft protection, stale sources and paired Restore",
+              [sys.executable, "tools/test_creature_clone_ui.py"], capture_output=True)
+    ok &= run("Custom Creature GUI, reviewed source proofs, exact deltas and Restore",
+              [sys.executable, "tools/test_creature_import_ui.py"], capture_output=True)
+    ok &= run("Definition class placement, owners, Actors button and exact recovery",
+              [sys.executable, "tools/test_definition_placement_types_ui.py"], capture_output=True)
+    ok &= run("Malformed Creature runtime profiles refuse before document mutation",
+              [sys.executable, "tools/test_creature_profile_refusal_ui.py"], capture_output=True)
+    ok &= run("Creature visual graph synthetic ownership observations",
+              [sys.executable, "tools/audit_creature_visual_graph.py"], capture_output=True)
+    ok &= run("Creature visual navigation numeric names and malformed-reference UI refusal",
+              [sys.executable, "tools/test_creature_visual_navigation_fixture_ui.py"], capture_output=True)
+    ok &= run("Creature body GUI stale bank/name/graphics refusal on tiny independent fixtures",
+              [sys.executable, "tools/test_creature_body_stale_ui.py"], capture_output=True)
+    ok &= run("Creature body GUI pack source preference, destination guards and Restore",
+              [sys.executable, "tools/test_creature_body_pack_ui.py"], capture_output=True)
+    ok &= run("Creature body named model chooser, ID ambiguity exclusion and Restore",
+              [sys.executable, "tools/test_creature_body_model_picker_ui.py"], capture_output=True)
+    ok &= run("Creature animation synthetic boundaries and malformed component refusal",
+              [sys.executable, "tools/audit_creature_animation.py"], capture_output=True)
+    ok &= run("Definition clone controls, exact donors, stale drafts and paired Restore",
+              [sys.executable, "tools/test_definition_clone_ui.py"], capture_output=True)
     ok &= run("Definition existing-name picker, exact field deltas, invalid offsets and Restore",
               [sys.executable, "tools/test_definition_name_picker_ui.py"], capture_output=True)
     ok &= run("Definition owning names offsets, duplicate names, refresh and source preservation",
@@ -336,7 +405,9 @@ def main():
               [sys.executable, "tools/test_definition_groups_ui.py"], capture_output=True)
     ok &= run("Definition scalar drafts, real inputs, destinations, stale guards, close review and Restore",
               [sys.executable, "tools/test_definition_edit_ui.py"], capture_output=True)
-    ok &= run("Definition wide ASCII drafts, native encoding, real inputs and protected Unicode originals",
+    ok &= run("Definition group picker, exact indices, target families and stale identity refusal",
+              [sys.executable, "tools/test_definition_group_picker_ui.py"], capture_output=True)
+    ok &= run("Definition wide Unicode drafts, native encoding, real inputs and protected malformed originals",
               [sys.executable, "tools/test_definition_wide_edit_ui.py"], capture_output=True)
     ok &= run("Definition integer bounds, signed name references and exact field deltas",
               [sys.executable, "tools/test_definition_integer_bounds.py"], capture_output=True)

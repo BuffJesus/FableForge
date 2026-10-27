@@ -1,7 +1,9 @@
 #pragma once
 #include "definitionwrite.hpp"
+#include "definitionread.hpp"
 #include "forge/defdecode.hpp"
 #include "forge/defedit.hpp"
+#include "forge/unicode.hpp"
 #include <charconv>
 #include <algorithm>
 #include <cstring>
@@ -10,12 +12,22 @@ inline bool printableString(const forge::defdecode::DecodedField& field) {
     return field.type=="CCharString" && !field.value.empty() && field.value.size()<=128 && field.value.back()==0 &&
         std::all_of(field.value.begin(),field.value.end()-1,[](unsigned char c){return c>=32 && c<=126;});
 }
+inline bool printableWideText(const std::string& text) {
+    if(text.size()>127) return false;
+    try {
+        std::vector<uint8_t> encoded;forge::unicode::appendUtf16z(encoded,text);
+        for(size_t i=0;i+2<encoded.size();i+=2)
+            if(encoded[i+1]==0 && (encoded[i]<32 || (encoded[i]>=127 && encoded[i]<=159))) return false;
+        return true;
+    } catch(const std::exception&) {return false;}
+}
 inline bool printableWideString(const forge::defdecode::DecodedField& field) {
     if(field.type!="CWideString" || field.value.size()<2 || field.value.size()>256 || field.value.size()%2 ||
        field.value[field.value.size()-2]!=0 || field.value.back()!=0) return false;
-    for(size_t i=0;i+2<field.value.size();i+=2)
-        if(field.value[i]<32 || field.value[i]>126 || field.value[i+1]!=0) return false;
-    return true;
+    try {
+        size_t cursor=0;const auto text=forge::unicode::readUtf16z(field.value,cursor);
+        return cursor==field.value.size() && printableWideText(text);
+    } catch(const std::exception&) {return false;}
 }
 inline bool fieldEditable(const forge::defdecode::DecodedField& field) {
     return !field.name.empty() && ((field.type=="bool" && field.value.size()==1) ||
@@ -44,7 +56,7 @@ inline std::string fieldValue(const forge::defdecode::DecodedField& field) {
         const int rgba[]={field.value[2],field.value[1],field.value[0],field.value[3]};return colourValue(rgba);
     }
     if(printableWideString(field)) {
-        std::string text;for(size_t i=0;i+2<field.value.size();i+=2) text+=char(field.value[i]);return text;
+        size_t cursor=0;return forge::unicode::readUtf16z(field.value,cursor);
     }
     if(printableString(field)) return std::string(field.value.begin(),field.value.end()-1);
     return forge::defdecode::formatValue(field);
@@ -52,7 +64,8 @@ inline std::string fieldValue(const forge::defdecode::DecodedField& field) {
 inline bool replaceField(const std::filesystem::path& sourceNames,const std::filesystem::path& sourceBank,
                           const std::filesystem::path& destination,size_t index,const forge::bin::Entry& expected,
                           const std::vector<std::pair<uint32_t,std::string>>& expectedNames,
-                          const forge::defschema::Schema& schema,const std::string& field,const std::string& value) {
+                          const forge::defschema::Schema& schema,const std::string& field,const std::string& value,
+                          const std::map<size_t,forge::bin::Entry>* expectedGroups=nullptr) {
     auto file=forge::bin::File::open(sourceNames,sourceBank);
     if(file.originalNames()!=expectedNames || index>=file.entries().size())
         throw std::runtime_error("Definition namespace changed; refresh before editing.");
@@ -66,13 +79,33 @@ inline bool replaceField(const std::filesystem::path& sourceNames,const std::fil
         if(target) throw std::runtime_error("Definition field name is ambiguous.");target=&candidate;
     }
     if(!target || !fieldEditable(*target)) throw std::runtime_error("Choose a confirmed editable field.");
-    if((target->type=="CCharString" || target->type=="CWideString") && (value.size()>127 ||
+    if(target->type=="CCharString" && (value.size()>127 ||
        std::any_of(value.begin(),value.end(),[](unsigned char c){return c<32 || c>126;})))
         throw std::runtime_error("Definition text accepts up to 127 printable ASCII characters.");
+    if(target->type=="CWideString") {
+        if(!printableWideText(value))
+            throw std::runtime_error("Wide definition text accepts up to 127 UTF-8 bytes without control characters.");
+    }
     // Preserve the exact original representation when the draft is unchanged,
     // including noncanonical true bytes and existing NaN payload bits.
     if(fieldValue(*target)==value) return false;
     forge::defedit::setField(file,schema,index,field,value);
+    // Alternate spellings of an unchanged scalar are still byte-exact no-ops,
+    // including legacy unresolved references. There is nothing to publish.
+    if(file.entries()[index].data==expected.data) return false;
+    if(sourceBank.filename()=="game.bin" && field=="GroupDef" && target->type=="int32" && definitionread::groupFamily(expected)) {
+        const auto updated=forge::defdecode::decode(file.entries()[index],schema);
+        const auto found=std::find_if(updated.fields.begin(),updated.fields.end(),[&](const auto& candidate){return candidate.name==field;});
+        if(found==updated.fields.end() || found->value.size()!=4) throw std::runtime_error("Group reference has no confirmed four-byte layout.");
+        const auto& bytes=found->value;
+        const uint32_t group=uint32_t(bytes[0]) | (uint32_t(bytes[1])<<8) | (uint32_t(bytes[2])<<16) | (uint32_t(bytes[3])<<24);
+        if(!definitionread::groupChoice(file,expected,group)) throw std::runtime_error("Choose an existing group of the confirmed family in this game bank.");
+        if(!expectedGroups) throw std::runtime_error("Capture the current group choices before editing.");
+        const auto captured=expectedGroups->find(group);const auto& current=file.entries()[group];
+        if(captured==expectedGroups->end() || captured->second.name!=current.name ||
+           captured->second.definition!=current.definition || captured->second.indexInDefinition!=current.indexInDefinition)
+            throw std::runtime_error("The selected group identity changed; start the edit again.");
+    }
     if(target->type=="CDefString") {
         const auto updated=forge::defdecode::decode(file.entries()[index],schema);
         const auto found=std::find_if(updated.fields.begin(),updated.fields.end(),[&](const auto& candidate){return candidate.name==field;});
@@ -86,7 +119,6 @@ inline bool replaceField(const std::filesystem::path& sourceNames,const std::fil
         }
         if(!valid) throw std::runtime_error("Choose an existing name from this bank or no name.");
     }
-    if(file.entries()[index].data==expected.data) return false;
     publish(file,sourceNames,destination,true);return true;
 }
 } // namespace albion::definitionwrite

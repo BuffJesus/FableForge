@@ -42,7 +42,7 @@ def main():
        lines+=['definition_value '+value,'definition_save_refused','assert_state definition_editing 1']
       lines+=['definition_cancel']
      else:lines+=['definition_save','wait_ready','wait_file_job','wait_definitions','frames 3','assert_state definition_editing 0']
-    lines+=['quit'];script=case/'vectors.txt';script.write_text('\n'.join(lines)+'\n')
+    lines+=['dump_state '+str((case/'state.txt').resolve()),'quit'];script=case/'vectors.txt';script.write_text('\n'.join(lines)+'\n')
     r=subprocess.run([str(a.gui.resolve()),'--install',str(root),'--size',size,'--auto',str(script)],cwd=a.cwd.resolve(),env=dict(os.environ,FABLEFORGE_AUTOMATION_HIDDEN='1',APPDATA=str(case/'profile'),LOCALAPPDATA=str(case/'local')),capture_output=True,text=True,encoding='utf-8',errors='replace',timeout=90)
     (case/'output.log').write_text(r.stdout+r.stderr,encoding='utf-8');trace=Path(str(script)+'.log').read_text()
     assert r.returncode==0 and 'RESULT PASS' in trace and 'FAIL ' not in trace,trace[-5000:]

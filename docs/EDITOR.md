@@ -1440,17 +1440,37 @@ Fixed-size definition fields with unexpected payload lengths remain protected: `
 
 Game-bank records with a confirmed `GroupDef` reference offer **Open group**. It follows the native entry index and requires a group record in the same bank; unsupported or invalid references have no jump. Selecting a group shows its confirmed members; click a member to return to that definition. Membership is read from the current game bank in the background, and unsupported records are omitted. Open drafts keep this navigation disabled. An unchanged fixed-width draft retains the exact original representation, including existing noncanonical boolean bytes and floating-point NaN bits.
 
+Decoded int32 `GroupDef` drafts offer a searched group picker: Object, Building and Creature owners use `THING_GROUP`, and terrain themes use `ENGINE_THEME_GROUP`. Choices show explicit native entry indices, including duplicate or unnamed labels. Changed targets must remain in the same bank and retain their captured type/name/ordinal identity; wrong-family, missing and stale targets refuse before publication. Unresolved original values survive an exact no-op, but there is no invented "no group" sentinel. Creature GroupDef's inherited int32 type is confirmed by native transfer evidence and all 517 retail Creature records. Other unknown schema types remain read-only; integer fields are not generally inferred to be references. Raw CLI field editing is unchanged.
+
+The distinct **Clone creature** action appears for game-bank CREATURE records. It retargets only verified self references before paired publication; components, appearance and body definitions stay shared. The draft and Create confirmation make this limitation explicit. Empty, malformed or unresolved donors refuse before a draft opens. Folder/pack destinations, stale-source refusal, Close/Install protection and paired Restore use the existing clone safeguards. **Clone selected definition** still copies the exact donor payload without retargeting.
+
+The same guarded shared-component mode is available through `forge-tools defs clone-creature <game.bin> <donor-name-or-index> <new-name> --schema <schema.json> --out <game.bin>`.
+
+The separate **Clone private creature visuals** action appends a coordinated root, CCreatureDef and CAppearanceDef, with explicit unique bounded ASCII names. Selected visual rows become owned by the new root; other gameplay components retain their original data and ownership. Without a custom model, models, textures and animation assets remain shared. The paired publisher independently recomputes the three-record plan before writing names.bin and game.bin together, retaining recovery records. Unsupported/malformed known layouts, missing visual components, unresolved references and new name-CRC ambiguities refuse before publication. Root, body and appearance names are separate fields in the scrolling card. Cancel and close-review retain the existing draft protection. Use owned outputs first; no gameplay validation is claimed.
+
+Enable **Import a custom body model** in that draft to choose one explicit body part/alternative and a skinned `.glb` or `.gltf` matching the donor skeleton. Supply a new `MESH_` name using uppercase letters, digits and underscores, then choose an existing texture ID or a new named image. New images support DXT1, DXT3 and ARGB8888; models can be compressed or stored. **Review custom import** checks the model before offering Create. Changing any input or destination requires a fresh review. Create rechecks the source banks, model and external buffer bytes, image, destination files and pack manifest before publishing the coordinated definitions, mesh and optional texture. Controls and cancellation wait for background review/publication. Pack imports refresh Models and preview their diffuse textures using a separate pack context; the loaded world's assets stay unchanged. Materials shows verified names and dimensions from that preview source as read-only entries; normal install textures retain their navigation links. Restore removes created outputs or recovers in-place originals. Other body alternatives and animations remain shared; this does not replace a complete creature or establish gameplay compatibility. The Actors palette and placement use the stored definition class, so a creature name does not need a `CREATURE_` prefix. Automatic ownership follows the creature definition; an object with a similar name stays an object. Village membership follows its runtime `CTCVillageMember` component, so renaming a donor does not change that placement profile. Unsupported or malformed component metadata refuses placement before changing the level.
+
+The same private mode is available through `forge-tools defs clone-creature-private <game.bin> <donor-name-or-index> <root-name> <body-name> <appearance-name> --schema <schema.json> --out <game.bin> [--names <names.bin>] [--json]`.
+
+Game-bank CREATURE details offer **Open body definition** and **Open appearance definition** when the counted component listing has one valid target of the matching class. These links use record indices, including for inherited components, and are disabled while a definition draft is open. Editing a component affects every creature sharing it; navigation alone does not make components or their model/texture/animation assets private. Missing, ambiguous, wrong-class or out-of-range links are not offered.
+
 Definition `CRGBColour` CLI input uses red, green, blue, alpha (0-255; omitted alpha defaults to 255). The writer converts to the native blue, green, red, alpha byte order. Existing unexpected lengths refuse.
 
-Inline CCharString and CWideString drafts accept up to 127 printable ASCII characters, including empty text. Unicode input is filtered. Existing non-ASCII, long, unterminated or opaque-tailed strings remain read-only and exact. The shared writer requires one complete NUL-terminated original string before replacement. Unsupported wide strings and name-table references remain inspectable.
+Clean game-bank CCreatureDef details list verified body-part model alternatives as **Open body / alternative model** links. They open the individual mesh in Models by graphics-bank ID and remain disabled during definition drafts or asset file operations. Unsupported counted prefixes offer no guessed links. This is an individual mesh preview, not creature assembly, animation, rebinding or skeleton-compatibility validation.
 
-CWideString uses UTF-16LE with a final zero code unit, without a count prefix. The CLI writer currently accepts ASCII text for this type and refuses non-ASCII input; existing Unicode values remain intact until an explicit supported replacement. Odd lengths, missing or embedded terminators and opaque trailers refuse before writes.
+`forge-tools defs bind-body-model <game.bin> <entry-index> <body-part> <alternative> <model-id> --schema <schema.json> --graphics <graphics.big> --out <game.bin> [--names <names.bin>] [--json]` changes one verified body-model ID in a CCreatureDef. Indices are explicit unsigned decimal values, not name selectors. Both current and replacement models must be unique type-5 graphics entries. The publisher recomputes the edit, refuses stale source banks or graphics-directory metadata, preserves names.bin bytes, and retains recovery records. Component users and assets stay shared; use private cloned components and owned outputs when appropriate. This does not validate skeleton/runtime compatibility or import custom meshes.
+
+In Definitions, a verified CCreatureDef body alternative offers **Bind body / alternative**. The draft provides the model-ID field plus a named model chooser searchable by name or decimal ID. Each label includes its ID, so duplicate names stay distinct; unnamed entries remain selectable. Only unique type-5 IDs from the captured mesh bank appear. Save rechecks the source banks, graphics directory and destination, changes just the selected model-ID word, and preserves the name pool. Cancel, close protection, folder/pack destinations and Restore follow the other definition drafts. This changes all users of the component; it does not prove skeleton or runtime compatibility.
+
+Inline CCharString drafts accept up to 127 printable ASCII characters, including empty text. Non-ASCII narrow input is filtered; legacy byte strings remain read-only and exact. CWideString drafts accept valid Unicode up to 127 UTF-8 bytes, including supplementary characters and empty text. Existing Unicode values within that limit can be edited or saved unchanged. C0/C1 controls, malformed encoding, overlong originals, missing terminators and opaque trailers remain unsupported. The shared writer requires one complete NUL-terminated original string before replacement.
+
+CWideString uses UTF-16LE with a final zero code unit, without a count prefix. CLI and GUI edits use strict UTF-8 conversion. Odd lengths, malformed surrogates, missing or embedded terminators and opaque trailers refuse before writes. Unchanged supported drafts retain their exact original bytes.
 
 Definitions are grouped by type and confirmed game-bank group. Search includes group names and native indices. Opening a definition expands its tree and reveals the selected row.
 
 Confirmed object Graphic fields offer Open model by native ID. Missing or ambiguous IDs preserve the current preview. Definition drafts protect this navigation.
 
-Wide-string CLI edits accept valid UTF-8 and save native UTF-16LE. The GUI currently edits short printable ASCII wide strings; other originals remain inspectable.
+Wide-string CLI edits accept valid UTF-8 and save native UTF-16LE. GUI Unicode authoring is part of the development continuation after rc.2. The GUI keeps Segoe UI as its primary font and merges missing glyphs from available Windows language and emoji fonts, sharing their data across roles and scale rebuilds. Accented Latin, Greek, CJK and monochrome emoji were inspected at both sizes. Optional fonts vary by installation; absent glyphs still use replacements without changing input/storage. This is glyph fallback, not a guarantee of every script, text shaping or colour emoji. Unsupported originals remain inspectable.
 
 Terrain-theme texture fields offer Open texture for confirmed positive main-bank IDs. Unsupported and ambiguous targets preserve the current preview; definition drafts protect navigation.
 
@@ -1465,4 +1485,20 @@ Definition CDefString fields show a readable name when their byte offset identif
 Four-byte definition name references can now be edited with an existing-name chooser. Search finds names or byte offsets; duplicate names appear with distinct offsets. No name stores -1. Saving keeps the existing name pool and refuses stale references. Original unsupported offsets can remain unchanged.
 
 
-The CLI can clone a definition: `forge-tools defs clone <bank.bin> <donor-name-or-index> <new-name> --out <output-bank.bin>`. It copies the whole donor payload and saves the bank/name-pool pair with recovery records. Existing outputs must match the loaded bank and pool. GUI clone controls are still pending.
+Select a record in Assets > Definitions and choose **Clone selected definition**.
+Enter a unique name of up to 127 ASCII characters, then choose **Create definition**
+and confirm. The copy keeps every field and reference target from its donor;
+it does not copy the records those references point to. Named and unnamed records
+can be donors, including records whose fields cannot be decoded by the inspector.
+The new record is selected after saving. Save folders and valid pack destinations
+use the existing destination chooser; Cancel and Close/Install protection retain
+the draft until you save or discard it. Changed sources or destinations refuse.
+Restore recovers the bank and its names together, or removes a newly created pair.
+For definition-only save folders, preview uses the edited definitions with textures
+from the original install when the folder has no texture bank. An existing invalid
+output texture bank reports an error; preview fallback does not copy any assets.
+
+The CLI provides the same operation with `forge-tools defs clone <bank.bin>
+<donor-name-or-index> <new-name> --out <output-bank.bin>`. Existing outputs must
+match the loaded bank and pool. GUI cloning is part of the development continuation
+after rc.2; the published rc.2 candidate contains the CLI operation.

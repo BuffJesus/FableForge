@@ -1,5 +1,6 @@
 #include "forge/fmplinks.hpp"
 #include "forge/defdecode.hpp"
+#include "forge/creatureappearance.hpp"
 #include <algorithm>
 #include <charconv>
 #include <cstring>
@@ -208,69 +209,31 @@ struct CreaturePrefix {
     size_t wounds = 0, woundRows = 0, expressions = 0, expressionRows = 0;
     struct Model { size_t mesh = 0; std::vector<size_t> textures; };
     std::vector<std::vector<Model>> bodies;
-    std::vector<size_t> skeletons;
+    std::vector<size_t> skeletons, otherTextures;
     std::vector<size_t> structuralWords;
 };
 CreaturePrefix creaturePrefix(std::span<const uint8_t> bytes) {
-    // Native CCreatureDef leading counted-pointer blocks, described by
-    // ChocolateBox FFF38E28/237DCBE3/F0F1CA81. Walk boundaries; never search
-    // opaque bytes for an apparent reference tag.
-    size_t cursor = 3;
+    const auto decoded = creatureappearance::read(bytes);
     CreaturePrefix result;
-    auto skip = [&](size_t length) {
-        if (cursor > bytes.size() || length > bytes.size() - cursor)
-            fail("truncated creature prefix layout");
-        cursor += length;
-    };
-    auto word = [&]() { const auto value = read32(bytes, cursor); cursor += 4; return value; };
-    auto tag = [&](uint32_t expected) {
-        const auto at = cursor;
-        if (word() != expected) fail("unsupported creature prefix control layout");
-        result.structuralWords.push_back(at);
-    };
-    auto count = [&](size_t minimum) {
-        const auto at = cursor;
-        const size_t value = word();
-        if (value > 4096 || cursor > bytes.size() || value > (bytes.size() - cursor) / minimum)
-            fail("invalid creature prefix count");
-        result.structuralWords.push_back(at);
-        return value;
-    };
-    tag(defdecode::fieldTag("WoundMorphs"));
-    result.wounds = count(44); result.woundRows = cursor; skip(result.wounds * 44);
-    tag(0x01ab6ceeu);
-    tag(defdecode::fieldTag("RandomAppearanceMorph"));
-    const size_t bodies = count(4);
-    size_t allModels = 0, allTextures = 0;
-    for (size_t body = 0; body < bodies; ++body) {
-        const size_t models = count(17); allModels += models;
-        if (allModels > 4096) fail("invalid creature prefix model count");
-        result.bodies.emplace_back();
-        for (size_t model = 0; model < models; ++model) {
-            CreaturePrefix::Model layout; layout.mesh = cursor;
-            skip(8);
-            const size_t textures = count(12); allTextures += textures;
-            if (allTextures > 4096) fail("invalid creature prefix texture count");
-            skip(4); // serialized array metadata, retained verbatim
-            for (size_t texture = 0; texture < textures; ++texture) {
-                layout.textures.push_back(cursor); skip(12);
-            }
-            skip(1); result.bodies.back().push_back(std::move(layout));
+    result.wounds = decoded.wounds; result.woundRows = decoded.woundRows;
+    result.expressions = decoded.expressions; result.expressionRows = decoded.expressionRows;
+    result.structuralWords = decoded.structuralWords;
+    for (const auto& body : decoded.bodies) {
+        auto& models = result.bodies.emplace_back();
+        for (const auto& model : body) {
+            CreaturePrefix::Model converted;
+            converted.mesh = model.offset;
+            for (const auto& texture : model.textures.rows) converted.textures.push_back(texture.offset);
+            models.push_back(std::move(converted));
         }
     }
-    skip(3 + 24);
-    const size_t skeletal = count(13);
-    for (size_t index = 0; index < skeletal; ++index) {
-        result.skeletons.push_back(cursor + 8); skip(13);
-    }
-    skip(1 + 12);
-    tag(defdecode::fieldTag("Expressions"));
-    result.expressions = count(12); result.expressionRows = cursor;
-    skip(result.expressions * 12);
-    tag(0x01ab6d32u);
-    tag(defdecode::fieldTag("Stats"));
+    for (const auto& morph : decoded.skeletal) result.skeletons.push_back(morph.offset + 8);
+    for (const auto& map : decoded.bodyTextures)
+        for (const auto& row : map.rows) result.otherTextures.push_back(row.offset);
+    for (const auto& row : decoded.globalTextures.rows) result.otherTextures.push_back(row.offset);
     return result;
 }
+
 bool identicalGameOwners(const big::File& package, const std::string& owner) {
     const auto* records = package.findBank("GameBINEntries");
     if (!records) return false;
@@ -295,12 +258,19 @@ CreaturePrefixLayout creaturePrefixLayout(std::span<const uint8_t> bytes) {
     for (size_t row = 0; row < prefix.wounds; ++row)
         for (size_t slot = 0; slot < 6; ++slot)
             result.references.push_back({prefix.woundRows + row * 44 + 8 + slot * 4, 0, Destination::TextureEntry});
-    for (const auto& body : prefix.bodies) for (const auto& model : body) {
+    for (size_t bodyPart=0;bodyPart<prefix.bodies.size();++bodyPart)
+    for (size_t alternative=0;alternative<prefix.bodies[bodyPart].size();++alternative) {
+        const auto& model=prefix.bodies[bodyPart][alternative];
+        result.bodyModels.push_back({bodyPart,alternative,model.mesh});
         result.references.push_back({model.mesh, 0, Destination::MeshEntry});
         for (const auto texture : model.textures) {
             result.references.push_back({texture, 0, Destination::TextureEntry});
             result.references.push_back({texture + 4, 0, Destination::TextureEntry});
         }
+    }
+    for (const auto texture : prefix.otherTextures) {
+        result.references.push_back({texture, 0, Destination::TextureEntry});
+        result.references.push_back({texture + 4, 0, Destination::TextureEntry});
     }
     for (const auto skeleton : prefix.skeletons)
         result.references.push_back({skeleton, 0, Destination::NameOffset});

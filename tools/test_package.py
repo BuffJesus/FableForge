@@ -209,6 +209,8 @@ def main():
         '--count', '8', '--install', args.root.resolve(), '--out', work / 'exports'])
     run('gui', [sys.executable, repo / 'tools/ui_smoke.py', '--exe', package / 'FableForge.exe',
         '--install', args.root.resolve(), '--cwd', cwd])
+    run('font_fallback', [sys.executable, repo / 'tools/test_font_fallback_ui.py',
+        '--gui', package / 'FableForge.exe', '--cwd', cwd, '--work-root', work])
     run('text_browser', [sys.executable, repo / 'tools/test_text_browser_ui.py',
         '--gui', package / 'FableForge.exe', '--cwd', cwd, '--work-root', work])
     run('text_backup_restore', [sys.executable, repo / 'tools/test_text_backup_restore.py',
@@ -233,6 +235,49 @@ def main():
         '--gui', package / 'FableForge.exe', '--cwd', cwd, '--work-root', work])
     run('definition_clone', [sys.executable, repo / 'tools/test_definition_clone.py',
         '--tool', package / 'forge-tools.exe', '--forge', package / 'forge.exe', '--work-root', work])
+    run('creature_clone_cli', [sys.executable, repo / 'tools/test_creature_clone_cli.py',
+        '--tool', package / 'forge-tools.exe', '--forge', package / 'forge.exe', '--cwd', cwd, '--work-root', work])
+    run('creature_private_clone_cli', [sys.executable, repo / 'tools/test_creature_private_clone_cli.py',
+        '--tool', package / 'forge-tools.exe', '--forge', package / 'forge.exe', '--cwd', cwd, '--work-root', work])
+    run('creature_visual_navigation', [sys.executable, repo / 'tools/test_creature_visual_navigation_ui.py',
+        '--install', args.root.resolve(), '--gui', package / 'FableForge.exe', '--cwd', cwd, '--work-root', work])
+    run('creature_visual_navigation_fixture', [sys.executable, repo / 'tools/test_creature_visual_navigation_fixture_ui.py',
+        '--gui', package / 'FableForge.exe', '--cwd', cwd, '--work-root', work])
+    run('creature_body_preview', [sys.executable, repo / 'tools/test_creature_body_preview_ui.py',
+        '--install', args.root.resolve(), '--gui', package / 'FableForge.exe', '--cwd', cwd, '--work-root', work])
+    run('creature_body_publication', [sys.executable, repo / 'tools/test_creature_body_publication.py',
+        '--install', args.root.resolve(), '--tools', package / 'forge-tools.exe', '--forge', package / 'forge.exe',
+        '--schema', package / 'docs/re_reference/def_schema.json', '--cwd', cwd, '--work-root', work])
+    run('creature_body_binding', [sys.executable, repo / 'tools/test_creature_body_binding_ui.py',
+        '--install', args.root.resolve(), '--gui', package / 'FableForge.exe', '--forge', package / 'forge.exe',
+        '--cwd', cwd, '--work-root', work])
+    for fixture_name in ('stale', 'pack', 'model_picker'):
+        run('creature_body_' + fixture_name, [sys.executable, repo / ('tools/test_creature_body_' + fixture_name + '_ui.py'),
+            '--gui', package / 'FableForge.exe', '--forge', package / 'forge.exe', '--cwd', cwd, '--work-root', work])
+    for donor_policy in ('first', 'inherited', 'missing', 'unresolved'):
+        run('creature_private_clone_ui_' + donor_policy, [sys.executable, repo / 'tools/test_creature_private_clone_ui.py',
+            '--install', args.root.resolve(), '--gui', package / 'FableForge.exe', '--forge', package / 'forge.exe',
+            '--schema', package / 'docs/re_reference/def_schema.json', '--donor-policy', donor_policy,
+            '--cwd', cwd, '--work-root', work, *([] if donor_policy=='first' else ['--only','save'])])
+    run('creature_clone_retail', [sys.executable, repo / 'tools/test_creature_clone_retail.py',
+        '--install', args.root.resolve(), '--tool', package / 'forge-tools.exe', '--forge', package / 'forge.exe',
+        '--schema', package / 'docs/re_reference/def_schema.json', '--cwd', cwd, '--work-root', work])
+    run('creature_clone_ui', [sys.executable, repo / 'tools/test_creature_clone_ui.py',
+        '--gui', package / 'FableForge.exe', '--forge', package / 'forge.exe', '--cwd', cwd, '--work-root', work])
+    run('creature_import_ui', [sys.executable, repo / 'tools/test_creature_import_ui.py',
+        '--gui', package / 'FableForge.exe', '--forge', package / 'forge.exe', '--work-root', work])
+    run('definition_placement_types', [sys.executable, repo/'tools/test_definition_placement_types_ui.py',
+        '--gui', package/'FableForge.exe', '--forge', package/'forge.exe', '--work-root', work,
+        '--cwd', cwd, '--schema', package/'docs/re_reference/def_schema.json'])
+    run('creature_placement_profile_refusals', [sys.executable, repo/'tools/test_creature_profile_refusal_ui.py',
+        '--gui', package/'FableForge.exe', '--work-root', work, '--cwd', cwd,
+        '--schema', package/'docs/re_reference/def_schema.json'])
+    for window_size in ('1440x900', '800x600'):
+        run('creature_clone_gui_retail_' + window_size, [sys.executable, repo / 'tools/test_creature_clone_retail.py',
+            '--install', args.root.resolve(), '--gui', package / 'FableForge.exe', '--forge', package / 'forge.exe',
+            '--size', window_size, '--cwd', cwd, '--work-root', work])
+    run('definition_clone_ui', [sys.executable, repo / 'tools/test_definition_clone_ui.py',
+        '--gui', package / 'FableForge.exe', '--forge', package / 'forge.exe', '--cwd', cwd, '--work-root', work])
     run('definition_name_picker', [sys.executable, repo / 'tools/test_definition_name_picker_ui.py',
         '--gui', package / 'FableForge.exe', '--cwd', cwd, '--work-root', work])
     run('definition_name_labels', [sys.executable, repo / 'tools/test_definition_name_labels_ui.py',
@@ -247,8 +292,19 @@ def main():
         '--gui', package / 'FableForge.exe', '--cwd', cwd, '--work-root', work])
     run('definition_edit', [sys.executable, repo / 'tools/test_definition_edit_ui.py',
         '--gui', package / 'FableForge.exe', '--forge', package / 'forge.exe', '--cwd', cwd, '--work-root', work])
+    run('definition_group_picker', [sys.executable, repo / 'tools/test_definition_group_picker_ui.py',
+        '--gui', package / 'FableForge.exe', '--forge', package / 'forge.exe', '--cwd', cwd, '--work-root', work])
+    run('definition_group_retail', [sys.executable, repo / 'tools/test_definition_group_retail.py',
+        '--install', args.root.resolve(), '--gui', package / 'FableForge.exe', '--tool', package / 'forge-tools.exe',
+        '--forge', package / 'forge.exe', '--cwd', cwd, '--work-root', work])
+    run('creature_group_schema', [sys.executable, repo / 'tools/test_creature_group_schema.py',
+        '--install', args.root.resolve(), '--tool', package / 'forge-tools.exe',
+        '--schema', package / 'docs/re_reference/def_schema.json', '--cwd', cwd, '--work-root', work])
     run('definition_wide', [sys.executable, repo / 'tools/test_definition_wide_edit_ui.py',
         '--gui', package / 'FableForge.exe', '--cwd', cwd, '--work-root', work])
+    run('definition_wide_retail', [sys.executable, repo / 'tools/test_definition_wide_retail.py',
+        '--install', args.root.resolve(), '--gui', package / 'FableForge.exe',
+        '--forge', package / 'forge.exe', '--cwd', cwd, '--work-root', work])
     run('definition_integer_bounds', [sys.executable, repo / 'tools/test_definition_integer_bounds.py',
         '--tool', package / 'forge-tools.exe', '--work-root', work])
     run('definition_wide_layout', [sys.executable, repo / 'tools/test_definition_wide_layout.py',

@@ -1,4 +1,12 @@
-> Latest session checkpoint: [2026-10-10 continuation](HANDOFF_2026-10-10.md). RC2 passes all 54 CTests and 57 selected extracted workflows; GitHub release integration is next.
+> Current development checkpoint, 2026-10-23: [Creature placement profiles](HANDOFF_CREATURE_PROFILES_2026-10-23.md). The runtime-profile archive passes 119 identities, 145 documentation links and four extracted workflows: retail/GUI smoke, 16 metadata-profile placements and eight malformed-profile refusals. 146 workflows not run; two unrelated corpus skips. The unchanged import gate was not repeated. Whole-creature presentation and gameplay remain unverified; RC2 unchanged.
+
+[Creature authoring history](HANDOFF_CREATURE_GUI_2026-10-23.md) retains the earlier import and material evidence; older checkpoint ZIPs remain unchanged.
+
+[Creature assembly continuation](HANDOFF_CREATURE_ASSEMBLY_2026-10-23.md) records the
+checked reader/selector source milestone and remaining presentation integration.
+
+Paused-session resume point: [Creature pose checkpoint](HANDOFF_CREATURE_POSE_2026-10-23.md).
+The pose target builds; execution and retail diagnostics remain pending.
 
 # Navigation lane, 2026-09-27
 

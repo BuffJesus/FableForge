@@ -21,7 +21,9 @@
 #include "forge/big.hpp"
 #include "forge/bin.hpp"
 #include "forge/defdecode.hpp"
+#include "forge/defedit.hpp"
 #include "forge/defschema.hpp"
+#include "forge/meshpreview.hpp"
 #include "forge/terraintex.hpp"
 #include "forge/wld.hpp"
 #define MINIZ_HEADER_FILE_ONLY   // the implementation is vendor/third_party/miniz/miniz.c (forgecore_slice)
@@ -585,12 +587,94 @@ std::vector<std::pair<std::string, std::string>> Context::definitions(const std:
     return out;
 }
 
+forge::creatureassembly::Assembly Context::assembleCreature(const std::string& name, uint32_t seed,
+                                                            const fs::path& graphicsBig,
+                                                            const forge::defschema::Schema* schema) const {
+    if (!impl_ || !impl_->defsReady || !impl_->defs || !impl_->schema)
+        throw std::runtime_error("definitions are not loaded");
+    if (!schema) schema = impl_->schema.get();
+    std::vector<uint8_t> prefix;
+    std::map<uint32_t, std::string> names;
+    {
+        std::lock_guard<std::mutex> lock(impl_->defMutex);
+        const auto& entries = impl_->defs->entries();
+        const auto root = std::find_if(entries.begin(), entries.end(),
+                                       [&](const auto& e) { return e.name == name && e.definition == "CREATURE"; });
+        if (root == entries.end()) throw std::runtime_error("no CREATURE named " + name);
+        const auto graph = forge::defedit::resolveCreatureVisuals(*impl_->defs, *schema,
+                                                                  size_t(root - entries.begin()));
+        const auto& body = entries[graph.bodyIndex];
+        const auto* type = forge::defdecode::resolveType(*schema, body.definition, body.data);
+        if (!type) throw std::runtime_error("no schema for " + body.definition);
+        const auto decoded = forge::defdecode::decode(body.data, *type);
+        if (!decoded.clean() || forge::defdecode::encode(decoded) != body.data)
+            throw std::runtime_error("CCreatureDef does not round-trip");
+        prefix = decoded.prefix;
+        // names.bin pool offsets: a 4-byte header, then CRC + NUL-terminated name.
+        uint64_t offset = 4;
+        for (const auto& [crc, text] : impl_->defs->originalNames()) {
+            if (offset > UINT32_MAX) break;
+            names.emplace(uint32_t(offset), text);
+            offset += text.size() + 5;
+        }
+    }
+    const fs::path bones = impl_->gameRoot / "data" / "Bones";
+    const forge::creatureassembly::Sources sources{
+        [&](uint32_t at) {
+            const auto found = names.find(at);
+            if (found == names.end()) throw std::runtime_error("skeletal morph name is not a names.bin boundary");
+            return found->second;
+        },
+        [&](const std::string& file) {
+            std::ifstream in(bones / file, std::ios::binary);
+            if (!in) throw std::runtime_error("missing bone config data/Bones/" + file);
+            return std::string(std::istreambuf_iterator<char>(in), {});
+        },
+        [&](uint32_t id) { return forge::meshpreview::readLod0(graphicsBig, id); }};
+    return forge::creatureassembly::assemble(prefix, seed, false, sources);
+}
+
 std::optional<uint32_t> Context::definitionIndex(const std::string& name) const {
     if (!impl_ || !impl_->defs) return std::nullopt;
     const auto& entries = impl_->defs->entries();
     for (size_t i = 0; i < entries.size(); ++i)
         if (entries[i].name == name) return uint32_t(i);
     return std::nullopt;
+}
+
+std::optional<std::string> Context::definitionType(const std::string& name) const {
+    if (!impl_ || !impl_->defs) return std::nullopt;
+    const auto* entry = impl_->defs->find(name);
+    return entry ? std::optional<std::string>(entry->definition) : std::nullopt;
+}
+
+std::optional<bool> Context::definitionHasRuntimeComponent(const std::string& name,
+        const std::string& component, std::string& error) const {
+    error.clear();
+    if(!impl_ || !impl_->defs || !impl_->schema) {error="definition metadata is not loaded";return std::nullopt;}
+    std::lock_guard<std::mutex> lock(impl_->defMutex);
+    const auto* entry=impl_->defs->find(name);
+    if(!entry) {error="definition not found: "+name;return std::nullopt;}
+    try {
+        const auto decoded=forge::defdecode::decode(*entry,*impl_->schema);
+        const auto field=std::find_if(decoded.fields.begin(),decoded.fields.end(),[](const auto& f){return f.name=="Components";});
+        if(!decoded.clean() || field==decoded.fields.end()) throw std::runtime_error("runtime Components field is unavailable");
+        const auto offsets=forge::defdecode::runtimeComponentNameOffsets(*field);
+        std::map<uint32_t,std::string_view> names;
+        uint64_t nameOffset=4;
+        for(const auto& original:impl_->defs->originalNames()) {
+            if(nameOffset>0xffffffffULL) throw std::runtime_error("original names pool exceeds offset range");
+            names.emplace(uint32_t(nameOffset),original.second);
+            nameOffset+=original.second.size()+5;
+        }
+        bool found=false;
+        for(const auto offset:offsets) {
+            const auto it=names.find(offset);
+            if(it==names.end()) throw std::runtime_error("runtime component name is not an original pool boundary");
+            found|=it->second==component;
+        }
+        return found;
+    } catch(const std::exception& e) {error=e.what();return std::nullopt;}
 }
 
 std::vector<Context::GroupedDefinition> Context::groupedDefinitions(const std::vector<std::string>& types) const {

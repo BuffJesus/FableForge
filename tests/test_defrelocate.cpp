@@ -1,5 +1,7 @@
 #include "forge/defrelocate.hpp"
 #include "forge/defdecode.hpp"
+#include "forge/fmplinks.hpp"
+#include "forge/creatureappearance.hpp"
 #include <cstdio>
 #include <iostream>
 #include <stdexcept>
@@ -25,6 +27,24 @@ Bytes fixture(bool moved) {
     field(out, "Names", {2, moved ? 900u : 77u, UINT32_MAX});
     field(out, "Float", {77}); // A float's raw bits must stay unchanged.
     field(out, "Other", {12345});
+    return out;
+}
+Bytes animationFixture(bool moved) {
+    Bytes out{1,0,1};
+    field(out,"Animation",{1,77,77,moved ? 900u : 77u,moved ? 900u : 77u,13});
+    for (uint32_t kind=0;kind<=12;++kind) {
+        word(out,kind);
+        if (kind==3) { word(out,77);word(out,77); }
+        else if (kind==4) { word(out,1);word(out,60); }
+        else if (kind==5) word(out,12345);
+        else if (kind==6) { out.push_back(1);out.push_back(0); }
+        else if (kind==7) { out.push_back(0);word(out,77);word(out,77); }
+        else if (kind==8 || kind==11) word(out,moved ? 900 : 77);
+        else if (kind==12) { word(out,5);word(out,77);out.push_back('X'); }
+        else word(out,77);
+    }
+    word(out,77);word(out,77);word(out,77);word(out,moved ? 900 : 77);
+    field(out,"Tail",{});out.push_back(0);
     return out;
 }
 std::string hex(const Bytes& data) {
@@ -79,6 +99,244 @@ int audit(char** argv) {
 }
 
 int main(int argc, char** argv) {
+    const bool selectionAudit=argc==4 && std::string_view(argv[1])=="--creature-appearance-selection-audit";
+    if(argc==4 && (std::string_view(argv[1])=="--creature-appearance-audit" || selectionAudit)) {
+        try {
+            using namespace forge;
+            using Json=nlohmann::json;
+            const auto folder=std::filesystem::path(argv[2])/"data"/"CompiledDefs";
+            const auto schema=defschema::Schema::load(argv[3]);
+            const auto source=bin::File::open(folder/"names.bin",folder/"game.bin");
+            std::map<uint32_t,std::string> names;
+            uint64_t offset=4;
+            for(const auto& [crc,name]:source.originalNames()) {
+                if(offset>UINT32_MAX)throw std::runtime_error("names offset overflow");
+                names.emplace(uint32_t(offset),name);offset+=name.size()+5;
+            }
+            const auto mapJson=[](const creatureappearance::TextureMap& map) {
+                auto rows=Json::array();
+                for(const auto& row:map.rows)rows.push_back({{"offset",row.offset},{"original",row.original},
+                    {"replacement",row.replacement},{"group",row.group}});
+                return Json{{"rows",rows},{"dirty",map.dirty}};
+            };
+            auto rows=Json::array();
+            for(size_t i=0;i<source.entries().size();++i) {
+                const auto& entry=source.entries()[i];if(entry.definition!="CCreatureDef")continue;
+                Json row{{"index",i},{"name",entry.name}};
+                try {
+                    const auto decoded=defdecode::decode(entry,schema);
+                    if(!decoded.clean() || defdecode::encode(decoded)!=entry.data)
+                        throw std::runtime_error("unclean component decode");
+                    const auto layout=creatureappearance::read(decoded.prefix);
+                    if(selectionAudit) {
+                        for(const auto& morph:layout.skeletal)
+                            if(!names.contains(morph.nameOffset))throw std::runtime_error("skeletal name is not a pool boundary");
+                        const auto textures=[](const auto& values) {
+                            auto output=Json::array();
+                            for(const auto& value:values)output.push_back({value.original,value.replacement});
+                            return output;
+                        };
+                        for(uint32_t seed:{0u,1u,0x12345678u,0xffffffffu})for(bool decapitated:{false,true}) {
+                            const auto selected=creatureappearance::select(layout,seed,decapitated);
+                            auto parts=Json::array(),skeletal=Json::array();
+                            for(const auto& part:selected.parts)
+                                parts.push_back({{"mesh",part.mesh},{"textures",textures(part.textures)}});
+                            for(const auto& morph:selected.skeletal)
+                                skeletal.push_back({{"name_offset",morph.nameOffset},{"amount",morph.amount}});
+                            rows.push_back({{"index",i},{"seed",seed},{"decapitated",decapitated},
+                                {"selection",{{"seed",selected.seedAfter},{"parts",parts},{"skeletal",skeletal},
+                                    {"global_textures",textures(selected.globalTextures)}}}});
+                        }
+                        continue;
+                    }
+                    row["bodies"]=Json::array();row["body_texture_maps"]=Json::array();
+                    row["slots"]=Json::array();row["skeletal_morphs"]=Json::array();
+                    for(size_t body=0;body<layout.bodies.size();++body) {
+                        auto alternatives=Json::array();
+                        for(size_t alternative=0;alternative<layout.bodies[body].size();++alternative) {
+                            const auto& model=layout.bodies[body][alternative];
+                            alternatives.push_back({{"mesh",model.mesh},{"priority",model.priority},
+                                {"textures",mapJson(model.textures)}});
+                            row["slots"].push_back({{"body_part",body},{"alternative",alternative},
+                                {"offset",model.offset},{"id",model.mesh}});
+                        }
+                        row["bodies"].push_back(alternatives);
+                        row["body_texture_maps"].push_back(mapJson(layout.bodyTextures[body]));
+                    }
+                    for(const auto& morph:layout.skeletal) {
+                        const auto found=names.find(morph.nameOffset);
+                        if(found==names.end())throw std::runtime_error("skeletal name is not a pool boundary");
+                        row["skeletal_morphs"].push_back({{"key",morph.key},{"group",morph.group},
+                            {"name_offset",morph.nameOffset},{"name",found->second},{"allow_variation",morph.allowVariation}});
+                    }
+                    row["global_texture_map"]=mapJson(layout.globalTextures);
+                    row["texture_group_count"]=layout.textureGroupCount;
+                    row["stats_value_offset"]=layout.statsValueOffset;
+                }catch(const std::exception& e){row["refused"]=e.what();}
+                rows.push_back(std::move(row));
+            }
+            std::cout<<Json{{"records",rows}}.dump()<<'\n';return 0;
+        }catch(const std::exception& e){std::cerr<<e.what()<<'\n';return 1;}
+    }
+    if(argc==4 && std::string_view(argv[1])=="--creature-body-audit") {
+        try {
+            const auto folder=std::filesystem::path(argv[2])/"data"/"CompiledDefs";
+            const auto schema=forge::defschema::Schema::load(argv[3]);
+            const auto source=forge::bin::File::open(folder/"names.bin",folder/"game.bin");
+            auto rows=nlohmann::json::array();
+            for(size_t i=0;i<source.entries().size();++i) {
+                const auto& entry=source.entries()[i];if(entry.definition!="CCreatureDef") continue;
+                nlohmann::json row{{"index",i},{"models",nlohmann::json::array()}};
+                try {
+                    const auto decoded=forge::defdecode::decode(entry,schema);
+                    if(!decoded.clean() || forge::defdecode::encode(decoded)!=entry.data)
+                        throw std::runtime_error("unclean component decode");
+                    const auto layout=forge::fmplinks::creaturePrefixLayout(decoded.prefix);
+                    row["prefix_length"]=decoded.prefixLen;
+                    for(const auto& slot:layout.bodyModels) {
+                        uint32_t value=0;
+                        for(size_t n=0;n<4;++n)value|=uint32_t(entry.data.at(slot.offset+n))<<(8*n);
+                        row["models"].push_back({{"body_part",slot.bodyPart},{"alternative",slot.alternative},
+                                                {"offset",slot.offset},{"id",value}});
+                    }
+                } catch(const std::exception& e) {row["refused"]=e.what();}
+                rows.push_back(std::move(row));
+            }
+            std::cout<<nlohmann::json{{"records",rows}}.dump()<<'\n';return 0;
+        }catch(const std::exception& e){std::cerr<<e.what()<<'\n';return 1;}
+    }
+    if (argc == 4 && std::string_view(argv[1]) == "--creature-animation-name-audit") {
+        try {
+            using namespace forge;
+            const auto folder=std::filesystem::path(argv[2])/"data"/"CompiledDefs";
+            const auto schema=defschema::Schema::load(argv[3]);
+            const auto source=bin::File::open(folder/"names.bin",folder/"game.bin");
+            const auto isolatedSchema=defschema::Schema::loadText(R"({
+                "CAppearanceDef":{"prefix_len":3,"fields":[{"name":"Animation","type":"CAnimationSet"}]}
+            })");
+            // In-memory synthetic destinations only. The independent auditor
+            // verifies that every non-null native Animation name is in this
+            // map; low integers stay out so unproven combo/recoil domains are
+            // not implicitly claimed. Small-name collisions have CTest cases.
+            defrelocate::Maps maps;
+            uint64_t offset=4;
+            for(const auto& name:source.originalNames()) {
+                if(offset>=65536) {
+                    if(offset+0x10000000>=UINT32_MAX) throw std::runtime_error("animation audit name overflow");
+                    maps.nameOffsets.emplace(uint32_t(offset),uint32_t(offset+0x10000000));
+                }
+                offset+=name.second.size()+5;
+            }
+            nlohmann::json rows=nlohmann::json::array();
+            for(size_t i=0;i<source.entries().size();++i) {
+                const auto& entry=source.entries()[i];if(entry.definition!="CAppearanceDef") continue;
+                const auto decoded=defdecode::decode(entry,schema);
+                if(!decoded.clean() || defdecode::encode(decoded)!=entry.data || decoded.prefixLen!=3)
+                    throw std::runtime_error("animation audit appearance decode mismatch");
+                std::vector<const defdecode::DecodedField*> matches;
+                for(const auto& field:decoded.fields) if(field.name=="Animation" && field.type=="CAnimationSet" && field.tagOk)
+                    matches.push_back(&field);
+                if(matches.size()!=1) throw std::runtime_error("animation audit requires one verified field");
+                bin::Entry isolated{"CAppearanceDef",entry.name,entry.indexInDefinition,decoded.prefix};
+                word(isolated.data,defdecode::fieldTag("Animation"));
+                isolated.data.insert(isolated.data.end(),matches.front()->value.begin(),matches.front()->value.end());
+                const auto analysis=defrelocate::analyze(isolated,isolatedSchema,maps);
+                nlohmann::json row{{"index",i},{"before_hex",hex(isolated.data)},
+                    {"rewrites",nlohmann::json::array()},{"unresolved",nlohmann::json::array()}};
+                for(const auto& rewrite:analysis.rewrites)
+                    row["rewrites"].push_back({{"offset",rewrite.offset},{"before",rewrite.before},
+                        {"after",rewrite.after},{"path",rewrite.path},
+                        {"domain",rewrite.domain==defrelocate::Domain::GameEntry?"game":"name"}});
+                for(const auto& candidate:analysis.unresolved)
+                    row["unresolved"].push_back({{"offset",candidate.offset},{"value",candidate.value}});
+                if(analysis.unresolved.empty()) row["after_hex"]=hex(defrelocate::relocate(isolated,isolatedSchema,maps));
+                rows.push_back(std::move(row));
+            }
+            std::cout<<nlohmann::json{{"records",rows},{"name_map",maps.nameOffsets},
+                {"clone_eligibility_verified",false}}.dump()<<'\n';return 0;
+        } catch(const std::exception& e) {std::fprintf(stderr,"%s\n",e.what());return 1;}
+    }
+    if (argc == 4 && std::string_view(argv[1]) == "--creature-visual-audit") {
+        try {
+            using namespace forge;
+            const auto folder=std::filesystem::path(argv[2])/"data"/"CompiledDefs";
+            const auto schema=defschema::Schema::load(argv[3]);
+            const auto source=bin::File::open(folder/"names.bin",folder/"game.bin");
+            const auto& entries=source.entries();
+            if(entries.size()>UINT32_MAX-3) throw std::runtime_error("visual audit index overflow");
+            auto read=[](const auto& bytes,size_t at) {
+                if(at>bytes.size() || bytes.size()-at<4) throw std::runtime_error("truncated visual audit word");
+                return uint32_t(bytes[at]) | uint32_t(bytes[at+1])<<8 | uint32_t(bytes[at+2])<<16 | uint32_t(bytes[at+3])<<24;
+            };
+            nlohmann::json rows=nlohmann::json::array();
+            for(size_t i=0;i<entries.size();++i) {
+                const auto& root=entries[i];if(root.definition!="CREATURE") continue;
+                const auto decoded=defdecode::decode(root,schema);
+                if(!decoded.clean() || defdecode::encode(decoded)!=root.data || root.data.size()<5)
+                    throw std::runtime_error("visual audit root decode mismatch");
+                const size_t count=size_t(root.data[3]) | size_t(root.data[4])<<8;
+                if(decoded.prefixLen!=5+12*count) throw std::runtime_error("visual audit prefix mismatch");
+                std::vector<size_t> nodes{i};
+                for(const auto* kind:{"CCreatureDef","CAppearanceDef"}) {
+                    std::vector<size_t> matches;
+                    for(size_t row=0;row<count;++row) if(read(root.data,5+12*row)==defdecode::fieldTag(kind))
+                        matches.push_back(read(root.data,9+12*row));
+                    if(matches.size()!=1 || matches.front()>=entries.size() || entries[matches.front()].definition!=kind) break;
+                    nodes.push_back(matches.front());
+                }
+                if(nodes.size()!=3) continue; // Missing shapes are reported independently, not accepted.
+                defrelocate::Maps maps;
+                for(size_t n=0;n<nodes.size();++n) maps.gameEntries.emplace(uint32_t(nodes[n]),uint32_t(entries.size()+n));
+                nlohmann::json payloads=nlohmann::json::array();
+                for(const auto node:nodes) {
+                    const auto& entry=entries[node];const auto view=defdecode::decode(entry,schema);
+                    const auto analysis=defrelocate::analyze(entry,schema,maps);
+                    nlohmann::json payload{{"index",node},{"type",entry.definition},{"prefix",view.prefixLen},
+                        {"clean_roundtrip",view.clean() && defdecode::encode(view)==entry.data},
+                        {"rewrites",nlohmann::json::array()},{"unresolved",nlohmann::json::array()}};
+                    for(const auto& rewrite:analysis.rewrites)
+                        payload["rewrites"].push_back({{"offset",rewrite.offset},{"before",rewrite.before},
+                            {"after",rewrite.after},{"path",rewrite.path},
+                            {"domain",rewrite.domain==defrelocate::Domain::GameEntry?"game":"name"}});
+                    for(const auto& candidate:analysis.unresolved)
+                        payload["unresolved"].push_back({{"offset",candidate.offset},{"value",candidate.value}});
+                    if(analysis.unresolved.empty()) payload["after_hex"]=hex(defrelocate::relocate(entry,schema,maps));
+                    payloads.push_back(std::move(payload));
+                }
+                rows.push_back({{"root",i},{"payloads",std::move(payloads)}});
+            }
+            std::cout<<nlohmann::json{{"entries",entries.size()},{"records",rows},
+                {"clone_eligibility_verified",false}}.dump()<<'\n';
+            return 0;
+        } catch(const std::exception& e) {std::fprintf(stderr,"%s\n",e.what());return 1;}
+    }
+    if (argc == 4 && std::string_view(argv[1]) == "--creature-self-audit") {
+        try {
+            using namespace forge;
+            const auto folder = std::filesystem::path(argv[2]) / "data" / "CompiledDefs";
+            const auto schema = defschema::Schema::load(argv[3]);
+            const auto source = bin::File::open(folder / "names.bin", folder / "game.bin");
+            nlohmann::json rows = nlohmann::json::array();
+            for (size_t i = 0; i < source.entries().size(); ++i) {
+                const auto& entry = source.entries()[i];
+                if (entry.definition != "CREATURE") continue;
+                const defrelocate::Maps maps{{{uint32_t(i),uint32_t(source.entries().size())}}, {}};
+                const auto decoded = defdecode::decode(entry,schema);
+                const auto analysis = defrelocate::analyze(entry,schema,maps);
+                nlohmann::json row{{"index",i},{"name",entry.name},{"prefix",decoded.prefixLen},
+                    {"rewrites",nlohmann::json::array()},{"unresolved",nlohmann::json::array()}};
+                for (const auto& rewrite : analysis.rewrites)
+                    row["rewrites"].push_back({{"offset",rewrite.offset},{"before",rewrite.before},
+                        {"after",rewrite.after},{"path",rewrite.path}});
+                for (const auto& candidate : analysis.unresolved)
+                    row["unresolved"].push_back({{"offset",candidate.offset},{"value",candidate.value}});
+                if (analysis.unresolved.empty()) row["after_hex"] = hex(defrelocate::relocate(entry,schema,maps));
+                rows.push_back(std::move(row));
+            }
+            std::cout << nlohmann::json{{"entries",source.entries().size()},{"records",rows}}.dump() << '\n';
+            return 0; // Audit reports unresolved donors, never silently accepts them.
+        } catch (const std::exception& e) { std::fprintf(stderr,"%s\n",e.what()); return 1; }
+    }
     if (argc == 7) {
         try { return audit(argv); }
         catch (const std::exception& e) { std::fprintf(stderr, "%s\n", e.what()); return 1; }
@@ -115,19 +373,21 @@ int main(int argc, char** argv) {
     const auto ownerSchema = defschema::Schema::loadText(R"({
         "BUILDING":{"fields":[{"name":"Value","type":"int32"}]},
         "CThingBuildingDef":{"fields":[{"name":"Value","type":"int32"}]},
+        "CREATURE":{"fields":[{"name":"Value","type":"int32"}]},
+        "CThingCreatureDef":{"fields":[{"name":"Value","type":"int32"}]},
         "HERO_ABILITY":{"fields":[{"name":"DummyObject","type":"?"},{"name":"Name","type":"?"}]},
         "CHeroAbilityDef":{"fields":[{"name":"DummyObject","type":"?"},{"name":"Name","type":"?"}]},
         "UNVERIFIED":{"fields":[{"name":"DummyObject","type":"?"},{"name":"Name","type":"?"}]}
     })");
-    for (const auto* owner : {"BUILDING", "CThingBuildingDef"}) {
+    for (const auto* owner : {"BUILDING", "CThingBuildingDef", "CREATURE", "CThingCreatureDef"}) {
         auto bytes = fixture(false); bytes.resize(17); field(bytes, "Value", {12345});
         auto expected = fixture(true); expected.resize(17); field(expected, "Value", {12345});
         bin::Entry building{owner, "BUILDING_PROBE", 0, bytes};
         check(defrelocate::relocate(building, ownerSchema, maps) == expected,
-              "building component data/inheritance move while CRC/header/trailing scalar stay exact");
+              "confirmed owner component data/inheritance move while CRC/header/trailing scalar stay exact");
         building.data[3] = 2;
         rejects([&] { defrelocate::relocate(building, ownerSchema, maps); },
-                "building listing with wrong count refuses");
+                "confirmed owner listing with wrong count refuses");
     }
     for (const auto* owner : {"HERO_ABILITY", "CHeroAbilityDef"}) {
         bin::Entry hero{owner, "ABILITY_PROBE", 0, {1,0,1,0,0}};
@@ -369,6 +629,71 @@ int main(int argc, char** argv) {
     rejects([&] { defrelocate::relocate(badSound,soundSchema,soundMaps); }, "music row count must match full value");
     badSound = sound; badSound.data.pop_back();
     rejects([&] { defrelocate::relocate(badSound,soundSchema,soundMaps); }, "reverb row must contain all 21 floats");
+    const auto animationSchema = defschema::Schema::loadText(R"({
+        "CAppearanceDef":{"fields":[{"name":"Animation","type":"CAnimationSet"},
+            {"name":"Tail","type":"bool"}]},
+        "UNVERIFIED_ANIMATION":{"fields":[{"name":"Animation","type":"CAnimationSet"},
+            {"name":"Tail","type":"bool"}]}
+    })");
+    bin::Entry animation{"CAppearanceDef","ANIMATION_DOMAINS",0,animationFixture(false)};
+    const defrelocate::Maps animationMaps{{{77,88},{15360,20000}},{{77,900},{15360,21000}}};
+    const auto animationAnalysis = defrelocate::analyze(animation,animationSchema,animationMaps);
+    check(animationAnalysis.unresolved.empty() && animationAnalysis.rewrites.size()==5,
+          "all thirteen animation variants identify only five native names-offset references");
+    check(defrelocate::relocate(animation,animationSchema,animationMaps)==animationFixture(true),
+          "animation CRCs, asset IDs, scalar bits, inline strings and cross-primitive matches stay exact");
+    check(defrelocate::relocate(animation,animationSchema,defrelocate::Maps{{{77,88},{15360,20000}}, {}})==animation.data,
+          "animation names and asset IDs never become game-entry references");
+    check(animation.data==animationFixture(false),"animation relocation leaves input unchanged");
+    auto badAnimation=animation;
+    badAnimation.data[7]=2;
+    rejects([&] {defrelocate::relocate(badAnimation,animationSchema,animationMaps);},"animation entry count requires complete rows");
+    badAnimation=animation;for(size_t i=7;i<11;++i) badAnimation.data[i]=255;
+    rejects([&] {defrelocate::relocate(badAnimation,animationSchema,animationMaps);},"overflowing animation entry count refuses");
+    badAnimation=animation;badAnimation.data[27]=14;
+    rejects([&] {defrelocate::relocate(badAnimation,animationSchema,animationMaps);},"animation component count is bounded");
+    badAnimation=animation;badAnimation.data[31]=13;
+    rejects([&] {defrelocate::relocate(badAnimation,animationSchema,animationMaps);},"unknown animation component refuses");
+    badAnimation=animation;badAnimation.data[39]=0;
+    rejects([&] {defrelocate::relocate(badAnimation,animationSchema,animationMaps);},"duplicate animation component refuses");
+    for(const auto offset:{91u,97u}) {
+        badAnimation=animation;badAnimation.data[offset]=2;
+        rejects([&] {defrelocate::relocate(badAnimation,animationSchema,animationMaps);},"animation bool must be canonical");
+    }
+    badAnimation=animation;for(size_t i=142;i<146;++i) badAnimation.data[i]=255;
+    rejects([&] {defrelocate::relocate(badAnimation,animationSchema,animationMaps);},"animation inline string length must fit");
+    badAnimation=animation;badAnimation.data.insert(badAnimation.data.end()-5,0);
+    rejects([&] {defrelocate::relocate(badAnimation,animationSchema,animationMaps);},"animation trailing data refuses");
+    badAnimation=animation;badAnimation.data.erase(badAnimation.data.end()-6);
+    rejects([&] {defrelocate::relocate(badAnimation,animationSchema,animationMaps);},"truncated animation defaults refuse");
+    for(const auto offset:{71u,75u,83u}) {
+        badAnimation=animation;
+        for(size_t i=0;i<4;++i) badAnimation.data[offset+i]=uint8_t(77u >> (8*i));
+        rejects([&] {defrelocate::relocate(badAnimation,animationSchema,animationMaps);},
+                "unproven whole combo/recoil integers remain refusal candidates");
+    }
+    auto truncationMaps=animationMaps;
+    // The structural tag is always present even before a truncated value's
+    // first numeric candidate; force analysis rather than its no-candidate no-op.
+    truncationMaps.gameEntries.emplace(defdecode::fieldTag("Animation"),1234567);
+    for(size_t end=7;end<animation.data.size()-5;++end) {
+        badAnimation=animation;badAnimation.data.resize(end);
+        field(badAnimation.data,"Tail",{});badAnimation.data.push_back(0);
+        rejects([&] {defrelocate::relocate(badAnimation,animationSchema,truncationMaps);},
+                "every truncated animation value refuses before reference output");
+    }
+    badAnimation=animation;badAnimation.definition="UNVERIFIED_ANIMATION";
+    rejects([&] {defrelocate::relocate(badAnimation,animationSchema,animationMaps);},"animation layout is limited to its verified owner/field");
+    bin::Entry emptyAnimation{"CAppearanceDef","EMPTY_ANIMATION",0,{1,0,1}};
+    field(emptyAnimation.data,"Animation",{0,77,77,77,77});field(emptyAnimation.data,"Tail",{});emptyAnimation.data.push_back(0);
+    auto emptyExpected=emptyAnimation.data;emptyExpected[23]=132;emptyExpected[24]=3;
+    check(defrelocate::relocate(emptyAnimation,animationSchema,animationMaps)==emptyExpected,
+          "empty animation set still relocates only DefaultGroup");
+    badAnimation=emptyAnimation;badAnimation.data.insert(badAnimation.data.end()-5,0);
+    check(defrelocate::relocate(badAnimation,animationSchema,{})==badAnimation.data,
+          "default no-change relocation does not interpret an untouched payload");
+    rejects([&] {defrelocate::relocate(badAnimation,animationSchema,{},true);},
+            "explicit known-layout validation checks Animation even with no changed IDs");
     const auto expressionSchema = defschema::Schema::loadText(R"({
         "CExpressionSubDef":{"fields":[{"name":"ExpressionDef","type":"int32"}]}})");
     bin::Entry expression{"CExpressionSubDef","EXPRESSION_OWNER",0,{0,0,0}};

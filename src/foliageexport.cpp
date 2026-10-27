@@ -785,6 +785,19 @@ std::vector<fs::path> writeGlbWith(const te::Scene& terrain, const std::vector<c
     });
 }
 
+std::vector<fs::path> writeModelGlb(const Scene& model, const fs::path& out, te::UpAxis up) {
+    return detail::publishExport(out, [&](const fs::path& out) {
+        glb::Builder b;
+        std::vector<int> roots;
+        appendFoliage(b, model, up, roots);
+        if (roots.empty()) throw std::runtime_error("model export: nothing to write");
+        const auto glb = b.finish(model.rootName, roots, "FableForge");
+        if (!out.parent_path().empty()) fs::create_directories(out.parent_path());
+        detail::writeExportBytes(out, glb);
+        return std::vector<fs::path>{out};
+    });
+}
+
 std::vector<uint8_t> buildGlbWithFoliage(const te::Scene& terrain, const Scene& foliage) { return buildGlbWith(terrain, {&foliage}); }
 std::vector<fs::path> writeGlbWithFoliage(const te::Scene& terrain, const Scene& foliage, const fs::path& out) { return writeGlbWith(terrain, {&foliage}, out); }
 

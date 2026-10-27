@@ -402,9 +402,9 @@ int main() {
                 clippedModel.notes[0].find("texture")!=std::string::npos,"UV clipping was not reported per affected vertex");++checks;
         auto edgeUv=uvBytes;
         set32(edgeUv,36,std::bit_cast<uint32_t>(-24.f));
-        set32(edgeUv,40,std::bit_cast<uint32_t>(25.f));
+        set32(edgeUv,40,std::bit_cast<uint32_t>(-24.f));   // V is stored unflipped: same range as U
         set32(edgeUv,44,std::bit_cast<uint32_t>(8.f-1.f/2048));
-        set32(edgeUv,48,std::bit_cast<uint32_t>(-7.f+1.f/2048));
+        set32(edgeUv,48,std::bit_cast<uint32_t>(8.f-1.f/2048));
         set32(edgeUv,52,std::bit_cast<uint32_t>(8.f-1.f/2048+1.f/8192));
         require(load(withDocument(uvDoc,edgeUv)).notes.empty(),"ordinary UV quantization incorrectly reported clipping");++checks;
         for(const char* attribute:{"NORMAL","TEXCOORD_0"}) {

@@ -175,6 +175,10 @@ std::vector<std::filesystem::path> writeGlbWith(const terrainexport::Scene& terr
 std::vector<std::filesystem::path> writeObjWith(const terrainexport::Scene& terrain,
                                                 const std::vector<const Scene*>& layers,
                                                 const std::filesystem::path& out);
+// One scene without terrain (a model, or an assembled creature, placed by its
+// own instances with instanceCount set): a standalone .glb for Blender.
+std::vector<std::filesystem::path> writeModelGlb(const Scene& model, const std::filesystem::path& out,
+                                                 terrainexport::UpAxis up = terrainexport::UpAxis::Y);
 // Single-layer conveniences.
 std::vector<uint8_t> buildGlbWithFoliage(const terrainexport::Scene& terrain, const Scene& foliage);
 std::vector<std::filesystem::path> writeGlbWithFoliage(const terrainexport::Scene& terrain,

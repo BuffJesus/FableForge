@@ -1,7 +1,10 @@
 #include "forge/defedit.hpp"
+#include "forge/defrelocate.hpp"
+#include "forge/fmplinks.hpp"
 #include "forge/unicode.hpp"
 
 #include <cctype>
+#include <array>
 #include <algorithm>
 #include <cerrno>
 #include <cmath>
@@ -11,11 +14,48 @@
 #include <limits>
 #include <stdexcept>
 #include <string>
+#include <type_traits>
 #include <vector>
 
 #include "forge/defdecode.hpp"
 
 namespace forge::defedit {
+CreatureBodyModelResult setCreatureBodyModel(bin::File& file,const defschema::Schema& schema,
+        size_t entryIndex,size_t bodyPart,size_t alternative,uint32_t modelId,const big::File& graphics) {
+    const auto refuse=[](const char* text){throw std::runtime_error(std::string("defedit body model: ")+text);};
+    if(entryIndex>=file.entries().size())refuse("entry index out of range");
+    const auto& entry=file.entries()[entryIndex];
+    if(entry.definition!="CCreatureDef")refuse("requires CCreatureDef");
+    const auto decoded=defdecode::decode(entry,schema);
+    if(!decoded.clean() || defdecode::encode(decoded)!=entry.data)refuse("requires clean exact decode");
+    const auto layout=fmplinks::creaturePrefixLayout(decoded.prefix);
+    const auto slot=std::find_if(layout.bodyModels.begin(),layout.bodyModels.end(),[&](const auto& value){
+        return value.bodyPart==bodyPart && value.alternative==alternative;
+    });
+    if(slot==layout.bodyModels.end())refuse("body part or alternative is absent");
+    uint32_t old=0;
+    for(size_t n=0;n<4;++n)old|=uint32_t(entry.data.at(slot->offset+n))<<(8*n);
+    const big::Bank* meshes=nullptr;
+    for(const auto& bank:graphics.banks())if(bank.name=="MBANK_ALLMESHES") {
+        if(meshes)refuse("ambiguous mesh bank");meshes=&bank;
+    }
+    if(!meshes)refuse("missing mesh bank");
+    for(const auto id:{old,modelId}) {
+        const big::Entry* target=nullptr;
+        for(const auto& mesh:meshes->entries)if(mesh.id==id) {
+            if(target)refuse("ambiguous mesh ID");target=&mesh;
+        }
+        if(!target)refuse("missing mesh ID");
+        if(target->type!=5)refuse("requires skinned type-5 mesh");
+    }
+    const CreatureBodyModelResult result{entryIndex,bodyPart,alternative,slot->offset,old,modelId};
+    if(old!=modelId) {
+        auto data=entry.data;
+        for(size_t n=0;n<4;++n)data[slot->offset+n]=uint8_t(modelId>>(8*n));
+        file.setEntryData(entryIndex,std::move(data));
+    }
+    return result;
+}
 namespace {
 
 // Split "a,b,c" into pieces (no trimming beyond surrounding spaces per piece).
@@ -352,6 +392,28 @@ SetFieldResult setField(bin::File& file, const defschema::Schema& schema,
 size_t cloneEntry(bin::File& file,size_t donorIndex,std::string newName) {
     return file.cloneEntry(donorIndex,std::move(newName));
 }
+size_t cloneCreature(bin::File& file,const defschema::Schema& schema,size_t donorIndex,std::string newName) {
+    if(donorIndex>=file.entries().size() || file.entries()[donorIndex].definition!="CREATURE")
+        throw std::runtime_error("creature clone: choose a Creature donor by its native index");
+    if(file.entries().size()>=UINT32_MAX)
+        throw std::runtime_error("creature clone: append index exceeds the game reference domain");
+    const auto& donor=file.entries()[donorIndex];
+    const auto decoded=defdecode::decode(donor,schema);
+    if(!decoded.clean() || defdecode::encode(decoded)!=donor.data || donor.data.size()<5 ||
+       decoded.fields.empty() || decoded.fields.front().name!="Components" ||
+       std::any_of(decoded.fields.begin(),decoded.fields.end(),[](const auto& field){return !field.tagOk;}))
+        throw std::runtime_error("creature clone: donor has no verified component layout");
+    const size_t count=size_t(donor.data[3]) | size_t(donor.data[4])<<8;
+    if(!count || decoded.prefixLen!=5+count*12)
+        throw std::runtime_error("creature clone: donor component listing is empty or malformed");
+    const auto landing=uint32_t(file.entries().size());
+    // Compute and reject every unsupported candidate before appending. The exact
+    // clone validates the new name, payload capacity and whole-bank ordinals.
+    auto payload=defrelocate::relocate(donor,schema,{{{uint32_t(donorIndex),landing}}, {}});
+    const auto appended=file.cloneEntry(donorIndex,std::move(newName));
+    file.setEntryData(appended,std::move(payload));
+    return appended;
+}
 size_t cloneEntry(bin::File& file,std::string_view donorName,std::string newName) {
     if(donorName.empty()) throw std::runtime_error("defedit clone: use an index for an unnamed donor");
     size_t selected=file.entries().size();
@@ -361,6 +423,112 @@ size_t cloneEntry(bin::File& file,std::string_view donorName,std::string newName
     }
     if(selected==file.entries().size()) throw std::runtime_error("defedit clone: donor name was not found");
     return file.cloneEntry(selected,std::move(newName));
+}
+
+CreatureVisualGraph resolveCreatureVisuals(const bin::File& file,
+                      const defschema::Schema& schema,size_t donorIndex) {
+    const auto& entries=file.entries();
+    auto read=[](const auto& data,size_t offset) {
+        if(offset>data.size() || data.size()-offset<4)
+            throw std::runtime_error("creature visual graph: truncated component word");
+        return uint32_t(data[offset]) | uint32_t(data[offset+1])<<8 |
+               uint32_t(data[offset+2])<<16 | uint32_t(data[offset+3])<<24;
+    };
+    auto rootLayout=[&](size_t index) {
+        if(index>=entries.size() || entries[index].definition!="CREATURE")
+            throw std::runtime_error("creature visual graph: donor/original parent must be a Creature index");
+        const auto& entry=entries[index];const auto decoded=defdecode::decode(entry,schema);
+        if(!decoded.clean() || defdecode::encode(decoded)!=entry.data || entry.data.size()<5 ||
+           decoded.fields.empty() || decoded.fields.front().name!="Components" ||
+           std::any_of(decoded.fields.begin(),decoded.fields.end(),[](const auto& field){return !field.tagOk;}))
+            throw std::runtime_error("creature visual graph: unverified Creature component layout");
+        const size_t count=size_t(entry.data[3]) | size_t(entry.data[4])<<8;
+        if(!count || decoded.prefixLen!=5+12*count)
+            throw std::runtime_error("creature visual graph: empty or malformed Creature listing");
+        return count;
+    };
+    const auto count=rootLayout(donorIndex);
+    const auto& root=entries[donorIndex];
+    std::array<size_t,2> rows{};
+    std::array<size_t,3> donors{donorIndex,0,0};
+    constexpr std::array<const char*,2> kinds{"CCreatureDef","CAppearanceDef"};
+    for(size_t k=0;k<kinds.size();++k) {
+        size_t matches=0;
+        const auto key=defdecode::fieldTag(kinds[k]);
+        for(size_t row=0;row<count;++row) if(read(root.data,5+12*row)==key) {
+            ++matches;rows[k]=row;donors[k+1]=read(root.data,9+12*row);
+        }
+        if(matches!=1 || donors[k+1]>=entries.size() || entries[donors[k+1]].definition!=kinds[k])
+            throw std::runtime_error("creature visual graph: requires one correctly typed "+std::string(kinds[k])+" row");
+        const auto owner=read(root.data,13+12*rows[k]);
+        const auto ownerCount=rootLayout(owner);size_t ownerMatches=0;
+        for(size_t row=0;row<ownerCount;++row) if(read(entries[owner].data,5+12*row)==key) {
+            ++ownerMatches;
+            if(read(entries[owner].data,9+12*row)!=donors[k+1])
+                throw std::runtime_error("creature visual graph: original parent has a different visual component");
+        }
+        if(ownerMatches!=1)
+            throw std::runtime_error("creature visual graph: original parent visual row is missing or ambiguous");
+    }
+    return {donorIndex,donors[1],donors[2],count,rows[0],rows[1]};
+}
+
+CreatureVisualCloneResult cloneCreatureVisuals(bin::File& file,const defschema::Schema& schema,
+                      size_t donorIndex,std::string rootName,std::string bodyName,std::string appearanceName) {
+    const auto& entries=file.entries();
+    // CSubDefInfo persists signed-long definition/original-parent indices.
+    if(entries.size()>size_t(INT32_MAX)-2u)
+        throw std::runtime_error("private creature clone: append indices exceed the signed reference domain");
+    const auto graph=resolveCreatureVisuals(file,schema,donorIndex);
+    const auto count=graph.componentCount;
+    const auto& root=entries[donorIndex];
+    const std::array<size_t,2> rows{graph.bodyRow,graph.appearanceRow};
+    const std::array<size_t,3> donors{graph.rootIndex,graph.bodyIndex,graph.appearanceIndex};
+    std::array<std::string,3> names{std::move(rootName),std::move(bodyName),std::move(appearanceName)};
+    std::array<uint32_t,3> keys{};
+    for(size_t i=0;i<names.size();++i) {
+        keys[i]=bin::nameCrc(names[i]);
+        if(std::any_of(entries.begin(),entries.end(),[&](const auto& entry){return bin::nameCrc(entry.name)==keys[i];}) ||
+           std::find(keys.begin(),keys.begin()+i,keys[i])!=keys.begin()+i)
+            throw std::runtime_error("private creature clone: new names would introduce a compiled CRC ambiguity");
+    }
+    const auto first=uint32_t(entries.size());
+    const defrelocate::Maps maps{{{uint32_t(donors[0]),first},
+                                 {uint32_t(donors[1]),first+1},
+                                 {uint32_t(donors[2]),first+2}}, {}};
+    std::array<std::vector<uint8_t>,3> payloads;
+    for(size_t i=0;i<donors.size();++i) {
+        const auto& donor=entries[donors[i]];const auto decoded=defdecode::decode(donor,schema);
+        if(!decoded.clean() || decoded.fields.empty() || defdecode::encode(decoded)!=donor.data ||
+           std::any_of(decoded.fields.begin(),decoded.fields.end(),[](const auto& field){return !field.tagOk;}))
+            throw std::runtime_error("private creature clone: component payload does not round-trip cleanly");
+        payloads[i]=defrelocate::relocate(donor,schema,maps,true);
+    }
+    // CParentDefClassBase ownership is local to each selected row. Generic
+    // reference relocation must not mark borrowed gameplay components as ours.
+    // Keep every unselected triple exact, including data/parent IDs that happen
+    // to equal a visual donor or the root; no value-wide old-parent rewrite.
+    for(size_t row=0;row<count;++row) {
+        const auto offset=5+12*row;
+        if(row!=rows[0] && row!=rows[1])
+            std::copy_n(root.data.begin()+offset,12,payloads[0].begin()+offset);
+    }
+    auto put=[&](size_t offset,uint32_t value) {
+        for(size_t byte=0;byte<4;++byte) payloads[0][offset+byte]=uint8_t(value>>(8*byte));
+    };
+    for(size_t i=0;i<rows.size();++i) {put(9+12*rows[i],first+1+uint32_t(i));put(13+12*rows[i],first);}
+
+    // Name, capacity and whole-bank ordinal checks run on this disposable copy.
+    // A later bad component name/append cannot leave a half-created root behind.
+    bin::File proposed=file;
+    for(size_t i=0;i<donors.size();++i) {
+        const auto appended=proposed.cloneEntry(donors[i],std::move(names[i]));
+        if(appended!=size_t(first)+i) throw std::runtime_error("private creature clone: append slot mismatch");
+        proposed.setEntryData(appended,std::move(payloads[i]));
+    }
+    static_assert(std::is_nothrow_move_assignable_v<bin::File>);
+    file=std::move(proposed);
+    return {first,size_t(first)+1,size_t(first)+2};
 }
 
 } // namespace forge::defedit

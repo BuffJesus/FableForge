@@ -33,6 +33,7 @@ using Args = std::vector<std::string>;
 std::optional<int> runLevels(const std::string& cmd, const Args& args);   // new levels and region entrances
 std::optional<int> runTextures(const std::string& cmd, const Args& args);   // textures.big and ground themes
 std::optional<int> runInstall(const std::string& cmd, const Args& args);   // backups and restore
+std::optional<int> runCreatures(const std::string& cmd,const Args& args);
 std::optional<int> runWorld(const std::string& cmd, const Args& args);   // the overworld (WLD/BWD) and regions
 std::optional<int> runNav(const std::string& cmd, const Args& args);   // navigation diagnostics
 std::optional<int> runChunks(const std::string& cmd, const Args& args);   // STB terrain chunk diagnostics and bakes

@@ -304,6 +304,9 @@ public:
                                         const std::vector<terrainexport::Image>& images, uint32_t size);
     void clearModelPreview();
     bool setModelPreview(const foliageexport::Mesh& mesh, const std::vector<terrainexport::Image>& images);
+    size_t modelTexturedParts() const {
+        size_t count=0;for(const auto& part:modelMesh_.parts) if(part.srv) ++count;return count;
+    }
     ID3D11ShaderResourceView* modelPreview(uint32_t size, float yaw, float pitch, float zoom, bool wire);
     void clearHeadPreview();
     bool setHeadPreview(const foliageexport::Mesh& mesh, const std::vector<terrainexport::Image>& images);

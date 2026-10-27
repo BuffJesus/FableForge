@@ -37,7 +37,9 @@
 #include <string>
 #include <vector>
 
+#include "forge/creatureassembly.hpp"
 #include "forge/lev.hpp"
+namespace forge::defschema { class Schema; }
 
 namespace forge::terraintex { class ThemeLibrary; struct TextureInfo; }
 
@@ -214,7 +216,21 @@ public:
     struct GroupedDefinition { std::string name, type, group; };
     // A def's game.bin entry index (the value LEV palettes store); nullopt when absent.
     std::optional<uint32_t> definitionIndex(const std::string& name) const;
+    // The compiled game.bin class; custom definition names need no type prefix.
+    std::optional<std::string> definitionType(const std::string& name) const;
+    // nullopt with a diagnostic for unavailable/malformed metadata; false only
+    // for a fully validated list that does not contain the named runtime CTC.
+    std::optional<bool> definitionHasRuntimeComponent(const std::string& name,
+        const std::string& component, std::string& error) const;
     std::vector<GroupedDefinition> groupedDefinitions(const std::vector<std::string>& types) const;
+    // Bind-pose random-appearance look of a CREATURE def for one stored Seed
+    // (forge::creatureassembly). The CCreatureDef comes from the checked visual
+    // graph, bone configs from <gameRoot>/data/Bones, meshes from `graphicsBig`.
+    // Throws with the refusal reason; never returns a partial creature. The
+    // embedded schema lacks CCreatureDef: pass the full def_schema.json.
+    forge::creatureassembly::Assembly assembleCreature(const std::string& name, uint32_t seed,
+                                                       const std::filesystem::path& graphicsBig,
+                                                       const forge::defschema::Schema* schema = nullptr) const;
     // Defs only (names.bin + game.bin, no textures.big): enough for themeLibrary().
     bool loadDefs(const std::filesystem::path& gameRoot, std::string& error);
     // The install's ENGINE_THEME library (palette slot -> textures); nullptr until ready() or loadDefs().

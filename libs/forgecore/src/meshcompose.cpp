@@ -9,6 +9,7 @@
 
 #include "forge/lzo.hpp"
 #include "forge/texturewrite.hpp"
+#include "forge/meshpreview.hpp"
 
 namespace forge::meshcompose {
 
@@ -55,9 +56,9 @@ void writeMaterial(std::vector<uint8_t>& out, int32_t id, const std::string& nam
     }
 }
 
-void meshHeader(std::vector<uint8_t>& out, const std::string& name, const Vec3& bsc, float bsr, const Vec3& bbMin, const Vec3& bbMax) {
+void meshHeader(std::vector<uint8_t>& out, const std::string& name, const Vec3& bsc, float bsr, const Vec3& bbMin, const Vec3& bbMax,bool animated=false) {
     putStr(out, name);
-    putU8(out, 0);   // AnimatedFlag
+    putU8(out, animated?1:0);
     putF32(out, bsc.x); putF32(out, bsc.y); putF32(out, bsc.z);
     putF32(out, bsr);
     putF32(out, bbMin.x); putF32(out, bbMin.y); putF32(out, bbMin.z);
@@ -199,7 +200,7 @@ Composed composeStatic(const std::string& name, const std::vector<Primitive>& pr
             putF32(vb, v.x); putF32(vb, v.y); putF32(vb, v.z);
             putU32(vb, packNormal(i < norms.size() ? norms[i] : Vec3{0, 0, 1}));
             putI16(vb, compressUv(uv.u));
-            putI16(vb, compressUv(1.0f - uv.v));            // the decoder yields 1-v: store it back
+            putI16(vb, compressUv(uv.v));                   // stored V is glTF V (top-left origin, as D3D)
         }
         lzoBlock(lod, vb, compress);
         std::vector<uint8_t> ib;
@@ -236,6 +237,194 @@ Composed composeStatic(const std::string& name, const std::vector<Primitive>& pr
     putU32(info, uint32_t(texIds.size()));
     for (uint32_t t : texIds) putU32(info, t);
     return c;
+}
+
+namespace {
+
+size_t validateSkeleton(const meshpreview::SkeletonBlocks& s) {
+    const size_t count=s.indices.size()/2;
+    if(s.indices.size()%2 || !count || count>256 || s.bones.size()!=60*count ||
+       s.keyframes.size()!=48*count || s.inverseBinds.size()!=64*count ||
+       s.names.size()<=3 || s.names.size()>1048576 || std::count(s.names.begin(),s.names.end(),uint8_t(0))!=count ||
+       s.names.empty() || s.names.back()!=0)
+        throw std::invalid_argument("invalid donor skeleton spans");
+    std::vector<int32_t> parents(count);
+    const auto finite=[](const std::vector<uint8_t>& bytes,size_t offset,size_t floats) {
+        for(size_t i=0;i<floats;++i) {float v;std::memcpy(&v,bytes.data()+offset+4*i,4);
+            if(!std::isfinite(v)) throw std::invalid_argument("non-finite donor bind pose");}
+    };
+    for(size_t i=0;i<count;++i) {
+        std::memcpy(&parents[i],s.bones.data()+60*i+4,4);
+        if(parents[i]<-1 || parents[i]>=int32_t(count)) throw std::invalid_argument("invalid donor bone parent");
+        finite(s.bones,60*i+12,12);finite(s.inverseBinds,64*i,12);
+        finite(s.keyframes,48*i,7);finite(s.keyframes,48*i+32,3); // raw pad words are retained, not interpreted
+    }
+    for(size_t i=0;i<count;++i) {
+        int32_t p=int32_t(i);size_t steps=0;
+        while(p!=-1) {if(++steps>count) throw std::invalid_argument("cyclic donor skeleton");p=parents[size_t(p)];}
+    }
+    return count;
+}
+void writeSkeleton(std::vector<uint8_t>& out,const meshpreview::SkeletonBlocks& s,bool compress) {
+    out.insert(out.end(),s.indices.begin(),s.indices.end());
+    for(const auto* span:{&s.names,&s.bones,&s.keyframes,&s.inverseBinds}) lzoBlock(out,*span,compress);
+}
+struct SkinBlock {
+    std::vector<uint8_t> palette;
+    std::vector<std::array<uint32_t,3>> faces;
+    size_t vertices=0;
+};
+struct PreparedSkin {
+    Primitive geometry;
+    std::vector<std::vector<Influence>> skin;
+    std::vector<SkinBlock> blocks;
+};
+void addBone(std::vector<uint8_t>& palette,uint16_t bone) {
+    const auto slot=uint8_t(bone);
+    if(std::find(palette.begin(),palette.end(),slot)==palette.end()) palette.push_back(slot);
+}
+PreparedSkin prepareSkin(const SkinnedPrimitive& input,size_t boneCount,size_t materials) {
+    const auto& p=input.geometry;
+    if(p.verts.empty() || p.faces.empty() || p.verts.size()>maxPrimitiveVertices ||
+       input.skin.size()!=p.verts.size() || p.faces.size()>meshpreview::maxPrimitiveIndices/3 ||
+       p.material<0 || size_t(p.material)>=materials ||
+       (!p.uvs.empty() && p.uvs.size()!=p.verts.size()) ||
+       (!p.normals.empty() && p.normals.size()!=p.verts.size()))
+        throw std::invalid_argument("invalid skinned primitive counts or material");
+    for(const auto& v:p.verts) if(!std::isfinite(v.x) || !std::isfinite(v.y) || !std::isfinite(v.z))
+        throw std::invalid_argument("non-finite skinned position");
+    for(const auto& n:p.normals) (void)packNormal(n);
+    for(const auto& uv:p.uvs) {(void)compressUv(uv.u);(void)compressUv(uv.v);}
+    for(const auto& f:p.faces) for(uint32_t index:f) if(index>=p.verts.size()) throw std::invalid_argument("skinned face index out of range");
+    std::vector<std::vector<Influence>> skin=input.skin;
+    std::vector<uint8_t> palette;
+    for(auto& influences:skin) {
+        std::vector<uint16_t> used;
+        for(const auto& i:influences) {
+            if(i.bone>=boneCount || !std::isfinite(i.weight) || i.weight<0 ||
+               std::find(used.begin(),used.end(),i.bone)!=used.end()) throw std::invalid_argument("invalid skin influence");
+            used.push_back(i.bone);
+        }
+        std::erase_if(influences,[](const auto& i){return i.weight==0;});
+        std::stable_sort(influences.begin(),influences.end(),[](const auto& a,const auto& b){return a.weight>b.weight;});
+        if(influences.size()>3) influences.resize(3);
+        if(influences.empty()) influences.push_back({0,1});
+        // Divide by the largest first to avoid overflowing sums of finite weights.
+        const double largest=influences.front().weight;double sum=0;
+        for(auto& i:influences) {i.weight/=largest;sum+=i.weight;}
+        for(auto& i:influences) {i.weight/=sum;addBone(palette,i.bone);}
+    }
+    PreparedSkin out;
+    const auto normals=p.normals.empty()?faceNormals(p.verts,p.faces):p.normals;
+    if(palette.size()<=16) {
+        out.geometry=p;out.geometry.normals=normals;out.skin=std::move(skin);
+        out.blocks.push_back({palette,p.faces,p.verts.size()});return out;
+    }
+    std::vector<SkinBlock> groups(1);
+    for(const auto& face:p.faces) {
+        std::vector<uint8_t> needed;
+        for(auto index:face) for(const auto& i:skin[index]) addBone(needed,i.bone);
+        auto expanded=groups.back().palette;
+        for(auto bone:needed) addBone(expanded,bone);
+        if(expanded.size()>16 && !groups.back().faces.empty()) groups.emplace_back(SkinBlock{needed,{},{}});
+        else groups.back().palette=std::move(expanded);
+        groups.back().faces.push_back(face);
+    }
+    out.geometry.material=p.material;
+    for(auto& group:groups) {
+        std::map<uint32_t,uint32_t> remap;
+        for(auto& face:group.faces) for(auto& index:face) {
+            auto found=remap.find(index);
+            if(found==remap.end()) {
+                if(out.geometry.verts.size()>=maxPrimitiveVertices) throw std::invalid_argument("skinned vertex overflow after palette partition");
+                const auto next=uint32_t(out.geometry.verts.size());remap.emplace(index,next);
+                out.geometry.verts.push_back(p.verts[index]);out.geometry.normals.push_back(normals[index]);
+                out.geometry.uvs.push_back(p.uvs.empty()?Vec2{}:p.uvs[index]);out.skin.push_back(skin[index]);index=next;
+            }else index=found->second;
+        }
+        group.vertices=remap.size();
+        out.geometry.faces.insert(out.geometry.faces.end(),group.faces.begin(),group.faces.end());out.blocks.push_back(std::move(group));
+    }
+    return out;
+}
+void skinBytes(std::vector<uint8_t>& out,const std::vector<Influence>& skin,const std::vector<uint8_t>& palette) {
+    std::array<uint8_t,4> joints{};std::array<int,4> weights{};int total=0;
+    for(size_t k=0;k<skin.size();++k) {
+        const auto found=std::find(palette.begin(),palette.end(),uint8_t(skin[k].bone));
+        if(found==palette.end()) throw std::logic_error("skin palette omitted authored bone");
+        joints[k]=uint8_t(3*size_t(found-palette.begin()));weights[k]=int(std::lround(255*skin[k].weight));total+=weights[k];
+    }
+    *std::max_element(weights.begin(),weights.end())+=255-total;
+    out.insert(out.end(),joints.begin(),joints.end());
+    for(int weight:weights) putU8(out,uint8_t(weight));
+}
+
+} // namespace
+
+Composed composeSkinned(const std::string& name,const std::vector<SkinnedPrimitive>& prims,
+                        const std::vector<Material>& materials,const meshpreview::SkeletonBlocks& skeleton,bool compress) {
+    const size_t boneCount=validateSkeleton(skeleton);
+    if(name.rfind("MESH_",0)!=0 || prims.empty() || prims.size()>10000 || materials.empty() || materials.size()>10000)
+        throw std::invalid_argument("invalid skinned mesh name, primitive or material count");
+    std::vector<PreparedSkin> prepared;size_t blockCount=0;
+    for(const auto& p:prims) {
+        prepared.push_back(prepareSkin(p,boneCount,materials.size()));blockCount+=prepared.back().blocks.size();
+        if(blockCount>65535) throw std::invalid_argument("skinned animated block overflow");
+    }
+    for(const auto& m:materials) if(m.nativeFlags && (*m.nativeFlags)[3]) throw std::invalid_argument("skinned materials cannot contain a degenerate sentinel");
+    std::vector<const Primitive*> all;for(const auto& p:prepared) all.push_back(&p.geometry);
+    Composed result;bounds(all,result.bbMin,result.bbMax,result.sphereCentre,result.sphereRadius);
+    const auto header=[&](std::vector<uint8_t>& out,bool ghost) {
+        meshHeader(out,name,result.sphereCentre,result.sphereRadius,result.bbMin,result.bbMax,true);
+        putI32(out,ghost?0:int32_t(materials.size()));putI32(out,ghost?0:int32_t(prims.size()));
+        putI32(out,int32_t(boneCount));putI32(out,int32_t(skeleton.names.size()));
+        putU8(out,0);putU16(out,0);putU16(out,ghost?0:uint16_t(blockCount));writeSkeleton(out,skeleton,compress);identityRoot(out);
+    };
+    auto& lod=result.payload;header(lod,false);
+    for(size_t slot=0;slot<materials.size();++slot) {
+        const auto& m=materials[slot];
+        const uint32_t flags=m.originalMapFlags.value_or((m.diffuseId?1u:0u)|(m.bumpId?2u:0u)|(m.reflectId?4u:0u)|(m.illumId?8u:0u));
+        writeMaterial(lod,m.originalId.value_or(int32_t(slot)),(!m.originalId && m.name.empty())?name+"_mat"+std::to_string(slot):m.name,
+            m.decalId,m.diffuseId,m.bumpId,m.reflectId,m.illumId,int32_t(flags),m.selfIllum,m.twoSided,m.transparent,m.booleanAlpha,false,m.nativeFlags,m.filenames);
+    }
+    for(const auto& preparedPrimitive:prepared) {
+        const auto& p=preparedPrimitive.geometry;const auto& blocks=preparedPrimitive.blocks;
+        Vec3 mn,mx,centre;float radius;bounds({&p},mn,mx,centre,radius);
+        putI32(lod,materials[size_t(p.material)].originalId.value_or(p.material));putI32(lod,0);
+        putF32(lod,centre.x);putF32(lod,centre.y);putF32(lod,centre.z);putF32(lod,radius);putF32(lod,.1f);
+        putU32(lod,0);putU32(lod,uint32_t(blocks.size()));putU32(lod,uint32_t(p.verts.size()));putU32(lod,uint32_t(p.faces.size()));
+        putU32(lod,uint32_t(3*p.faces.size()));putU32(lod,0x14);putU32(lod,0);putU32(lod,uint32_t(blocks.size()));
+        size_t start=0;
+        for(const auto& block:blocks) {
+            putU32(lod,uint32_t(block.faces.size()));putU32(lod,uint32_t(start));start+=3*block.faces.size();
+            putU8(lod,0);putU8(lod,0);putU8(lod,0);putU32(lod,uint32_t(block.vertices));putU16(lod,3);putU8(lod,1);
+            putU8(lod,uint8_t(block.palette.size()));lod.insert(lod.end(),block.palette.begin(),block.palette.end());
+        }
+        for(float f:{1.f,1.f,1.f,1.f,0.f,0.f,0.f,0.f}) putF32(lod,f);
+        putU32(lod,28);putU32(lod,0);
+        std::vector<uint8_t> vb;vb.reserve(p.verts.size()*28);size_t block=0,within=0;
+        for(size_t i=0;i<p.verts.size();++i) {
+            while(within>=blocks[block].vertices && block+1<blocks.size()) {++block;within=0;}
+            const auto& v=p.verts[i];putF32(vb,v.x);putF32(vb,v.y);putF32(vb,v.z);
+            skinBytes(vb,preparedPrimitive.skin[i],blocks[block].palette);++within;
+            putU32(vb,packNormal(p.normals[i]));const auto uv=p.uvs.empty()?Vec2{}:p.uvs[i];
+            putI16(vb,compressUv(uv.u));putI16(vb,compressUv(uv.v));
+        }
+        lzoBlock(lod,vb,compress);std::vector<uint8_t> ib;ib.reserve(p.faces.size()*6);
+        for(const auto& f:p.faces) {putU16(ib,uint16_t(f[0]));putU16(ib,uint16_t(f[2]));putU16(ib,uint16_t(f[1]));}
+        lzoBlock(lod,ib,compress);putU32(lod,0);result.vertices+=p.verts.size();result.triangles+=p.faces.size();
+    }
+    const size_t lodSize=lod.size();if(lodSize>UINT32_MAX) throw std::invalid_argument("skinned LOD size overflow");
+    header(lod,true);
+    auto& info=result.info;putU32(info,0);
+    for(float f:{result.sphereCentre.x,result.sphereCentre.y,result.sphereCentre.z,result.sphereRadius,
+                 result.bbMin.x,result.bbMin.y,result.bbMin.z,result.bbMax.x,result.bbMax.y,result.bbMax.z}) putF32(info,f);
+    putU32(info,1);putU32(info,uint32_t(lodSize));putF32(info,0);
+    std::vector<uint32_t> textures;
+    for(const auto& m:materials) for(uint32_t id:{m.diffuseId,m.bumpId,m.reflectId,m.illumId,m.decalId>0?uint32_t(m.decalId):0u})
+        if(id && std::find(textures.begin(),textures.end(),id)==textures.end()) textures.push_back(id);
+    putU32(info,uint32_t(textures.size()));for(auto id:textures) putU32(info,id);
+    return result;
 }
 
 namespace {

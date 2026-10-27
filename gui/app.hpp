@@ -589,10 +589,28 @@ public:
     bool setDefinitionBank(const std::string& bank);
     void browseDefinition(const std::string& name);
     bool beginDefinitionEdit(size_t field);
+    bool beginDefinitionClone(bool creature=false,bool privateVisual=false);
+    bool beginDefinitionBodyModel(size_t bodyPart,size_t alternative);
+    bool saveDefinitionClone();
     bool setDefinitionEditValue(const std::string& value);
     bool saveDefinitionEdit();
-    bool definitionsBusy() const {return definitionFuture_.valid();}
+    bool definitionsBusy() const {return definitionFuture_.valid() || creatureImportFuture_.valid();}
 private:
+    struct CreatureImportDraft;
+    struct CreatureImportJob {std::shared_ptr<CreatureImportDraft> draft;std::string error;bool published=false;size_t rootIndex=0;};
+    std::future<CreatureImportJob> creatureImportFuture_;
+    std::shared_ptr<CreatureImportDraft> creatureImportDraft_;
+    bool definitionCreatureMesh_=false,definitionCreatureStored_=false;
+    char definitionCreatureModel_[2048]={},definitionCreatureTexture_[2048]={};
+    char definitionCreatureMeshName_[80]={},definitionCreatureTextureName_[80]={},definitionCreatureTextureId_[16]="0";
+    int definitionCreatureFormat_=0;
+    struct CreatureBodyChoice {size_t bodyPart,alternative;uint32_t modelId;};
+    std::vector<CreatureBodyChoice> definitionCreatureSlots_;
+    std::optional<size_t> definitionCreatureSlot_;
+    std::array<std::string,10> creatureImportInputs() const;
+    bool prepareCreatureImport();
+    bool saveCreatureImport();
+    void pollCreatureImport();
     struct DefinitionJob {
         std::filesystem::path names,bank;
         forge::bin::File file;
@@ -619,12 +637,20 @@ private:
     char definitionSearch_[256]={};
     bool definitionLoaded_=false,definitionFilterDirty_=true;
     bool definitionEditing_=false,definitionEditConfirm_=false;
+    bool definitionCloning_=false;
+    forge::bin::File definitionCloneFile_;
+    forge::big::File definitionBodyGraphics_;
+    std::filesystem::path definitionBodyGraphicsPath_;
+    size_t definitionBodyPart_=0,definitionBodyAlternative_=0;
+    std::vector<uint8_t> definitionCloneNamesBytes_,definitionCloneBankBytes_;
     size_t definitionEditIndex_=0;
     forge::bin::Entry definitionEditExpected_;
     std::vector<std::pair<uint32_t,std::string>> definitionEditExpectedNames_;
+    std::map<size_t,forge::bin::Entry> definitionEditExpectedGroups_;
     std::filesystem::path definitionEditNames_,definitionEditBank_,definitionEditDestination_;
     std::string definitionEditField_,definitionEditType_,definitionEditError_,definitionEditSuccess_;
     char definitionEditValue_[128]={};
+    char definitionCloneBodyName_[128]={},definitionCloneAppearanceName_[128]={};
     char definitionNameSearch_[128]={};
     std::pair<std::filesystem::path,std::filesystem::path> definitionPaths() const;
     bool selectDefinitionIndex(size_t index,bool reveal=true);
@@ -1038,12 +1064,38 @@ public:
     std::map<uint32_t, std::vector<std::string>> modelUsers_;
     bool modelsLoaded_ = false, modelUsersLoaded_ = false, modelReady_ = false, modelImportOpen_ = false;
     std::string modelRoot_, modelBankPath_, modelName_, modelError_;
+    // An undeployed pack may contain textures absent from the loaded world.
+    // Built by the import worker and used only for its physical graphics bank.
+    std::shared_ptr<terrainexport::Context> modelPreviewContext_;
+    // Retain the selected mesh's actual texture snapshot for material metadata.
+    std::shared_ptr<terrainexport::Context> modelSelectedTextureContext_;
+    std::filesystem::path modelPreviewGraphics_;
+    std::string modelPreviewContextError_;
     uint32_t modelId_ = 0;
     forge::meshpreview::Geometry modelGeometry_;
     char modelSearch_[96] = {};
     size_t modelFiltered_ = 0;
     float modelYaw_ = 0.8f, modelPitch_ = 0.55f, modelZoom_ = 1.0f;
     bool modelWire_ = false;
+    // ---- Creature looks: a CREATURE's random appearance, assembled in bind
+    // pose into the model viewport (forge::creatureassembly).
+    bool selectCreatureLook(const std::string& name, uint32_t seed);
+    void drawCreatureLooks(float pad, float inner, float cardInner);
+    std::vector<std::string> creatureLookNames_;
+    bool creatureLookNamesLoaded_ = false;
+    char creatureLookSearch_[96] = {};
+    std::string creatureLookName_, creatureLookSummary_;
+    uint32_t creatureLookSeed_ = 0;
+    std::shared_ptr<forge::defschema::Schema> creatureLookSchema_; // full schema; embedded lacks CCreatureDef
+    // Export the previewed model or creature look as a standalone .glb into the
+    // Export tab's output folder; returns the written path ("" on failure).
+    std::string exportModelGlb();
+    std::string modelExportStatus_, modelExportError_;
+    // Fit a .glb/.gltf/.obj onto the selected creature look's parts (forge::characterfit),
+    // write one rigged .glb per part to the output folder and preview the fit.
+    bool fitModelToLook(const std::string& model);
+    char creatureFitPath_[512] = {};
+    std::string creatureFitStatus_, creatureFitError_;
     // ---- Read-only Effects browser (gui/effectbrowser.cpp).
     struct EffectBrowserRow { uint32_t id = 0; std::string name, displayName; };
     std::vector<EffectBrowserRow> effectBrowserRows_;
@@ -1571,6 +1623,9 @@ public:
     void setDpiScale(float s) { dpiScale_ = s; }
 private:
     ImFont* fontBody_ = nullptr;
+    // Shared immutable bytes outlive ImGui's sources and avoid one file copy per
+    // role/scale. main.cpp destroys the atlas before this App is destroyed.
+    std::map<std::string,std::vector<unsigned char>> fontFileData_;
     ImFont* fontBold_ = nullptr;
     ImFont* fontTitle_ = nullptr;
     ImFont* fontSmall_ = nullptr;

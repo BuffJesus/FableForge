@@ -451,7 +451,7 @@ std::map<std::string, MapBytes> staticMapsOf(const fs::path& stb, const std::vec
 bool prepareShadow(const fs::path& gameRoot, const fs::path& pack, const fs::path& shadow, bool viewOnly, std::string& error) try {
     const fs::path lv = fs::path("data") / "Levels";
     std::error_code ec;
-    fs::remove_all(shadow, ec);
+    forge::removeTree(shadow, ec);
     fs::create_directories(shadow / lv / "FinalAlbion", ec);
     fs::create_directories(shadow / "data" / "CompiledDefs", ec);
     if (ec) { error = "cannot create " + shadow.string() + ": " + ec.message(); return false; }

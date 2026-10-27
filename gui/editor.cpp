@@ -2480,7 +2480,7 @@ void App::drawPlacementOptions(float width) {
 
 int App::ownerFor(const std::string& def) const {
     if (placeOwner_ >= 0) return std::min(placeOwner_, 4);
-    if (def.rfind("CREATURE_", 0) == 0) {
+    if (ctx_.definitionType(def) == "CREATURE") {
         if (const auto v = ctx_.defIntField(def, "DefaultOwner")) return int(*v);
         return 0;   // defs not readable: FableForge's old creature default
     }
@@ -2544,13 +2544,21 @@ bool App::placeDefinition(const std::string& def, const std::string& scriptName)
 bool App::placeDefinitionAt(const std::string& def, const float position[3], const std::string& scriptName) {
     if (!documentLoaded()) { pushLog("editor: no level document", 1); return false; }
     if (!std::isfinite(position[0]) || !std::isfinite(position[1]) || !std::isfinite(position[2])) return false;
+    const bool creature=ctx_.definitionType(def)=="CREATURE";
+    bool villageMember=false;
+    if(creature) {
+        std::string error;
+        const auto profile=ctx_.definitionHasRuntimeComponent(def,"CTCVillageMember",error);
+        if(!profile) {pushLog("editor: cannot read creature placement profile: "+error,2);return false;}
+        villageMember=*profile;
+    }
     uint32_t modelId = 0;
     const int code = ctx_.graphicModelId(def, modelId);
     if (code == 0) { pushLog("editor: " + def + " is not in game.bin", 2); return false; }
     if (code < 0 || modelId == 0) pushLog("editor: " + def + " has no mesh; it will appear as an editor marker", 1);
     forge::thingplacer::Placement p;
     p.definitionType = def;
-    p.thingType = def.rfind("BUILDING_", 0) == 0 ? "Building" : "Object";
+    p.thingType = ctx_.definitionType(def) == "BUILDING" ? "Building" : "Object";
     p.scriptName = scriptName;
     float at[3] = {position[0], position[1], position[2]};
     snapPlacementPoint(at);
@@ -2570,10 +2578,9 @@ bool App::placeDefinitionAt(const std::string& def, const float position[3], con
         if (fl > 1e-6f) p.forward = {fx / fl, fy / fl, 0.0f};
     }
     try {
-        const bool creature = def.rfind("CREATURE_", 0) == 0;
         const float pos[3] = {p.position.x, p.position.y, p.position.z};
         const float fwd[2] = {p.forward.x, p.forward.y};
-        const size_t n = creature ? doc_.placeCreature(pos, fwd, def, scriptName, p.player) : doc_.place(p);
+        const size_t n = creature ? doc_.placeCreature(pos, fwd, def, villageMember, scriptName, p.player) : doc_.place(p);
         selectedUid_ = doc_.uidOf(n);
         selectedThing_ = int(n);
         renderer_.selectedThing = selectedThing_;
@@ -4198,7 +4205,7 @@ void App::drawUnsavedPrompt() {
             if (worldPendingCount())
                 ImGui::TextColored(theme::vec(theme::Muted), "%zu pending world change%s not written.", worldPendingCount(), worldPendingCount() == 1 ? "" : "s");
             if(definitionEditing_)
-                ImGui::TextColored(theme::vec(theme::Muted),"%s has an open definition field draft. Review and save it from Assets > Definitions before closing.",definitionEditField_.c_str());
+                ImGui::TextColored(theme::vec(theme::Muted),"%s has an open definition %s draft. Review and save it from Assets > Definitions before closing.",definitionEditField_.c_str(),definitionCloning_?"clone":"field");
             if (textEditing_)
                 ImGui::TextColored(theme::vec(theme::Muted),
                     "%s has an open text draft. Review and save it from Assets > Text before closing.",textEditName_.c_str());
@@ -4247,7 +4254,7 @@ void App::drawUnsavedPrompt() {
         }
         auto_.registerWidget("btn_unsaved_save");
         ImGui::SameLine(0, S(6));
-        ImGui::BeginDisabled(worldFuture_.valid() || recoveryFuture_.valid());
+        ImGui::BeginDisabled(worldFuture_.valid() || recoveryFuture_.valid() || creatureImportFuture_.valid());
         if (theme::dangerButton("Discard", ImVec2(w, S(32)))) {
             retireRecovery();
             if (closePending_) quit_ = true;
@@ -4715,12 +4722,13 @@ void App::drawEditPanel(float pad, float inner, float cardInner) {
         theme::label("Creatures by group");
         ImGui::SetNextItemWidth(cardInner);
         ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(S(10), S(6)));
-        ImGui::InputTextWithHint("##actorsearch", "Search creatures (CREATURE_...)", defSearch_, sizeof defSearch_);
+        ImGui::InputTextWithHint("##actorsearch", "Search creatures", defSearch_, sizeof defSearch_);
         ImGui::PopStyleVar();
         auto_.registerWidget("input_actorsearch");
         drawDefPalette("##actorlist", {"CREATURE"}, cardInner, S(260));
-        const std::string actorLabel = placeDef_.rfind("CREATURE_", 0) == 0 ? "Place " + placeDef_ : std::string("Pick a creature above");
-        if (theme::ghostButton(actorLabel.c_str(), ImVec2(cardInner, S(30))) && placeDef_.rfind("CREATURE_", 0) == 0) placeDefinition(placeDef_);
+        const bool actorSelected = ctx_.definitionType(placeDef_) == "CREATURE";
+        const std::string actorLabel = actorSelected ? "Place " + placeDef_ : std::string("Pick a creature above");
+        if (theme::ghostButton(actorLabel.c_str(), ImVec2(cardInner, S(30))) && actorSelected) placeDefinition(placeDef_);
         auto_.registerWidget("btn_place_actor");
         drawRuleNotice("creature", cardInner);
         theme::endCard();

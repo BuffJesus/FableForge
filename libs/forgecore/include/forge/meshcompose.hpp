@@ -17,6 +17,8 @@
 #include <optional>
 #include <vector>
 
+namespace forge::meshpreview { struct SkeletonBlocks; }
+
 namespace forge::meshcompose {
 
 // Current static writer capacity per primitive.
@@ -28,7 +30,7 @@ struct Vec2 { float u = 0, v = 0; };
 struct Primitive {
     std::vector<Vec3> verts;                 // required
     std::vector<std::array<uint32_t, 3>> faces;   // required, CCW
-    std::vector<Vec2> uvs;                   // per vertex; empty = (0,0). v is glTF/Blender-convention (stored as 1-v)
+    std::vector<Vec2> uvs;                   // per vertex; empty = (0,0). v is glTF/Blender-convention, stored unchanged (D3D shares the top-left origin)
     std::vector<Vec3> normals;               // per vertex; empty = accumulated face normals
     int material = 0;                        // slot into Composed::materials
 };
@@ -55,6 +57,24 @@ struct Composed {
     float sphereRadius = 0;
     size_t vertices = 0, triangles = 0;
 };
+
+struct Influence { uint16_t bone = 0; double weight = 0; }; // local donor slot, not global ID
+struct SkinnedPrimitive {
+    Primitive geometry;
+    std::vector<std::vector<Influence>> skin; // exactly one list per vertex
+};
+// New type-5 payload: float positions (stride 28), triangle lists and greedy
+// <=16-bone palettes with shared vertices duplicated across animated blocks.
+// Uses the top three positive influences, normalized to bytes summing to 255;
+// an explicitly empty influence list binds to donor slot 0. Rejects nonfinite,
+// negative, duplicate-slot or out-of-range influences and malformed donor spans.
+// Donors have 1-256 local slots and a 4-byte to 1-MiB terminated name pool;
+// smaller name blocks are outside the existing chunked-LZO readback contract.
+// All five decoded donor skeleton spans survive exactly in LOD0 and ghost LOD.
+// This composes bytes only; it does not publish banks or prove runtime compatibility.
+Composed composeSkinned(const std::string& name,const std::vector<SkinnedPrimitive>& prims,
+                        const std::vector<Material>& materials,
+                        const meshpreview::SkeletonBlocks& skeleton,bool compress=true);
 
 // `name` must start with "MESH_" (the payload classifier). Throws std::invalid_argument on bad input
 // (no prims / materials, > 65535 primitives or vertices in one primitive, a face index out of range,
@@ -83,7 +103,8 @@ uint32_t packNormal(Vec3 n);
 // Saturate finite coordinates before integer conversion; non-finite input throws.
 int16_t compressUv(float v);
 // True when packing must saturate beyond ordinary 1/2048 quantization.
-// Non-finite input throws, as in compressUv. Call with the stored V (1-v).
+// Non-finite input throws, as in compressUv. Call with the stored V, which is the
+// glTF V unchanged (the value passed to compressUv).
 bool uvNeedsClamping(float v);
 
 } // namespace forge::meshcompose

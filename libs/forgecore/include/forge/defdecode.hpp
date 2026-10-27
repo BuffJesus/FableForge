@@ -62,6 +62,11 @@ struct Decoded {
 // Decode one entry against its def-type schema. `def` must match entry.definition.
 Decoded decode(const std::vector<uint8_t>& payload, const defschema::DefType& def);
 
+// Validated retail CThingComponentSet: count, nine-byte entries, verification
+// word 0x01ab6cce. Returns the original names-pool offsets; throws on unsupported
+// or malformed fields. Resolving each offset remains the owning bank's job.
+std::vector<uint32_t> runtimeComponentNameOffsets(const DecodedField& field);
+
 // Rebuild a payload from a decode: prefix bytes, then [4-byte tag][value] per
 // field. encode(decode(p)) == p for any clean() decode.
 std::vector<uint8_t> encode(const Decoded& d);

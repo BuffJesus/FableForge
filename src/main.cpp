@@ -16,6 +16,7 @@ int main(int argc, char** argv) try {
     if (const auto r = runLevels(cmd, args)) return *r;
     if (const auto r = runTextures(cmd, args)) return *r;
     if (const auto r = runInstall(cmd, args)) return *r;
+    if (const auto r = runCreatures(cmd, args)) return *r;
     if (const auto r = runWorld(cmd, args)) return *r;
     if (const auto r = runChunks(cmd, args)) return *r;
     if (const auto r = runNav(cmd, args)) return *r;

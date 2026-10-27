@@ -1,6 +1,8 @@
 #include "forge/fmplinks.hpp"
 #include "forge/defrelocate.hpp"
 #include "forge/defdecode.hpp"
+#include "forge/defedit.hpp"
+#include "forge/creatureappearance.hpp"
 #include <algorithm>
 #include <cstdio>
 #include <cstring>
@@ -51,6 +53,129 @@ int main() {
     auto rejects = [&](auto action, const char* what) {
         try { action(); check(false, what); } catch (const std::runtime_error&) {}
     };
+    {
+        using namespace forge::creatureappearance;
+        Prefix plan;
+        for(size_t body=0;body<3;++body) {
+            for(uint32_t alternative=0;alternative<2;++alternative) {
+                BodyModel model;model.mesh=uint32_t(10+10*body)+alternative;model.priority=1;
+                model.textures.rows={{0,100,200+alternative,0},{0,100,300+alternative,1},
+                                     {0,100,400+alternative,2}};
+                plan.bodies[body].push_back(model);
+            }
+            plan.bodyTextures[body].rows={{0,100,uint32_t(500+body),0}};
+        }
+        plan.globalTextures.rows={{0,100,600,0},{0,100,601,0}};
+        plan.textureGroupCount=2;
+        plan.skeletal={{0,0,0,4,false},{0,0,0,8,true}};
+        // Original-x86 oracle fixtures: first draws for seeds 32/43/114 are
+        // 49/50/51. Pin thresholds, layer order, amplitude and final seed.
+        const uint32_t seed=43;
+        const auto selected=select(plan,seed);
+        const auto headless=select(plan,seed,true);
+        check(selected.seedAfter==4167952974u && selected.parts.size()==3 &&
+              selected.parts[0].body==0 && selected.parts[0].alternative==0 && selected.parts[0].mesh==10 &&
+              selected.parts[0].textures.size()==2 && selected.parts[0].textures[0].replacement==300 &&
+              selected.parts[0].textures[1].replacement==500 && selected.globalTextures[0].replacement==600 &&
+              selected.skeletal.size()==2 && selected.skeletal[0].nameOffset==4 && selected.skeletal[0].amount==1 &&
+              selected.skeletal[1].nameOffset==8 && selected.skeletal[1].amount==0.541900634765625f && seed==43,
+              "native zero-key threshold, shared draws, exact amplitude and ordered texture layers");
+        check(headless.seedAfter==selected.seedAfter && headless.parts.size()==2 && headless.parts[0].body==1 &&
+              headless.parts[0].mesh==selected.parts[1].mesh && select(plan,32).skeletal.size()==1,
+              "decapitation consumes head draws and zero-key draw 49 is excluded");
+        plan.skeletal={{0,1,1,4,false},{0,1,1,8,true},{0,2,2,12,true}};
+        const auto grouped=select(plan,114);
+        check(select(plan,43).skeletal.empty() && grouped.seedAfter==3241426900u && grouped.skeletal.size()==2 &&
+              grouped.skeletal[0].amount==0.6214752197265625f && grouped.skeletal[1].amount==0.920989990234375f,
+              "native nonzero-key draw 50 is excluded and draw 51 selects a candidate");
+        const auto empty=select(Prefix{},seed,true);
+        check(empty.seedAfter==seed && empty.parts.empty() && empty.skeletal.empty() && empty.globalTextures.empty(),
+              "empty appearance consumes no draws");
+        const auto composed=composeTextures(selected.parts[0].textures,selected.globalTextures);
+        check(composed.size()==1 && composed[0].original==100 && composed[0].replacement==600 &&
+              selected.parts[0].textures.size()==2,
+              "global type-3 replacement supersedes model/body layers without mutating selection");
+        const std::vector<TextureReplacement> layers{{10,20},{20,30},{10,40},{40,10}};
+        const std::vector<TextureReplacement> globals{{20,50},{60,60},{10,10}};
+        const auto cycle=composeTextures(layers,{});
+        check(cycle.size()==3 && cycle[0].replacement==40 && cycle[1].replacement==30 &&
+              cycle[2].replacement==10,
+              "replacement destinations are not chased through other source keys or cycles");
+        const auto keyed=composeTextures(layers,globals);
+        check(keyed.size()==4 && keyed[0].original==10 && keyed[0].replacement==10 &&
+              keyed[1].original==20 && keyed[1].replacement==50 &&
+              keyed[2].original==40 && keyed[2].replacement==10 &&
+              keyed[3].original==60 && keyed[3].replacement==60,
+              "source keys retain insertion order, identity overrides and independent cyclic destinations");
+        const auto otherPart=composeTextures(std::vector<TextureReplacement>{{10,99}},{});
+        const auto baseOnly=composeTextures({},globals);
+        check(otherPart.size()==1 && otherPart[0].replacement==99 &&
+              baseOnly.size()==3 && baseOnly[0].original==20 && baseOnly[2].replacement==10 &&
+              composeTextures({},{}).empty(),
+              "part maps stay isolated and empty-part base appearance receives globals");
+        auto invalid=plan;invalid.globalTextures.dirty=true;
+        rejects([&]{select(invalid,seed);},"unverified dirty-map tie order refuses");
+        invalid=plan;invalid.globalTextures.rows={{0,200,600,0},{0,100,601,0}};
+        rejects([&]{select(invalid,seed);},"unordered clean texture map refuses");
+        invalid=plan;invalid.globalTextures.rows={{0,100,600,999}};
+        rejects([&]{select(invalid,seed);},"incompatible global color group refuses without a partial selection");
+        invalid=plan;std::reverse(invalid.skeletal.begin(),invalid.skeletal.end());
+        rejects([&]{select(invalid,seed);},"unordered skeletal keys refuse");
+    }
+    {
+        Bytes data{1,0,1};
+        word(data,forge::defdecode::fieldTag("WoundMorphs"));word(data,0);word(data,0x01ab6cee);
+        word(data,forge::defdecode::fieldTag("RandomAppearanceMorph"));
+        const auto groupsAt=data.size();word(data,3);
+        word(data,1);word(data,9);word(data,7);
+        word(data,1);word(data,12);word(data,100);word(data,101);word(data,2);data.push_back(1);
+        word(data,0);word(data,0);
+        word(data,1);const auto byteSizeAt=data.size();word(data,12);
+        word(data,200);word(data,201);word(data,0);data.push_back(0);
+        for(int n=0;n<2;++n){word(data,0);word(data,0);data.push_back(0);}
+        word(data,1);word(data,2);word(data,2);word(data,4);data.push_back(1);
+        word(data,2);word(data,24);
+        word(data,300);word(data,301);word(data,0);
+        word(data,300);word(data,302);word(data,2);const auto flagAt=data.size();data.push_back(0);
+        word(data,3);word(data,forge::defdecode::fieldTag("Expressions"));word(data,1);
+        word(data,0);word(data,0);word(data,400);word(data,0x01ab6d32);
+        word(data,forge::defdecode::fieldTag("Stats"));
+        const auto original=data;
+        const auto parsed=forge::creatureappearance::read(data);
+        check(parsed.bodies[0].size()==1 && parsed.bodies[1].empty() && parsed.bodies[2].empty() &&
+              parsed.bodies[0][0].mesh==9 && parsed.bodies[0][0].priority==7 &&
+              parsed.bodies[0][0].textures.dirty && parsed.bodies[0][0].textures.rows[0].group==2 &&
+              parsed.bodyTextures[0].rows[0].replacement==201 &&
+              parsed.globalTextures.rows.size()==2 && parsed.globalTextures.rows[1].replacement==302 &&
+              parsed.skeletal.size()==1 && parsed.skeletal[0].nameOffset==4 && parsed.skeletal[0].allowVariation &&
+              parsed.textureGroupCount==3 && parsed.statsValueOffset==data.size() && data==original,
+              "complete appearance reader preserves all body/global maps, skeletal fields and input bytes");
+        const auto locations=forge::fmplinks::creaturePrefixLayout(data);
+        check(locations.references.size()==11 && locations.bodyModels.size()==1,
+              "body/global texture pairs join existing verified mesh/name/expression reference domains");
+        const auto schema=forge::defschema::Schema::loadText(
+            R"({"CCreatureDef":{"fields":[{"name":"InitialActions","type":"uint32"}]}})");
+        auto payload=data;word(payload,0);
+        word(payload,forge::defdecode::fieldTag("InitialActions"));word(payload,0);
+        auto expected=payload;
+        const auto nameAt=parsed.skeletal[0].offset+8;
+        for(size_t n=0;n<4;++n)expected[nameAt+n]=uint8_t(444u>>(8*n));
+        const forge::bin::Entry entry{"CCreatureDef","ALL_TEXTURE_MAPS",0,payload};
+        const forge::defrelocate::Maps maps{{{9,90},{200,900},{300,999}},{{4,444}}};
+        check(forge::defrelocate::relocate(entry,schema,maps)==expected && entry.data==payload,
+              "body/global asset namespace collisions survive relocation while only skeletal name changes");
+        for(size_t length=0;length<data.size();++length)
+            rejects([&]{forge::creatureappearance::read(std::span(data).first(length));},
+                    "every truncated complete appearance layout refuses");
+        for(const auto& [at,value]:std::vector<std::pair<size_t,uint32_t>>{
+                {groupsAt,2},{groupsAt,4},{groupsAt,UINT32_MAX},{byteSizeAt,11},{byteSizeAt-4,UINT32_MAX}}) {
+            auto changed=data;
+            for(size_t n=0;n<4;++n)changed[at+n]=uint8_t(value>>(8*n));
+            rejects([&]{forge::creatureappearance::read(changed);},"invalid native body count/map size refuses");
+        }
+        auto badFlag=data;badFlag[flagAt]=2;
+        rejects([&]{forge::creatureappearance::read(badFlag);},"invalid texture map boolean refuses");
+    }
     const auto valid = metadata();
     const auto links = forge::fmplinks::readMetadata(valid);
     check(links.size() == 1 && links[0].path == "123._" && links[0].target == "TARGET", "forward refs, arrays and null padding");
@@ -221,12 +346,12 @@ int main() {
         const size_t skinAt = prefix.size();
         for (uint32_t value = 70; value < 79; ++value) word(prefix, value);
         word(prefix, 0x01ab6cee); word(prefix, forge::defdecode::fieldTag("RandomAppearanceMorph"));
-        word(prefix, 2); word(prefix, 1); const size_t meshAt = prefix.size();
+        word(prefix, 3); word(prefix, 1); const size_t meshAt = prefix.size();
         word(prefix, 9); word(prefix, 10);
-        word(prefix, 2); word(prefix, 2);
+        word(prefix, 2); word(prefix, 24);
         const size_t textureAt = prefix.size();
         for (int n = 0; n < 6; ++n) word(prefix, 100+n);
-        prefix.push_back(1); word(prefix, 0);
+        prefix.push_back(1); word(prefix, 0); word(prefix, 0);
         prefix.insert(prefix.end(), 27, 0);
         word(prefix, 1); const size_t skeletonAt = prefix.size() + 8;
         prefix.insert(prefix.end(), 13, 0); prefix.insert(prefix.end(), 13, 0);
@@ -241,6 +366,62 @@ int main() {
             forge::defdecode::decode(prefixRecord, prefixSchema).prefix);
         check(enumerated.references.size() == 14 && !enumerated.structuralWords.empty(),
               "creature prefix enumerates verified reference domains and structural words");
+        check(enumerated.bodyModels.size()==1 && enumerated.bodyModels[0].bodyPart==0 &&
+              enumerated.bodyModels[0].alternative==0 && enumerated.bodyModels[0].offset==meshAt,
+              "body model slots exclude facial-expression meshes and preserve native indices");
+        auto shiftedBody=prefix;
+        const size_t bodyCountAt=meshAt-4;
+        shiftedBody.insert(shiftedBody.begin()+bodyCountAt,4,0);
+        // Move the last empty group before the populated group, retaining three.
+        shiftedBody.erase(shiftedBody.begin()+textureAt+24+1+8,
+                          shiftedBody.begin()+textureAt+24+1+12);
+        const auto shiftedLayout=forge::fmplinks::creaturePrefixLayout(
+            forge::defdecode::decode({"CCreatureDef","SHIFTED_BODY",0,shiftedBody},prefixSchema).prefix);
+        check(shiftedLayout.bodyModels.size()==1 && shiftedLayout.bodyModels[0].bodyPart==1 &&
+              shiftedLayout.bodyModels[0].offset==meshAt+4,
+              "empty leading body part is not renumbered in body model slots");
+        {
+            forge::bin::File bank;
+            bank.addEntry("CCreatureDef","BODY",prefix);
+            bank.addEntry("OTHER","UNCHANGED",{9,0,0,0});
+            forge::big::File graphics;
+            auto& meshes=graphics.addBank("MBANK_ALLMESHES",0);
+            for(const auto id:{9u,99u}) {
+                forge::big::Entry mesh;mesh.id=id;mesh.type=5;mesh.name=std::to_string(id);
+                meshes.entries.push_back(std::move(mesh));
+            }
+            auto changed=bank;
+            const auto result=forge::defedit::setCreatureBodyModel(changed,prefixSchema,0,0,0,99,graphics);
+            auto expectedBody=prefix;
+            for(size_t n=0;n<4;++n)expectedBody[meshAt+n]=uint8_t(99u>>(8*n));
+            check(result.offset==meshAt && result.oldModelId==9 && result.newModelId==99 &&
+                  changed.entries()[0].data==expectedBody && changed.entries()[1].data==bank.entries()[1].data &&
+                  changed.originalNames()==bank.originalNames(),"body binding changes only one verified model word");
+            forge::defedit::setCreatureBodyModel(changed,prefixSchema,0,0,0,99,graphics);
+            check(changed.entries()[0].data==expectedBody,"same body model is an exact no-op");
+            const auto refused=[&](forge::bin::File input,size_t entry,size_t body,size_t alternative,
+                                   uint32_t id,const forge::big::File& assets) {
+                const auto original=input.entries();
+                rejects([&]{forge::defedit::setCreatureBodyModel(input,prefixSchema,entry,body,alternative,id,assets);},
+                        "invalid body binding refuses");
+                bool exact=input.entries().size()==original.size();
+                for(size_t n=0;n<original.size();++n)exact &= input.entries()[n].data==original[n].data &&
+                    input.entries()[n].name==original[n].name && input.entries()[n].definition==original[n].definition;
+                check(exact,"body binding refusal does not mutate any record");
+            };
+            refused(bank,99,0,0,99,graphics);refused(bank,1,0,0,99,graphics);
+            refused(bank,0,1,0,99,graphics);refused(bank,0,0,1,99,graphics);
+            refused(bank,0,0,0,999,graphics);
+            auto wrong=graphics;wrong.banks()[0].entries[1].type=1;refused(bank,0,0,0,99,wrong);
+            wrong=graphics;wrong.banks()[0].entries[0].type=9;refused(bank,0,0,0,99,wrong);
+            wrong=graphics;wrong.banks()[0].entries.push_back(wrong.banks()[0].entries[1]);
+            refused(bank,0,0,0,99,wrong);
+            wrong=graphics;wrong.banks().push_back(wrong.banks()[0]);refused(bank,0,0,0,99,wrong);
+            refused(bank,0,0,0,99,forge::big::File{});
+            auto malformed=prefix;malformed[endMarkerAt]^=1;
+            auto invalid=bank;invalid.setEntryData(0,malformed);refused(invalid,0,0,0,99,graphics);
+            invalid=bank;invalid.setEntryData(0,{1,0,1});refused(invalid,0,0,0,99,graphics);
+        }
         auto relocatable = prefixRecord;
         for (size_t n = 0; n < 4; ++n) relocatable.data[skeletonAt+n] = uint8_t(500000u >> (8*n));
         auto relocatedExpected = relocatable.data;
@@ -253,10 +434,9 @@ int main() {
         rejects([&] { forge::defrelocate::relocate(unsupported,prefixSchema,prefixMaps); },
                 "unsupported creature prefix refuses without partial namespace relocation");
         auto counted = prefixRecord;
-        for (size_t n = 0; n < 4; ++n) counted.data[meshAt+12+n] = uint8_t(777u >> (8*n));
-        const forge::defrelocate::Maps crossing{{{777u << 8,222222}}, {}};
+        const forge::defrelocate::Maps crossing{{{24u << 8,222222}}, {}};
         check(forge::defrelocate::relocate(counted,prefixSchema,crossing) == counted.data,
-              "candidate crossing validated creature array count boundary stays unchanged");
+              "candidate crossing validated creature array byte-size boundary stays unchanged");
         const std::vector<forge::fmplinks::Link> prefixLinks{
             {"4294151720.Skin Effects Array.0.Link to ID5", "SKIN"},
             {"4042377857.unknown.1.Animations", "ANIMATION"}};
